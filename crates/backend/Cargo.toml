@@ -1,0 +1,25 @@
+[package]
+name = "backend"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+axum.workspace = true
+futures-util.workspace = true
+http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+shared = { path = "../shared" }
+tokio.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+mdns-sd = "0.13"
+flume = "0.11"
+palette.workspace = true
+libblur = "0.23"
+socket2 = "0.5"
+rumqttc = "0.24"

@@ -1,0 +1,682 @@
+use std::collections::HashMap;
+
+use anyhow::Context;
+use shared::{InputValue, NodeDiagnostic, NodeDiagnosticSeverity, NodeRuntimeValue};
+
+use crate::node_runtime::{NodeEvaluation, NodeEvaluationContext, RuntimeNodeEvaluator};
+use crate::services::runtime::types::{CompiledGraph, GraphExecutionState, RuntimeEventPublisher};
+
+impl CompiledGraph {
+    /// Executes one tick of the compiled graph.
+    ///
+    /// The graph is evaluated in topological order, reusing per-node evaluators across ticks and
+    /// across render contexts. Runtime updates and diagnostics are emitted through `events`, and
+    /// the produced outputs become the previous-tick values for the next invocation.
+    pub(crate) fn execute_tick(
+        &mut self,
+        graph_id: &str,
+        events: &dyn RuntimeEventPublisher,
+        elapsed_seconds: f64,
+        execution_state: &mut GraphExecutionState,
+    ) -> anyhow::Result<()> {
+        const DEFAULT_CONTEXT_ID: &str = "__default__";
+        const RUNTIME_UPDATE_INTERVAL_SECONDS: f64 = 1.0 / 20.0;
+        initialize_delay_previous_outputs(self, execution_state);
+        let previous_outputs = execution_state.previous_outputs.clone();
+        let mut outputs = HashMap::<(usize, String, String), InputValue>::new();
+
+        let topological_order = self.topological_order.clone();
+        for node_index in topological_order {
+            let render_contexts =
+                evaluation_contexts_for_node(&self.render_contexts_by_node[node_index]);
+            let incoming_edges = self.incoming_edges_by_node[node_index].clone();
+            let node = &mut self.nodes[node_index];
+
+            for render_context in render_contexts {
+                let context_id = render_context
+                    .as_ref()
+                    .map(|ctx| ctx.id.as_str())
+                    .unwrap_or(DEFAULT_CONTEXT_ID);
+                let mut inputs = node.input_defaults.clone();
+
+                for incoming in &incoming_edges {
+                    let context_key = (
+                        incoming.from_node_index,
+                        context_id.to_owned(),
+                        incoming.from_output_name.clone(),
+                    );
+                    let fallback_key = (
+                        incoming.from_node_index,
+                        DEFAULT_CONTEXT_ID.to_owned(),
+                        incoming.from_output_name.clone(),
+                    );
+                    let value = if incoming.use_previous_tick {
+                        previous_outputs
+                            .get(&context_key)
+                            .cloned()
+                            .or_else(|| previous_outputs.get(&fallback_key).cloned())
+                    } else {
+                        outputs
+                            .get(&context_key)
+                            .cloned()
+                            .or_else(|| outputs.get(&fallback_key).cloned())
+                    };
+                    if let Some(value) = value {
+                        inputs.insert(incoming.to_input_name.clone(), value);
+                    }
+                }
+
+                let context = NodeEvaluationContext {
+                    elapsed_seconds,
+                    render_layout: render_context.as_ref().map(|ctx| ctx.layout.clone()),
+                };
+                tracing::trace!(
+                    graph_id,
+                    node_id = %node.id,
+                    node_type = %node.node_type.as_str(),
+                    context_id,
+                    input_names = ?inputs.keys().collect::<Vec<_>>(),
+                    elapsed_seconds,
+                    "evaluating node"
+                );
+                let evaluator = execution_state
+                    .evaluators
+                    .entry((node_index, context_id.to_owned()))
+                    .or_insert_with(|| {
+                        self.node_registry
+                            .evaluator_for(node.node_type.as_str(), &node.parameters)
+                            .expect("validated node type must have runtime evaluator")
+                    });
+                let evaluation = match evaluate_node(&context, evaluator.as_mut(), &inputs) {
+                    Ok(evaluation) => evaluation,
+                    Err(error) => {
+                        events.node_diagnostics(
+                            graph_id.to_owned(),
+                            node.id.clone(),
+                            vec![NodeDiagnostic {
+                                severity: NodeDiagnosticSeverity::Error,
+                                code: Some("runtime_evaluation_failed".to_owned()),
+                                message: error.to_string(),
+                            }],
+                        );
+                        return Err(error).with_context(|| {
+                            format!(
+                                "evaluate node {} ({}) in context {}",
+                                node.id,
+                                node.node_type.as_str(),
+                                context_id
+                            )
+                        });
+                    }
+                };
+                if !evaluation.diagnostics.is_empty() {
+                    events.node_diagnostics(
+                        graph_id.to_owned(),
+                        node.id.clone(),
+                        evaluation.diagnostics.clone(),
+                    );
+                }
+                let node_updates = evaluation
+                    .frontend_updates
+                    .into_iter()
+                    .filter(|update| runtime_update_name_allowed(node, &update.name))
+                    .map(|update| NodeRuntimeValue {
+                        name: update.name,
+                        value: update.value,
+                    })
+                    .collect::<Vec<_>>();
+                let update_key = (node_index, context_id.to_owned());
+                let should_emit_runtime_update = node_updates.is_empty()
+                    || should_emit_runtime_update(
+                        execution_state
+                            .last_runtime_update_seconds
+                            .get(&update_key)
+                            .copied(),
+                        elapsed_seconds,
+                        RUNTIME_UPDATE_INTERVAL_SECONDS,
+                    );
+                if !node_updates.is_empty() && should_emit_runtime_update {
+                    tracing::trace!(
+                        graph_id,
+                        node_id = %node.id,
+                        node_type = %node.node_type.as_str(),
+                        context_id,
+                        runtime_update_names = ?node_updates.iter().map(|value| value.name.as_str()).collect::<Vec<_>>(),
+                        "emitting node runtime updates"
+                    );
+                    execution_state
+                        .last_runtime_update_seconds
+                        .insert(update_key, elapsed_seconds);
+                    events.node_runtime_update(graph_id.to_owned(), node.id.clone(), node_updates);
+                }
+
+                let output_names = evaluation.outputs.keys().cloned().collect::<Vec<_>>();
+                tracing::trace!(
+                    graph_id,
+                    node_id = %node.id,
+                    node_type = %node.node_type.as_str(),
+                    context_id,
+                    output_names = ?output_names,
+                    "node evaluation completed"
+                );
+
+                for (name, value) in evaluation.outputs {
+                    outputs.insert((node_index, context_id.to_owned(), name), value);
+                }
+            }
+        }
+
+        execution_state.previous_outputs = outputs;
+        Ok(())
+    }
+}
+
+/// Returns the render contexts in which a node should be evaluated for the current tick.
+///
+/// Nodes without explicit render contexts are evaluated once in the default context.
+fn evaluation_contexts_for_node(
+    contexts: &[crate::services::runtime::types::RenderContext],
+) -> Vec<Option<crate::services::runtime::types::RenderContext>> {
+    if contexts.is_empty() {
+        vec![None]
+    } else {
+        contexts.iter().cloned().map(Some).collect::<Vec<_>>()
+    }
+}
+
+/// Seeds previous-tick outputs for delay nodes when they have not produced a value yet.
+///
+/// Delay nodes need an initial value so feedback cycles can evaluate on the first tick. Frame
+/// contexts are seeded with transparent frames of the correct layout, while the default context
+/// is seeded with `0.0`.
+fn initialize_delay_previous_outputs(
+    graph: &CompiledGraph,
+    execution_state: &mut GraphExecutionState,
+) {
+    const DEFAULT_CONTEXT_ID: &str = "__default__";
+
+    for (node_index, node) in graph.nodes.iter().enumerate() {
+        if node.node_type.as_str() != shared::NodeTypeId::DELAY {
+            continue;
+        }
+
+        let render_contexts = if graph.render_contexts_by_node[node_index].is_empty() {
+            vec![None]
+        } else {
+            graph.render_contexts_by_node[node_index]
+                .iter()
+                .cloned()
+                .map(Some)
+                .collect::<Vec<_>>()
+        };
+
+        for render_context in render_contexts {
+            let (context_id, value) = match render_context {
+                Some(context) => (
+                    context.id,
+                    InputValue::ColorFrame(shared::ColorFrame {
+                        layout: context.layout.clone(),
+                        pixels: vec![
+                            shared::RgbaColor {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.0,
+                            };
+                            context.layout.pixel_count
+                        ],
+                    }),
+                ),
+                None => (DEFAULT_CONTEXT_ID.to_owned(), InputValue::Float(0.0)),
+            };
+
+            execution_state
+                .previous_outputs
+                .entry((node_index, context_id, "value".to_owned()))
+                .or_insert(value);
+        }
+    }
+}
+
+/// Evaluates a runtime node evaluator with the prepared input map.
+fn evaluate_node(
+    context: &NodeEvaluationContext,
+    evaluator: &mut dyn RuntimeNodeEvaluator,
+    inputs: &HashMap<String, InputValue>,
+) -> anyhow::Result<NodeEvaluation> {
+    evaluator.evaluate(context, inputs)
+}
+
+/// Returns whether a frontend runtime update name is allowed for a compiled node.
+///
+/// Display nodes are allowed to emit `value*` updates when `value` is part of the declared
+/// runtime-update schema so indexed display outputs can still be surfaced in the frontend.
+fn runtime_update_name_allowed(
+    node: &crate::services::runtime::types::CompiledNode,
+    name: &str,
+) -> bool {
+    node.allowed_runtime_update_names.contains(name)
+        || (node.node_type.as_str() == shared::NodeTypeId::DISPLAY
+            && node.allowed_runtime_update_names.contains("value")
+            && name.starts_with("value"))
+}
+
+/// Returns whether a runtime update should be emitted at `elapsed_seconds`.
+///
+/// Updates are rate-limited per node and render context, but the limiter resets when time moves
+/// backward, which can happen in tests or during manual stepping.
+fn should_emit_runtime_update(
+    last_emitted_seconds: Option<f64>,
+    elapsed_seconds: f64,
+    min_interval_seconds: f64,
+) -> bool {
+    match last_emitted_seconds {
+        None => true,
+        Some(last) if elapsed_seconds < last => true,
+        Some(last) => elapsed_seconds - last >= min_interval_seconds,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+    use std::time::{Duration, Instant};
+
+    use anyhow::Context;
+    use shared::{GraphDocument, InputValue};
+
+    use crate::node_runtime::{NodeEvaluationContext, build_builtin_node_registry};
+    use crate::services::runtime::compiler::compile_graph_document;
+    use crate::services::runtime::executor::{evaluate_node, initialize_delay_previous_outputs};
+    use crate::services::runtime::types::{GraphExecutionState, RuntimeEventPublisher};
+
+    struct NoopEvents;
+
+    impl RuntimeEventPublisher for NoopEvents {
+        /// Ignores runtime-status broadcasts in executor tests.
+        fn runtime_statuses_changed(&self, _statuses: Vec<shared::GraphRuntimeStatus>) {}
+
+        /// Ignores node runtime updates in executor tests.
+        fn node_runtime_update(
+            &self,
+            _graph_id: String,
+            _node_id: String,
+            _values: Vec<shared::NodeRuntimeValue>,
+        ) {
+        }
+
+        /// Ignores diagnostics emitted during executor tests.
+        fn node_diagnostics(
+            &self,
+            _graph_id: String,
+            _node_id: String,
+            _diagnostics: Vec<shared::NodeDiagnostic>,
+        ) {
+        }
+    }
+
+    /// Tests that the persisted sample graph executes a single tick without errors.
+    #[test]
+    fn persisted_test_graph_executes_one_tick() {
+        let document: GraphDocument = serde_json::from_str(include_str!(
+            "../../../data/graph_documents/e3d4fb07-e536-44bc-bad0-7eab6c108d2f.json"
+        ))
+        .expect("parse graph document");
+        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile graph document");
+        let mut execution_state = GraphExecutionState::default();
+
+        graph
+            .execute_tick(
+                "e3d4fb07-e536-44bc-bad0-7eab6c108d2f",
+                &NoopEvents,
+                0.0,
+                &mut execution_state,
+            )
+            .expect("execute persisted graph tick");
+    }
+
+    /// Measures the average tick time for the persisted sample graph.
+    #[test]
+    fn persisted_test_graph_tick_timing() {
+        let document: GraphDocument = serde_json::from_str(include_str!(
+            "../../../data/graph_documents/e3d4fb07-e536-44bc-bad0-7eab6c108d2f.json"
+        ))
+        .expect("parse graph document");
+        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile graph document");
+        let mut execution_state = GraphExecutionState::default();
+
+        graph
+            .execute_tick(
+                "e3d4fb07-e536-44bc-bad0-7eab6c108d2f",
+                &NoopEvents,
+                0.0,
+                &mut execution_state,
+            )
+            .expect("warm up persisted graph tick");
+
+        let iterations = 200usize;
+        let start = Instant::now();
+        for index in 0..iterations {
+            graph
+                .execute_tick(
+                    "e3d4fb07-e536-44bc-bad0-7eab6c108d2f",
+                    &NoopEvents,
+                    index as f64 / 60.0,
+                    &mut execution_state,
+                )
+                .expect("execute persisted graph tick");
+        }
+        let total = start.elapsed();
+        let average = Duration::from_secs_f64(total.as_secs_f64() / iterations as f64);
+        tracing::info!(
+            iterations,
+            total_millis = total.as_secs_f64() * 1000.0,
+            average_millis = average.as_secs_f64() * 1000.0,
+            "persisted graph tick timing"
+        );
+    }
+
+    /// Records a per-node timing breakdown for the persisted sample graph.
+    #[test]
+    fn persisted_test_graph_tick_breakdown() {
+        const DEFAULT_CONTEXT_ID: &str = "__default__";
+
+        let document: GraphDocument = serde_json::from_str(include_str!(
+            "../../../data/graph_documents/e3d4fb07-e536-44bc-bad0-7eab6c108d2f.json"
+        ))
+        .expect("parse graph document");
+        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile graph document");
+        let mut execution_state = GraphExecutionState::default();
+
+        let mut totals = HashMap::<(String, String, String), Duration>::new();
+        let mut counts = HashMap::<(String, String, String), usize>::new();
+        let iterations = 200usize;
+
+        for index in 0..iterations {
+            let elapsed_seconds = index as f64 / 60.0;
+            let previous_outputs = execution_state.previous_outputs.clone();
+            let mut outputs = HashMap::<(usize, String, String), InputValue>::new();
+
+            let topological_order = graph.topological_order.clone();
+            for node_index in topological_order {
+                let render_contexts = if graph.render_contexts_by_node[node_index].is_empty() {
+                    vec![None]
+                } else {
+                    graph.render_contexts_by_node[node_index]
+                        .iter()
+                        .cloned()
+                        .map(Some)
+                        .collect::<Vec<_>>()
+                };
+                let incoming_edges = graph.incoming_edges_by_node[node_index].clone();
+                let node = &mut graph.nodes[node_index];
+
+                for render_context in render_contexts {
+                    let context_id = render_context
+                        .as_ref()
+                        .map(|ctx| ctx.id.as_str())
+                        .unwrap_or(DEFAULT_CONTEXT_ID);
+                    let mut inputs = node.input_defaults.clone();
+
+                    for incoming in &incoming_edges {
+                        let context_key = (
+                            incoming.from_node_index,
+                            context_id.to_owned(),
+                            incoming.from_output_name.clone(),
+                        );
+                        let fallback_key = (
+                            incoming.from_node_index,
+                            DEFAULT_CONTEXT_ID.to_owned(),
+                            incoming.from_output_name.clone(),
+                        );
+                        let value = if incoming.use_previous_tick {
+                            previous_outputs
+                                .get(&context_key)
+                                .cloned()
+                                .or_else(|| previous_outputs.get(&fallback_key).cloned())
+                        } else {
+                            outputs
+                                .get(&context_key)
+                                .cloned()
+                                .or_else(|| outputs.get(&fallback_key).cloned())
+                        };
+                        if let Some(value) = value {
+                            inputs.insert(incoming.to_input_name.clone(), value);
+                        }
+                    }
+
+                    let context = NodeEvaluationContext {
+                        elapsed_seconds,
+                        render_layout: render_context.as_ref().map(|ctx| ctx.layout.clone()),
+                    };
+                    let evaluator = execution_state
+                        .evaluators
+                        .entry((node_index, context_id.to_owned()))
+                        .or_insert_with(|| {
+                            graph
+                                .node_registry
+                                .evaluator_for(node.node_type.as_str(), &node.parameters)
+                                .expect("validated node type must have runtime evaluator")
+                        });
+
+                    let started = Instant::now();
+                    let evaluation = evaluate_node(&context, evaluator.as_mut(), &inputs)
+                        .with_context(|| {
+                            format!(
+                                "evaluate node {} ({}) in context {}",
+                                node.id,
+                                node.node_type.as_str(),
+                                context_id
+                            )
+                        })
+                        .expect("evaluate persisted graph node");
+                    let elapsed = started.elapsed();
+
+                    let key = (
+                        node.id.clone(),
+                        node.node_type.as_str().to_owned(),
+                        context_id.to_owned(),
+                    );
+                    *totals.entry(key.clone()).or_default() += elapsed;
+                    *counts.entry(key).or_default() += 1;
+
+                    for (name, value) in evaluation.outputs {
+                        outputs.insert((node_index, context_id.to_owned(), name), value);
+                    }
+                }
+            }
+            execution_state.previous_outputs = outputs;
+        }
+
+        let mut rows = totals
+            .into_iter()
+            .map(|((node_id, node_type, context_id), total)| {
+                let count = counts
+                    .get(&(node_id.clone(), node_type.clone(), context_id.clone()))
+                    .copied()
+                    .unwrap_or(1);
+                let avg = Duration::from_secs_f64(total.as_secs_f64() / count as f64);
+                (total, avg, count, node_id, node_type, context_id)
+            })
+            .collect::<Vec<_>>();
+        rows.sort_by(|lhs, rhs| rhs.0.cmp(&lhs.0));
+
+        let total_time = rows
+            .iter()
+            .fold(Duration::ZERO, |acc, (total, _, _, _, _, _)| acc + *total);
+        tracing::info!(iterations, "persisted graph per-node breakdown");
+        for (total, avg, count, node_id, node_type, context_id) in rows.iter().take(20) {
+            let pct = if total_time.is_zero() {
+                0.0
+            } else {
+                total.as_secs_f64() * 100.0 / total_time.as_secs_f64()
+            };
+            tracing::info!(
+                node_id,
+                node_type,
+                context_id,
+                count,
+                total_millis = total.as_secs_f64() * 1000.0,
+                average_millis = avg.as_secs_f64() * 1000.0,
+                share_percent = pct,
+                "persisted graph node timing"
+            );
+        }
+        tracing::info!(
+            aggregate_millis = total_time.as_secs_f64() * 1000.0,
+            "persisted graph timing aggregate"
+        );
+    }
+
+    #[test]
+    /// Tests that a delay node can seed a feedback cycle without deadlocking execution.
+    fn delay_node_allows_feedback_cycle() {
+        let document: GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "delay-cycle",
+                "name": "delay cycle",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "constant_1",
+                    "metadata": { "name": "constant_1" },
+                    "node_type": "core.float_constant",
+                    "parameters": [{ "name": "value", "value": 1.0 }]
+                },
+                {
+                    "id": "add_float_1",
+                    "metadata": { "name": "add_float_1" },
+                    "node_type": "math.add_float"
+                },
+                {
+                    "id": "delay_1",
+                    "metadata": { "name": "delay_1" },
+                    "node_type": "core.delay",
+                    "parameters": [{ "name": "ticks", "value": 1 }]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "constant_1",
+                    "from_output_name": "value",
+                    "to_node_id": "add_float_1",
+                    "to_input_name": "a"
+                },
+                {
+                    "from_node_id": "delay_1",
+                    "from_output_name": "value",
+                    "to_node_id": "add_float_1",
+                    "to_input_name": "b"
+                },
+                {
+                    "from_node_id": "add_float_1",
+                    "from_output_name": "sum",
+                    "to_node_id": "delay_1",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse delay cycle graph");
+
+        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile delay cycle graph");
+        let mut execution_state = GraphExecutionState::default();
+
+        graph
+            .execute_tick("delay-cycle", &NoopEvents, 0.0, &mut execution_state)
+            .expect("execute first delay cycle tick");
+        let first = execution_state
+            .previous_outputs
+            .get(&(1usize, "__default__".to_owned(), "sum".to_owned()))
+            .cloned()
+            .expect("first add output");
+        assert_eq!(first, InputValue::Float(1.0));
+
+        graph
+            .execute_tick("delay-cycle", &NoopEvents, 1.0 / 60.0, &mut execution_state)
+            .expect("execute second delay cycle tick");
+        let second = execution_state
+            .previous_outputs
+            .get(&(1usize, "__default__".to_owned(), "sum".to_owned()))
+            .cloned()
+            .expect("second add output");
+        assert_eq!(second, InputValue::Float(1.0));
+
+        graph
+            .execute_tick("delay-cycle", &NoopEvents, 2.0 / 60.0, &mut execution_state)
+            .expect("execute third delay cycle tick");
+        let third = execution_state
+            .previous_outputs
+            .get(&(1usize, "__default__".to_owned(), "sum".to_owned()))
+            .cloned()
+            .expect("third add output");
+        assert_eq!(third, InputValue::Float(2.0));
+    }
+
+    #[test]
+    /// Tests that delay nodes seed transparent frames for render-context outputs.
+    fn delay_previous_output_initializes_to_transparent_frame_for_render_contexts() {
+        let document: GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "delay-frame-seed",
+                "name": "delay frame seed",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "delay_1",
+                    "metadata": { "name": "delay_1" },
+                    "node_type": "core.delay",
+                    "parameters": [{ "name": "ticks", "value": 1 }]
+                },
+                {
+                    "id": "wled_1",
+                    "metadata": { "name": "wled_1" },
+                    "node_type": "net.wled_target",
+                    "parameters": [
+                        { "name": "target", "value": "dummy" },
+                        { "name": "led_count", "value": 4 }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "delay_1",
+                    "from_output_name": "value",
+                    "to_node_id": "wled_1",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse delay frame seed graph");
+        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let graph = compile_graph_document(document, node_registry)
+            .expect("compile delay frame seed graph");
+        let mut execution_state = GraphExecutionState::default();
+
+        initialize_delay_previous_outputs(&graph, &mut execution_state);
+
+        let seeded_frame = execution_state
+            .previous_outputs
+            .values()
+            .find_map(|value| match value {
+                InputValue::ColorFrame(frame) => Some(frame),
+                _ => None,
+            })
+            .expect("seeded transparent delay frame");
+
+        assert!(
+            seeded_frame.pixels.iter().all(|pixel| {
+                pixel.r == 0.0 && pixel.g == 0.0 && pixel.b == 0.0 && pixel.a == 0.0
+            })
+        );
+    }
+}

@@ -1,0 +1,28 @@
+name: "Luma Weaver"
+version: "0.1.0"
+slug: "luma_weaver"
+description: "Browser-based node editor for animated lighting with a Rust backend and WebAssembly frontend."
+url: "https://github.com/Hannes-Beckmann/luma-weaver"
+init: false
+startup: application
+boot: auto
+arch:
+  - amd64
+  - aarch64
+  - armv7
+  - armhf
+  - i386
+host_network: true
+webui: "http://[HOST]:[PORT:38123]/"
+watchdog: "http://[HOST]:[PORT:38123]/health"
+ports:
+  38123/tcp: 38123
+ports_description:
+  38123/tcp: "Luma Weaver web UI"
+panel_icon: "mdi:animation-play"
+panel_title: "Luma Weaver"
+backup: hot
+options:
+  log_level: info
+schema:
+  log_level: "list(trace|debug|info|warn|error)"

@@ -1,0 +1,6 @@
+.git
+.devcontainer
+target
+crates/frontend/dist
+crates/backend/data
+**/*.log

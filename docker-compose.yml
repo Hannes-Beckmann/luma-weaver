@@ -1,0 +1,18 @@
+services:
+  luma-weaver:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: luma-weaver:latest
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      APP_DATA_DIR: /app/data
+      FRONTEND_DIST_DIR: /app/frontend-dist
+      BACKEND_PORT: "38123"
+      RUST_LOG: info
+    volumes:
+      - luma-weaver-data:/app/data
+
+volumes:
+  luma-weaver-data:
