@@ -1,10 +1,14 @@
 # Luma Weaver
 
 <p align="center">
-  <img src="crates/frontend/icon.svg" alt="Luma Weaver icon" width="180" />
+  <img src="assets/icon.svg" alt="Luma Weaver icon" width="180" />
 </p>
 
 Luma Weaver is a node-based lighting and animation editor built with Rust. It combines a browser-hosted `egui` frontend compiled to WebAssembly with an Axum backend that stores graph documents, executes them in real time, and serves the UI from the same process.
+
+<p align="center">
+  <img src="assets/example.gif" alt="Luma Weaver editor demo" width="900" />
+</p>
 
 The project is designed for two main deployment styles:
 
