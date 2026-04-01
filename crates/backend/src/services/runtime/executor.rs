@@ -315,60 +315,129 @@ mod tests {
         }
     }
 
-    /// Tests that the persisted sample graph executes a single tick without errors.
-    #[test]
-    fn persisted_test_graph_executes_one_tick() {
-        let document: GraphDocument = serde_json::from_str(include_str!(
-            "../../../data/graph_documents/e3d4fb07-e536-44bc-bad0-7eab6c108d2f.json"
-        ))
-        .expect("parse graph document");
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
-        let mut graph =
-            compile_graph_document(document, node_registry).expect("compile graph document");
-        let mut execution_state = GraphExecutionState::default();
-
-        graph
-            .execute_tick(
-                "e3d4fb07-e536-44bc-bad0-7eab6c108d2f",
-                &NoopEvents,
-                0.0,
-                &mut execution_state,
-            )
-            .expect("execute persisted graph tick");
+    fn sample_runtime_graph() -> GraphDocument {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "runtime-sample",
+                "name": "runtime sample",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "signal_1",
+                    "metadata": { "name": "signal_1" },
+                    "node_type": "math.signal_generator",
+                    "parameters": [
+                        { "name": "waveform", "value": "sinus" },
+                        { "name": "frequency", "value": 0.5 },
+                        { "name": "amplitude", "value": 1.0 },
+                        { "name": "phase", "value": 0.0 },
+                        { "name": "offset", "value": 0.0 }
+                    ]
+                },
+                {
+                    "id": "scale_1",
+                    "metadata": { "name": "scale_1" },
+                    "node_type": "math.multiply_float"
+                },
+                {
+                    "id": "solid_1",
+                    "metadata": { "name": "solid_1" },
+                    "node_type": "anim.solid_frame",
+                    "parameters": [
+                        { "name": "layout", "value": { "id": "strip-16", "pixel_count": 16, "width": 16, "height": 1 } },
+                        { "name": "color", "value": { "r": 1.0, "g": 0.55, "b": 0.18, "a": 1.0 } }
+                    ]
+                },
+                {
+                    "id": "brightness_1",
+                    "metadata": { "name": "brightness_1" },
+                    "node_type": "color.frame_brightness"
+                },
+                {
+                    "id": "display_1",
+                    "metadata": { "name": "display_1" },
+                    "node_type": "debug.wled_dummy_display",
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "signal_1",
+                    "from_output_name": "value",
+                    "to_node_id": "scale_1",
+                    "to_input_name": "a"
+                },
+                {
+                    "from_node_id": "signal_1",
+                    "from_output_name": "value",
+                    "to_node_id": "scale_1",
+                    "to_input_name": "b"
+                },
+                {
+                    "from_node_id": "solid_1",
+                    "from_output_name": "frame",
+                    "to_node_id": "brightness_1",
+                    "to_input_name": "frame"
+                },
+                {
+                    "from_node_id": "scale_1",
+                    "from_output_name": "product",
+                    "to_node_id": "brightness_1",
+                    "to_input_name": "factor"
+                },
+                {
+                    "from_node_id": "brightness_1",
+                    "from_output_name": "frame",
+                    "to_node_id": "display_1",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse sample runtime graph")
     }
 
-    /// Measures the average tick time for the persisted sample graph.
+    /// Tests that the sample runtime graph executes a single tick without errors.
     #[test]
-    fn persisted_test_graph_tick_timing() {
-        let document: GraphDocument = serde_json::from_str(include_str!(
-            "../../../data/graph_documents/e3d4fb07-e536-44bc-bad0-7eab6c108d2f.json"
-        ))
-        .expect("parse graph document");
+    fn sample_runtime_graph_executes_one_tick() {
+        let document = sample_runtime_graph();
         let node_registry = build_builtin_node_registry().expect("build builtin node registry");
         let mut graph =
             compile_graph_document(document, node_registry).expect("compile graph document");
         let mut execution_state = GraphExecutionState::default();
 
         graph
-            .execute_tick(
-                "e3d4fb07-e536-44bc-bad0-7eab6c108d2f",
-                &NoopEvents,
-                0.0,
-                &mut execution_state,
-            )
-            .expect("warm up persisted graph tick");
+            .execute_tick("runtime-sample", &NoopEvents, 0.0, &mut execution_state)
+            .expect("execute sample graph tick");
+    }
+
+    /// Measures the average tick time for the sample runtime graph.
+    #[test]
+    fn sample_runtime_graph_tick_timing() {
+        let document = sample_runtime_graph();
+        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile graph document");
+        let mut execution_state = GraphExecutionState::default();
+
+        graph
+            .execute_tick("runtime-sample", &NoopEvents, 0.0, &mut execution_state)
+            .expect("warm up sample graph tick");
 
         let iterations = 200usize;
         let start = Instant::now();
         for index in 0..iterations {
             graph
                 .execute_tick(
-                    "e3d4fb07-e536-44bc-bad0-7eab6c108d2f",
+                    "runtime-sample",
                     &NoopEvents,
                     index as f64 / 60.0,
                     &mut execution_state,
                 )
-                .expect("execute persisted graph tick");
+                .expect("execute sample graph tick");
         }
         let total = start.elapsed();
         let average = Duration::from_secs_f64(total.as_secs_f64() / iterations as f64);
@@ -376,19 +445,16 @@ mod tests {
             iterations,
             total_millis = total.as_secs_f64() * 1000.0,
             average_millis = average.as_secs_f64() * 1000.0,
-            "persisted graph tick timing"
+            "sample graph tick timing"
         );
     }
 
-    /// Records a per-node timing breakdown for the persisted sample graph.
+    /// Records a per-node timing breakdown for the sample runtime graph.
     #[test]
-    fn persisted_test_graph_tick_breakdown() {
+    fn sample_runtime_graph_tick_breakdown() {
         const DEFAULT_CONTEXT_ID: &str = "__default__";
 
-        let document: GraphDocument = serde_json::from_str(include_str!(
-            "../../../data/graph_documents/e3d4fb07-e536-44bc-bad0-7eab6c108d2f.json"
-        ))
-        .expect("parse graph document");
+        let document = sample_runtime_graph();
         let node_registry = build_builtin_node_registry().expect("build builtin node registry");
         let mut graph =
             compile_graph_document(document, node_registry).expect("compile graph document");
@@ -475,7 +541,7 @@ mod tests {
                                 context_id
                             )
                         })
-                        .expect("evaluate persisted graph node");
+                        .expect("evaluate sample graph node");
                     let elapsed = started.elapsed();
 
                     let key = (
@@ -510,7 +576,7 @@ mod tests {
         let total_time = rows
             .iter()
             .fold(Duration::ZERO, |acc, (total, _, _, _, _, _)| acc + *total);
-        tracing::info!(iterations, "persisted graph per-node breakdown");
+        tracing::info!(iterations, "sample graph per-node breakdown");
         for (total, avg, count, node_id, node_type, context_id) in rows.iter().take(20) {
             let pct = if total_time.is_zero() {
                 0.0
@@ -525,12 +591,12 @@ mod tests {
                 total_millis = total.as_secs_f64() * 1000.0,
                 average_millis = avg.as_secs_f64() * 1000.0,
                 share_percent = pct,
-                "persisted graph node timing"
+                "sample graph node timing"
             );
         }
         tracing::info!(
             aggregate_millis = total_time.as_secs_f64() * 1000.0,
-            "persisted graph timing aggregate"
+            "sample graph timing aggregate"
         );
     }
 
