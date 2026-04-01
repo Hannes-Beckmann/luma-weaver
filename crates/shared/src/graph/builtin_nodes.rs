@@ -766,9 +766,9 @@ static MASK_FRAME_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
         NodeInputDefinition {
             name: "mask".to_owned(),
             display_name: title_case_name("mask"),
-            value_kind: ValueKind::FloatTensor,
+            value_kind: ValueKind::ColorFrame,
             accepted_kinds: vec![],
-            default_value: Some(default_tensor_input()),
+            default_value: None,
         },
     ],
     outputs: vec![NodeOutputDefinition {
@@ -900,11 +900,16 @@ static MOVING_AVERAGE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     category: NodeCategory::Color,
     inputs: vec![
         NodeInputDefinition {
-            name: "frame".to_owned(),
-            display_name: title_case_name("frame"),
-            value_kind: ValueKind::ColorFrame,
-            accepted_kinds: vec![],
-            default_value: None,
+            name: "value".to_owned(),
+            display_name: title_case_name("value"),
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::Color,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
+            default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "window_size".to_owned(),
@@ -915,10 +920,15 @@ static MOVING_AVERAGE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
         },
     ],
     outputs: vec![NodeOutputDefinition {
-        name: "frame".to_owned(),
-        display_name: title_case_name("frame"),
-        value_kind: ValueKind::ColorFrame,
-        accepted_kinds: vec![],
+        name: "value".to_owned(),
+        display_name: title_case_name("value"),
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![
+            ValueKind::Float,
+            ValueKind::Color,
+            ValueKind::FloatTensor,
+            ValueKind::ColorFrame,
+        ],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use shared::{ColorFrame, FloatTensor, InputValue, NodeDiagnostic, NodeDiagnosticSeverity};
+use shared::{ColorFrame, InputValue, NodeDiagnostic, NodeDiagnosticSeverity};
 
 use crate::node_runtime::{
     NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
@@ -13,15 +13,12 @@ impl RuntimeNodeFromParameters for MaskFrameNode {}
 
 pub(crate) struct MaskFrameInputs {
     frame: Option<ColorFrame>,
-    mask: FloatTensor,
+    mask: Option<ColorFrame>,
 }
 
 crate::node_runtime::impl_runtime_inputs!(MaskFrameInputs {
     frame = None,
-    mask = FloatTensor {
-        shape: vec![1],
-        values: vec![0.0],
-    },
+    mask = None,
 });
 
 pub(crate) struct MaskFrameOutputs {
@@ -52,31 +49,23 @@ impl RuntimeNode for MaskFrameNode {
                 frame: None,
             }));
         };
+        let Some(mask) = inputs.mask else {
+            return Ok(TypedNodeEvaluation::from_outputs(MaskFrameOutputs {
+                frame: Some(frame),
+            }));
+        };
 
         let diagnostics;
-        match mask_values_for_frame(&inputs.mask, frame.layout.pixel_count) {
-            Ok(mask_values) => {
-                let mut clamped = false;
-                for (pixel, factor) in frame.pixels.iter_mut().zip(mask_values.iter().copied()) {
-                    let factor = if (0.0..=1.0).contains(&factor) {
-                        factor
-                    } else {
-                        clamped = true;
-                        factor.clamp(0.0, 1.0)
-                    };
+        match mask_alphas_for_frame(&mask, frame.layout.pixel_count) {
+            Ok(mask_alphas) => {
+                for (pixel, alpha) in frame.pixels.iter_mut().zip(mask_alphas.iter().copied()) {
+                    let factor = alpha.clamp(0.0, 1.0);
                     pixel.r = (pixel.r * factor).clamp(0.0, 1.0);
                     pixel.g = (pixel.g * factor).clamp(0.0, 1.0);
                     pixel.b = (pixel.b * factor).clamp(0.0, 1.0);
+                    pixel.a = (pixel.a * factor).clamp(0.0, 1.0);
                 }
-                diagnostics = if clamped {
-                    vec![NodeDiagnostic {
-                        severity: NodeDiagnosticSeverity::Warning,
-                        code: Some("mask_frame_mask_clamped".to_owned()),
-                        message: "Mask Frame clamped mask values into the [0, 1] range.".to_owned(),
-                    }]
-                } else {
-                    Vec::new()
-                };
+                diagnostics = Vec::new();
             }
             Err(message) => {
                 diagnostics = vec![NodeDiagnostic {
@@ -95,16 +84,97 @@ impl RuntimeNode for MaskFrameNode {
     }
 }
 
-fn mask_values_for_frame(mask: &FloatTensor, pixel_count: usize) -> Result<Vec<f32>, String> {
-    if mask.values.len() == 1 {
-        return Ok(vec![mask.values[0]; pixel_count]);
+fn mask_alphas_for_frame(mask: &ColorFrame, pixel_count: usize) -> Result<Vec<f32>, String> {
+    if mask.pixels.len() == 1 {
+        return Ok(vec![mask.pixels[0].a; pixel_count]);
     }
-    if mask.values.len() == pixel_count {
-        return Ok(mask.values.clone());
+    if mask.pixels.len() == pixel_count {
+        return Ok(mask.pixels.iter().map(|pixel| pixel.a).collect());
     }
     Err(format!(
-        "Mask Frame expected a mask with 1 or {} values, but got {}.",
+        "Mask Frame expected a mask frame with 1 or {} pixels, but got {}.",
         pixel_count,
-        mask.values.len()
+        mask.pixels.len()
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use shared::{LedLayout, RgbaColor};
+
+    use super::*;
+
+    #[test]
+    fn uses_mask_frame_alpha_channel() {
+        let mut node = MaskFrameNode;
+        let layout = LedLayout {
+            id: "layout".to_owned(),
+            pixel_count: 2,
+            width: Some(2),
+            height: Some(1),
+        };
+        let result = node
+            .evaluate(
+                &NodeEvaluationContext {
+                    elapsed_seconds: 0.0,
+                    render_layout: None,
+                },
+                MaskFrameInputs {
+                    frame: Some(ColorFrame {
+                        layout: layout.clone(),
+                        pixels: vec![
+                            RgbaColor {
+                                r: 1.0,
+                                g: 0.5,
+                                b: 0.25,
+                                a: 1.0,
+                            },
+                            RgbaColor {
+                                r: 0.2,
+                                g: 0.4,
+                                b: 0.8,
+                                a: 0.5,
+                            },
+                        ],
+                    }),
+                    mask: Some(ColorFrame {
+                        layout,
+                        pixels: vec![
+                            RgbaColor {
+                                r: 0.0,
+                                g: 0.0,
+                                b: 0.0,
+                                a: 0.25,
+                            },
+                            RgbaColor {
+                                r: 1.0,
+                                g: 1.0,
+                                b: 1.0,
+                                a: 1.0,
+                            },
+                        ],
+                    }),
+                },
+            )
+            .expect("evaluate mask frame");
+
+        let output = result.outputs.frame.expect("masked frame output");
+        assert_eq!(
+            output.pixels,
+            vec![
+                RgbaColor {
+                    r: 0.25,
+                    g: 0.125,
+                    b: 0.0625,
+                    a: 0.25,
+                },
+                RgbaColor {
+                    r: 0.2,
+                    g: 0.4,
+                    b: 0.8,
+                    a: 0.5,
+                },
+            ]
+        );
+    }
 }
