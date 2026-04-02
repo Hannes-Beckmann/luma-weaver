@@ -84,7 +84,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install trunk
-        run: cargo install --locked trunk
+        uses: taiki-e/install-action@trunk
 
       - name: Build frontend
         run: trunk build --release
@@ -93,6 +93,7 @@ jobs:
   docker-smoke-build:
     name: Docker smoke build
     runs-on: ubuntu-latest
+    if: github.event_name == 'push'
     needs:
       - validate-addon-metadata
       - rust-tests
@@ -113,6 +114,8 @@ jobs:
           load: false
           push: false
           platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           build-args: |
             BUILD_ARCH=amd64
             BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:bookworm

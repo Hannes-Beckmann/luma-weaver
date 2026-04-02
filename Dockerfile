@@ -31,7 +31,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/app/target \
     cd /app/crates/frontend \
     && trunk build --release \
-    && cargo build --locked --release -p backend \
     && install -D /app/target/release/backend /out/backend
 
 FROM ${BUILD_FROM} AS runtime

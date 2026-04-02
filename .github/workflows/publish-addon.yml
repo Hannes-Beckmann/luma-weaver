@@ -86,6 +86,8 @@ jobs:
           file: ./Dockerfile
           platforms: ${{ matrix.platform }}
           push: true
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           build-args: |
             BUILD_ARCH=${{ matrix.arch }}
             BUILD_FROM=${{ matrix.build_from }}
