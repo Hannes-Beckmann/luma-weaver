@@ -286,3 +286,21 @@ fn graph_id_from_path(pathname: &str) -> Option<String> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::graph_id_from_path;
+
+    #[test]
+    fn parses_graph_route() {
+        assert_eq!(graph_id_from_path("/graphs/demo"), Some("demo".to_owned()));
+        assert_eq!(graph_id_from_path("graphs/demo"), Some("demo".to_owned()));
+    }
+
+    #[test]
+    fn rejects_non_graph_routes() {
+        assert_eq!(graph_id_from_path("/"), None);
+        assert_eq!(graph_id_from_path("/graphs"), None);
+        assert_eq!(graph_id_from_path("/graphs/demo/extra"), None);
+    }
+}

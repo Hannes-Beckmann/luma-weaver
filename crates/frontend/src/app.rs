@@ -72,3 +72,20 @@ impl FrontendApp {
         self.clear_pending_graph_update_tracking();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::FrontendApp;
+    use crate::state::AppView;
+
+    #[test]
+    fn default_app_starts_disconnected_on_dashboard() {
+        let app = FrontendApp::default();
+
+        assert!(matches!(app.ui.active_view, AppView::Dashboard));
+        assert!(app.ui.selected_graph_id.is_none());
+        assert!(app.graphs.graph_documents.is_empty());
+        assert_eq!(app.connection.ws_status, "Disconnected");
+        assert!(!app.connection.has_confirmed_connection);
+    }
+}

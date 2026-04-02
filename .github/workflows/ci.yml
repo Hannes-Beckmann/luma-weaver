@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  validate-addon-metadata:
+    name: Validate add-on metadata
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate config.yaml fields
+        shell: bash
+        run: |
+          version="$(awk -F'"' '/^version: / { print $2; exit }' config.yaml)"
+          slug="$(awk -F'"' '/^slug: / { print $2; exit }' config.yaml)"
+          image="$(awk -F'"' '/^image: / { print $2; exit }' config.yaml)"
+
+          if [[ -z "${version}" ]]; then
+            echo "config.yaml is missing a version" >&2
+            exit 1
+          fi
+
+          if [[ -z "${slug}" ]]; then
+            echo "config.yaml is missing a slug" >&2
+            exit 1
+          fi
+
+          if [[ -z "${image}" ]]; then
+            echo "config.yaml is missing an image" >&2
+            exit 1
+          fi
+
+          if [[ "${image}" != *"{arch}"* ]]; then
+            echo "config.yaml image must include {arch}" >&2
+            exit 1
+          fi
+
+          if ! grep -q '^arch:$' config.yaml; then
+            echo "config.yaml is missing the arch list" >&2
+            exit 1
+          fi
+
+  rust-tests:
+    name: Rust tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Restore cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run Rust tests
+        run: cargo test -p shared -p backend -p frontend --locked
+
+  frontend-build:
+    name: Frontend trunk build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain with wasm target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Restore cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install trunk
+        run: cargo install --locked trunk
+
+      - name: Build frontend
+        run: trunk build --release
+        working-directory: crates/frontend
+
+  docker-smoke-build:
+    name: Docker smoke build
+    runs-on: ubuntu-latest
+    needs:
+      - validate-addon-metadata
+      - rust-tests
+      - frontend-build
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build amd64 image without pushing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          load: false
+          push: false
+          platforms: linux/amd64
+          build-args: |
+            BUILD_ARCH=amd64
+            BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:bookworm
+            BUILD_VERSION=ci

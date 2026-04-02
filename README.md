@@ -130,6 +130,8 @@ After adding the repository:
 2. Start it.
 3. Open the web UI from Home Assistant or directly at port `38123`.
 
+Because `config.yaml` now includes an `image` reference, Home Assistant will pull a prebuilt container image from GHCR instead of compiling the add-on on the target machine.
+
 The add-on is configured to:
 
 - run on the host network
@@ -138,6 +140,24 @@ The add-on is configured to:
 - use `/health` as the watchdog endpoint
 
 That makes Home Assistant a convenient host for always-on use while still keeping the app itself independent and browser-based.
+
+### Publishing add-on images
+
+To make the add-on install without compiling on the Home Assistant host:
+
+1. Update the version in `config.yaml`.
+2. Create and push a matching Git tag in the form `vX.Y.Z`.
+3. Let GitHub Actions publish the arch-specific images to GHCR.
+
+The repository includes `.github/workflows/publish-addon.yml`, which pushes:
+
+- `ghcr.io/hannes-beckmann/amd64-addon-luma_weaver:<version>`
+- `ghcr.io/hannes-beckmann/aarch64-addon-luma_weaver:<version>`
+- `ghcr.io/hannes-beckmann/armv7-addon-luma_weaver:<version>`
+- `ghcr.io/hannes-beckmann/armhf-addon-luma_weaver:<version>`
+- `ghcr.io/hannes-beckmann/i386-addon-luma_weaver:<version>`
+
+Home Assistant resolves the correct image automatically from the `image: ghcr.io/hannes-beckmann/{arch}-addon-luma_weaver` setting in `config.yaml`.
 
 ## Development
 
