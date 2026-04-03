@@ -101,23 +101,18 @@ pub(super) fn show_runtime_value(ui: &mut egui::Ui, value: &InputValue) {
 /// The preview preserves the frame aspect ratio and paints each source pixel into a scaled cell
 /// within the available preview rectangle.
 pub(super) fn draw_color_frame_preview(ui: &mut egui::Ui, frame: &shared::ColorFrame) {
-    let width = frame
-        .layout
-        .width
-        .unwrap_or(frame.pixels.len().max(1))
-        .max(1);
-    let height = frame
-        .layout
-        .height
-        .unwrap_or_else(|| (frame.pixels.len().max(1) + width - 1) / width)
-        .max(1);
-
-    let max_preview_size = egui::vec2(120.0, 120.0);
-    let aspect = width as f32 / height as f32;
-    let preview_size = if aspect >= 1.0 {
-        egui::vec2(max_preview_size.x, max_preview_size.x / aspect)
+    let (width, height) = frame_preview_dimensions(frame);
+    let max_preview_size = egui::vec2(240.0, 240.0);
+    let preview_size = if width == 1 || height == 1 {
+        // One-dimensional strips read best as a horizontal ribbon instead of a tall sliver.
+        egui::vec2(max_preview_size.x, 18.0)
     } else {
-        egui::vec2(max_preview_size.y * aspect, max_preview_size.y)
+        let aspect = width as f32 / height as f32;
+        if aspect >= 1.0 {
+            egui::vec2(max_preview_size.x, max_preview_size.x / aspect)
+        } else {
+            egui::vec2(max_preview_size.y * aspect, max_preview_size.y)
+        }
     };
 
     let (rect, _) = ui.allocate_exact_size(preview_size, egui::Sense::hover());
@@ -478,6 +473,21 @@ fn frame_layout_dims_label(frame: &shared::ColorFrame) -> String {
     format!("1x{}", frame.pixels.len().max(1))
 }
 
+/// Returns the preview grid dimensions used to render a frame in the editor.
+///
+/// True 2D layouts keep their native dimensions. One-dimensional strips are flattened into a
+/// horizontal ribbon so long LED chains stay readable in the preview.
+fn frame_preview_dimensions(frame: &shared::ColorFrame) -> (usize, usize) {
+    if let (Some(width), Some(height)) = (frame.layout.width, frame.layout.height)
+        && width > 1
+        && height > 1
+    {
+        return (width, height);
+    }
+
+    (frame.pixels.len().max(1), 1)
+}
+
 /// Returns a mutable reference to the named parameter value, inserting the default when missing.
 fn parameter_value_mut<'a>(
     parameters: &'a mut Vec<NodeParameter>,
@@ -804,4 +814,56 @@ pub(super) fn max_input_label_width(ui: &egui::Ui, node: &EditorSnarlNode) -> f3
         })
         .fold(0.0f32, f32::max);
     widest + 8.0
+}
+
+#[cfg(test)]
+mod tests {
+    use super::frame_preview_dimensions;
+    use shared::{ColorFrame, LedLayout, RgbaColor};
+
+    #[test]
+    fn one_dimensional_layout_is_rendered_as_horizontal_strip() {
+        let frame = ColorFrame {
+            layout: LedLayout {
+                id: "strip".to_owned(),
+                pixel_count: 153,
+                width: Some(1),
+                height: Some(153),
+            },
+            pixels: vec![
+                RgbaColor {
+                    r: 1.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.0,
+                };
+                153
+            ],
+        };
+
+        assert_eq!(frame_preview_dimensions(&frame), (153, 1));
+    }
+
+    #[test]
+    fn true_two_dimensional_layout_keeps_native_dimensions() {
+        let frame = ColorFrame {
+            layout: LedLayout {
+                id: "matrix".to_owned(),
+                pixel_count: 12,
+                width: Some(4),
+                height: Some(3),
+            },
+            pixels: vec![
+                RgbaColor {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.0,
+                };
+                12
+            ],
+        };
+
+        assert_eq!(frame_preview_dimensions(&frame), (4, 3));
+    }
 }
