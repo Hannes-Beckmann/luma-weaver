@@ -147,14 +147,14 @@ To make the add-on install without compiling on the Home Assistant host:
 
 1. Update the version in `config.yaml`.
 2. Create and push a matching Git tag in the form `vX.Y.Z`.
-3. Let GitHub Actions publish the arch-specific images to GHCR.
+3. Let GitHub Actions publish the release image.
 
-The repository includes `.github/workflows/publish-addon.yml`, which pushes:
+The repository includes `.github/workflows/publish-addon.yml`, which publishes one multi-arch image:
 
-- `ghcr.io/hannes-beckmann/amd64-addon_luma_weaver:<version>`
-- `ghcr.io/hannes-beckmann/aarch64-addon_luma_weaver:<version>`
+- `ghcr.io/hannes-beckmann/luma-weaver-addon:<version>`
+- `ghcr.io/hannes-beckmann/luma-weaver-addon:latest`
 
-Home Assistant resolves the correct image automatically from the `image: ghcr.io/hannes-beckmann/{arch}-addon_luma_weaver` setting in `config.yaml`.
+Home Assistant and standalone Docker both use the same image name, and Docker selects the right `amd64` or `aarch64` variant automatically from the manifest list.
 
 ## Development
 
@@ -197,4 +197,6 @@ Luma Weaver can expose values through Home Assistant MQTT `number` entities. The
 ## Status
 
 The project already contains a substantial runtime and node catalog, but it is still best understood as an actively evolving tool. If you deploy it, expect the graph format, node set, and integrations to continue growing.
+
+
 

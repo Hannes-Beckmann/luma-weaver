@@ -3,7 +3,7 @@ version: "0.1.0"
 slug: "luma_weaver"
 description: "Browser-based node editor for animated lighting with a Rust backend and WebAssembly frontend."
 url: "https://github.com/Hannes-Beckmann/luma-weaver"
-image: "ghcr.io/hannes-beckmann/{arch}-addon-luma_weaver"
+image: "ghcr.io/hannes-beckmann/luma-weaver-addon"
 init: false
 startup: application
 boot: auto

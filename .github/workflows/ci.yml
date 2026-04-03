@@ -40,11 +40,6 @@ jobs:
             exit 1
           fi
 
-          if [[ "${image}" != *"{arch}"* ]]; then
-            echo "config.yaml image must include {arch}" >&2
-            exit 1
-          fi
-
           if ! grep -q '^arch:$' config.yaml; then
             echo "config.yaml is missing the arch list" >&2
             exit 1
