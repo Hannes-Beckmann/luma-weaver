@@ -155,6 +155,7 @@ The repository includes `.github/workflows/publish-addon.yml`, which publishes o
 - `ghcr.io/hannes-beckmann/luma-weaver-addon:latest`
 
 Home Assistant and standalone Docker both use the same image name, and Docker selects the right `amd64` or `aarch64` variant automatically from the manifest list.
+The same tag also creates a GitHub Release with automatically generated release notes.
 
 ## Development
 
