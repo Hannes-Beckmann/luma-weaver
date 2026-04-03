@@ -1,5 +1,6 @@
 [workspace]
 members = ["crates/backend", "crates/frontend", "crates/shared"]
+default-members = ["crates/backend", "crates/shared"]
 resolver = "3"
 
 [workspace.package]
