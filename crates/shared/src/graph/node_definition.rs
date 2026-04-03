@@ -21,7 +21,6 @@ impl NodeTypeId {
     pub const WLED_SINK: &'static str = "net.wled_sink";
     pub const AUDIO_FFT_RECEIVER: &'static str = "net.audio_fft_receiver";
     pub const HA_MQTT_NUMBER: &'static str = "net.ha_mqtt_number";
-    pub const SINUS: &'static str = "math.sinus";
     pub const SIGNAL_GENERATOR: &'static str = "math.signal_generator";
     pub const ADD_FLOAT: &'static str = "math.add_float";
     pub const MULTIPLY_FLOAT: &'static str = "math.multiply_float";
@@ -85,13 +84,14 @@ impl Default for NodeTypeId {
 #[serde(rename_all = "snake_case")]
 /// Groups node definitions into the categories shown in the editor and dashboard.
 pub enum NodeCategory {
-    Core,
+    Inputs,
+    Generators,
     Math,
-    Color,
-    Animation,
-    Network,
+    FrameOperations,
+    TemporalFilters,
+    SpatialFilters,
+    Outputs,
     Debug,
-    Other,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

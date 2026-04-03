@@ -620,13 +620,14 @@ fn node_menu_categories(
     search: &str,
 ) -> Vec<NodeMenuCategory> {
     let normalized_search = search.trim().to_lowercase();
-    let mut core = Vec::new();
+    let mut inputs = Vec::new();
+    let mut generators = Vec::new();
     let mut math = Vec::new();
-    let mut color = Vec::new();
-    let mut animation = Vec::new();
-    let mut network = Vec::new();
+    let mut frame_operations = Vec::new();
+    let mut temporal_filters = Vec::new();
+    let mut spatial_filters = Vec::new();
+    let mut outputs = Vec::new();
     let mut debug = Vec::new();
-    let mut other = Vec::new();
 
     for definition in available_node_definitions {
         if !normalized_search.is_empty() {
@@ -642,24 +643,26 @@ fn node_menu_categories(
             }
         }
         match definition.category {
-            NodeCategory::Core => core.push(definition.clone()),
+            NodeCategory::Inputs => inputs.push(definition.clone()),
+            NodeCategory::Generators => generators.push(definition.clone()),
             NodeCategory::Math => math.push(definition.clone()),
-            NodeCategory::Color => color.push(definition.clone()),
-            NodeCategory::Animation => animation.push(definition.clone()),
-            NodeCategory::Network => network.push(definition.clone()),
+            NodeCategory::FrameOperations => frame_operations.push(definition.clone()),
+            NodeCategory::TemporalFilters => temporal_filters.push(definition.clone()),
+            NodeCategory::SpatialFilters => spatial_filters.push(definition.clone()),
+            NodeCategory::Outputs => outputs.push(definition.clone()),
             NodeCategory::Debug => debug.push(definition.clone()),
-            NodeCategory::Other => other.push(definition.clone()),
         }
     }
 
     let mut categories = Vec::new();
-    push_node_menu_category(&mut categories, "Core", core);
+    push_node_menu_category(&mut categories, "Inputs", inputs);
+    push_node_menu_category(&mut categories, "Generators", generators);
     push_node_menu_category(&mut categories, "Math", math);
-    push_node_menu_category(&mut categories, "Color", color);
-    push_node_menu_category(&mut categories, "Animation", animation);
-    push_node_menu_category(&mut categories, "Network", network);
+    push_node_menu_category(&mut categories, "Frame Operations", frame_operations);
+    push_node_menu_category(&mut categories, "Temporal Filters", temporal_filters);
+    push_node_menu_category(&mut categories, "Spatial Filters", spatial_filters);
+    push_node_menu_category(&mut categories, "Outputs", outputs);
     push_node_menu_category(&mut categories, "Debug", debug);
-    push_node_menu_category(&mut categories, "Other", other);
     categories
 }
 
