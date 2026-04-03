@@ -279,6 +279,22 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
         accepted_kinds: vec![],
     }],
     parameters: vec![NodeParameterDefinition {
+        name: "protocol".to_owned(),
+        display_name: title_case_name("protocol"),
+        default_value: ParameterDefaultValue::String("ddp".to_owned()),
+        ui_hint: ParameterUiHint::EnumSelect {
+            options: vec![
+                EnumOption {
+                    value: "ddp".to_owned(),
+                    label: "DDP".to_owned(),
+                },
+                EnumOption {
+                    value: "udp_raw".to_owned(),
+                    label: "UDP Raw".to_owned(),
+                },
+            ],
+        },
+    }, NodeParameterDefinition {
         name: "port".to_owned(),
         display_name: title_case_name("port"),
         default_value: ParameterDefaultValue::Integer(4048),
