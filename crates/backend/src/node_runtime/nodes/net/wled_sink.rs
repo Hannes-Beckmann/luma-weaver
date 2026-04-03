@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use shared::{ColorFrame, LedLayout, NodeDiagnostic, NodeDiagnosticSeverity, RgbaColor};
 
@@ -10,8 +11,56 @@ use crate::node_runtime::{
 };
 use crate::services::wled::ddp;
 
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum WledSinkProtocol {
+    Ddp,
+    UdpRaw,
+}
+
+impl Default for WledSinkProtocol {
+    fn default() -> Self {
+        Self::Ddp
+    }
+}
+
+impl WledSinkProtocol {
+    fn label(self) -> &'static str {
+        match self {
+            Self::Ddp => "DDP",
+            Self::UdpRaw => "UDP Raw",
+        }
+    }
+
+    fn waiting_message(self, port: u16) -> String {
+        format!("Waiting for WLED {} packets on port {}.", self.label(), port)
+    }
+
+    fn ignored_packet_code(self) -> Option<&'static str> {
+        match self {
+            Self::Ddp => Some("wled_sink_non_ddp_packet"),
+            Self::UdpRaw => None,
+        }
+    }
+
+    fn invalid_payload_message(self, port: u16) -> String {
+        match self {
+            Self::Ddp => format!("Ignored a DDP packet with an invalid RGB payload on port {}.", port),
+            Self::UdpRaw => format!("Ignored a UDP Raw packet with an invalid RGB payload on port {}.", port),
+        }
+    }
+
+    fn process_packet(self, assembler: &mut DdpFrameAssembler, packet: &[u8]) -> PacketProcessResult {
+        match self {
+            Self::Ddp => assembler.process_packet(packet),
+            Self::UdpRaw => process_udp_raw_packet(packet),
+        }
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct WledSinkNode {
+    protocol: WledSinkProtocol,
     port: u16,
     socket: Option<UdpSocket>,
     assembler: DdpFrameAssembler,
@@ -26,10 +75,12 @@ struct DdpFrameAssembler {
 
 #[derive(Default)]
 struct WledSinkParameters {
+    protocol: WledSinkProtocol,
     port: u16,
 }
 
 crate::node_runtime::impl_runtime_parameters!(WledSinkParameters {
+    protocol: WledSinkProtocol = WledSinkProtocol::Ddp,
     port: u64 => |value| crate::node_runtime::clamp_u64_to_u16(value, 1, 65_535), default ddp::DDP_PORT,
 });
 
@@ -38,6 +89,7 @@ impl WledSinkNode {
     fn from_config(config: WledSinkParameters) -> Self {
         let port = config.port;
         Self {
+            protocol: config.protocol,
             port,
             socket: match bind_socket(port) {
                 Ok(socket) => {
@@ -94,7 +146,7 @@ impl RuntimeNode for WledSinkNode {
             diagnostics.push(NodeDiagnostic {
                 severity: NodeDiagnosticSeverity::Info,
                 code: Some("wled_sink_waiting_for_data".to_owned()),
-                message: format!("Waiting for WLED DDP packets on port {}.", self.port),
+                message: self.protocol.waiting_message(self.port),
             });
         }
 
@@ -105,6 +157,7 @@ impl RuntimeNode for WledSinkNode {
         );
 
         tracing::trace!(
+            protocol = self.protocol.label(),
             port = self.port,
             socket_bound = self.socket.is_some(),
             received_pixels = self.latest_pixels.len(),
@@ -159,14 +212,19 @@ impl WledSinkNode {
             match socket.recv_from(&mut packet) {
                 Ok((packet_len, source)) => {
                     tracing::trace!(
+                        protocol = self.protocol.label(),
                         port = self.port,
                         %source,
                         packet_len,
                         "received packet for WLED sink"
                     );
-                    match self.assembler.process_packet(&packet[..packet_len]) {
+                    match self
+                        .protocol
+                        .process_packet(&mut self.assembler, &packet[..packet_len])
+                    {
                         PacketProcessResult::Frame(rgb) => {
                             tracing::trace!(
+                                protocol = self.protocol.label(),
                                 port = self.port,
                                 %source,
                                 pixels = rgb.len() / ddp::CHANNELS_PER_PIXEL,
@@ -176,23 +234,22 @@ impl WledSinkNode {
                             self.has_received_frame = true;
                         }
                         PacketProcessResult::IgnoredNonDdp => {
-                            diagnostics.push(NodeDiagnostic {
-                                severity: NodeDiagnosticSeverity::Warning,
-                                code: Some("wled_sink_non_ddp_packet".to_owned()),
-                                message: format!(
-                                    "Ignored a non-DDP packet from {} on port {}.",
-                                    source, self.port
-                                ),
-                            });
+                            if let Some(code) = self.protocol.ignored_packet_code() {
+                                diagnostics.push(NodeDiagnostic {
+                                    severity: NodeDiagnosticSeverity::Warning,
+                                    code: Some(code.to_owned()),
+                                    message: format!(
+                                        "Ignored a non-DDP packet from {} on port {}.",
+                                        source, self.port
+                                    ),
+                                });
+                            }
                         }
                         PacketProcessResult::InvalidRgbPayload => {
                             diagnostics.push(NodeDiagnostic {
                                 severity: NodeDiagnosticSeverity::Warning,
                                 code: Some("wled_sink_invalid_rgb_payload".to_owned()),
-                                message: format!(
-                                    "Ignored a DDP packet with an invalid RGB payload on port {}.",
-                                    self.port
-                                ),
+                                message: self.protocol.invalid_payload_message(self.port),
                             });
                         }
                         PacketProcessResult::BufferedPartial => {}
@@ -200,7 +257,12 @@ impl WledSinkNode {
                 }
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(error) => {
-                    tracing::warn!(port = self.port, %error, "failed to receive WLED DDP packet");
+                    tracing::warn!(
+                        protocol = self.protocol.label(),
+                        port = self.port,
+                        %error,
+                        "failed to receive WLED packet"
+                    );
                     self.socket = None;
                     diagnostics.push(NodeDiagnostic {
                         severity: NodeDiagnosticSeverity::Error,
@@ -272,6 +334,22 @@ impl DdpFrameAssembler {
             PacketProcessResult::BufferedPartial
         }
     }
+}
+
+/// Converts a raw UDP RGB payload into a full frame without any transport header.
+fn process_udp_raw_packet(packet: &[u8]) -> PacketProcessResult {
+    if packet.is_empty() {
+        return PacketProcessResult::Frame(Vec::new());
+    }
+    if packet.len() % ddp::CHANNELS_PER_PIXEL != 0 {
+        tracing::trace!(
+            packet_len = packet.len(),
+            "WLED sink ignored UDP Raw packet with invalid RGB payload length"
+        );
+        return PacketProcessResult::InvalidRgbPayload;
+    }
+
+    PacketProcessResult::Frame(packet.to_vec())
 }
 
 /// Binds the UDP socket used by the WLED sink listener.
@@ -352,7 +430,9 @@ mod tests {
     use crate::services::wled::ddp;
     use shared::LedLayout;
 
-    use super::{DdpFrameAssembler, normalize_frame, rgb_to_pixels};
+    use super::{
+        DdpFrameAssembler, normalize_frame, process_udp_raw_packet, rgb_to_pixels,
+    };
 
     /// Builds a minimal DDP packet for sink-assembler tests.
     fn ddp_packet(offset_pixels: u32, rgb: &[u8], push: bool) -> Vec<u8> {
@@ -384,6 +464,25 @@ mod tests {
             other => panic!("expected assembled frame, got {other:?}"),
         };
         assert_eq!(rgb, vec![255, 0, 0, 0, 255, 0, 0, 0, 255]);
+    }
+
+    /// Tests that raw UDP packets are treated as packed RGB frames without a transport header.
+    #[test]
+    fn udp_raw_packet_becomes_frame() {
+        let rgb = match process_udp_raw_packet(&[10, 20, 30, 40, 50, 60]) {
+            super::PacketProcessResult::Frame(rgb) => rgb,
+            other => panic!("expected raw UDP frame, got {other:?}"),
+        };
+        assert_eq!(rgb, vec![10, 20, 30, 40, 50, 60]);
+    }
+
+    /// Tests that invalid raw UDP payloads are rejected when they do not align to RGB triplets.
+    #[test]
+    fn udp_raw_packet_rejects_invalid_payload_length() {
+        assert!(matches!(
+            process_udp_raw_packet(&[1, 2, 3, 4]),
+            super::PacketProcessResult::InvalidRgbPayload
+        ));
     }
 
     /// Tests that frame normalization trims or pads frames to the requested layout size.
