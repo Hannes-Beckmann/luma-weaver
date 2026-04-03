@@ -58,6 +58,8 @@ jobs:
 
       - name: Restore cargo cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-stable
 
       - name: Run Rust tests
         run: cargo test -p shared -p backend --locked
@@ -77,6 +79,8 @@ jobs:
 
       - name: Restore cargo cache
         uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ubuntu-stable
 
       - name: Install trunk
         uses: taiki-e/install-action@trunk
@@ -99,7 +103,23 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
+        id: buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Restore Docker cache mounts
+        uses: actions/cache@v4
+        with:
+          path: .buildkit-cache/amd64
+          key: ${{ runner.os }}-buildkit-mounts-amd64-${{ hashFiles('Dockerfile', 'Cargo.lock', 'Cargo.toml', 'crates/backend/Cargo.toml', 'crates/frontend/Cargo.toml', 'crates/shared/Cargo.toml', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-buildkit-mounts-amd64-
+
+      - name: Inject Docker cache mounts
+        uses: reproducible-containers/buildkit-cache-dance@v3
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          cache-dir: .buildkit-cache/amd64
+          dockerfile: Dockerfile
 
       - name: Build amd64 image without pushing
         uses: docker/build-push-action@v6
@@ -109,8 +129,8 @@ jobs:
           load: false
           push: false
           platforms: linux/amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=amd64
+          cache-to: type=gha,mode=max,scope=amd64
           build-args: |
             BUILD_ARCH=amd64
             BUILD_FROM=ghcr.io/home-assistant/amd64-base-debian:bookworm
