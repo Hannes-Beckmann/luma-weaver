@@ -172,7 +172,6 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
         NodeTypeId::HA_MQTT_NUMBER,
         nodes::net::ha_mqtt_number::HomeAssistantMqttNumberNode
     );
-    register_builtin!(NodeTypeId::SINUS, nodes::core::sinus::SinusNode);
     register_builtin!(
         NodeTypeId::SIGNAL_GENERATOR,
         nodes::math::signal_generator::SignalGeneratorNode
@@ -357,7 +356,7 @@ mod tests {
             .register_fast_node::<TestNode>(NodeDefinition {
                 id: "custom.test".to_owned(),
                 display_name: "Custom Test".to_owned(),
-                category: NodeCategory::Other,
+                category: NodeCategory::Debug,
                 inputs: Vec::new(),
                 outputs: vec![shared::NodeOutputDefinition {
                     name: "value".to_owned(),
