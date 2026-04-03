@@ -23,15 +23,6 @@ jobs:
           - arch: aarch64
             platform: linux/arm64
             build_from: ghcr.io/home-assistant/aarch64-base-debian:bookworm
-          - arch: armv7
-            platform: linux/arm/v7
-            build_from: ghcr.io/home-assistant/armv7-base-debian:bookworm
-          - arch: armhf
-            platform: linux/arm/v6
-            build_from: ghcr.io/home-assistant/armhf-base-debian:bookworm
-          - arch: i386
-            platform: linux/386
-            build_from: ghcr.io/home-assistant/i386-base-debian:bookworm
 
     steps:
       - name: Check out repository
