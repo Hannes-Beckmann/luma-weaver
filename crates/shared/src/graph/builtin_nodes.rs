@@ -1365,6 +1365,40 @@ static MOVING_AVERAGE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     runtime_updates: None,
 });
 
+static MOVING_MEDIAN_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::MOVING_MEDIAN.to_owned(),
+    display_name: "Moving Median".to_owned(),
+    category: NodeCategory::TemporalFilters,
+    inputs: vec![
+        NodeInputDefinition {
+            name: "value".to_owned(),
+            display_name: title_case_name("value"),
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![ValueKind::Float, ValueKind::FloatTensor],
+            default_value: Some(InputValue::Float(0.0)),
+        },
+        NodeInputDefinition {
+            name: "window_size".to_owned(),
+            display_name: title_case_name("window_size"),
+            value_kind: ValueKind::Float,
+            accepted_kinds: vec![],
+            default_value: Some(InputValue::Float(4.0)),
+        },
+    ],
+    outputs: vec![NodeOutputDefinition {
+        name: "value".to_owned(),
+        display_name: title_case_name("value"),
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![ValueKind::Float, ValueKind::FloatTensor],
+    }],
+    parameters: vec![],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
 static BOX_BLUR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
     id: NodeTypeId::BOX_BLUR.to_owned(),
     display_name: "Box Blur".to_owned(),
@@ -1985,6 +2019,7 @@ pub fn builtin_node_definitions() -> Vec<NodeDefinition> {
         (*ALPHA_OVER_NODE_TYPE).clone(),
         (*FADE_NODE_TYPE).clone(),
         (*MOVING_AVERAGE_NODE_TYPE).clone(),
+        (*MOVING_MEDIAN_NODE_TYPE).clone(),
         (*BOX_BLUR_NODE_TYPE).clone(),
         (*GAUSSIAN_BLUR_NODE_TYPE).clone(),
         (*MEDIAN_FILTER_NODE_TYPE).clone(),

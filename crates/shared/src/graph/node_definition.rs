@@ -46,6 +46,7 @@ impl NodeTypeId {
     pub const ALPHA_OVER: &'static str = "frame_operations.alpha_over";
     pub const FADE: &'static str = "temporal_filters.fade";
     pub const MOVING_AVERAGE: &'static str = "temporal_filters.moving_average";
+    pub const MOVING_MEDIAN: &'static str = "temporal_filters.moving_median";
     pub const BOX_BLUR: &'static str = "spatial_filters.box_blur";
     pub const GAUSSIAN_BLUR: &'static str = "spatial_filters.gaussian_blur";
     pub const MEDIAN_FILTER: &'static str = "spatial_filters.median_filter";
