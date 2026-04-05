@@ -5,7 +5,7 @@ use libblur::{
 };
 use shared::{ColorFrame, InputValue, RgbaColor};
 
-use crate::node_runtime::nodes::color::filter_utils::layout_dimensions;
+use crate::node_runtime::nodes::filter_utils::layout_dimensions;
 use crate::node_runtime::{
     NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
     TypedNodeEvaluation,

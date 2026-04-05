@@ -6,7 +6,7 @@ use shared::{
 };
 
 use crate::color_math::sample_gradient_hsv;
-use crate::node_runtime::nodes::color::filter_utils::layout_dimensions;
+use crate::node_runtime::nodes::filter_utils::layout_dimensions;
 use crate::node_runtime::{NodeEvaluationContext, RuntimeNode, TypedNodeEvaluation};
 
 const EPSILON: f32 = 1.0e-5;

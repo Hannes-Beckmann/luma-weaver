@@ -150,31 +150,31 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
 
     register_builtin!(
         NodeTypeId::FLOAT_CONSTANT,
-        nodes::core::float_constant::FloatConstantNode
+        nodes::inputs::float_constant::FloatConstantNode
     );
     register_builtin!(
         NodeTypeId::COLOR_CONSTANT,
-        nodes::core::color_constant::ColorConstantNode
+        nodes::inputs::color_constant::ColorConstantNode
     );
-    register_builtin!(NodeTypeId::DELAY, nodes::core::delay::DelayNode);
-    register_builtin!(NodeTypeId::DISPLAY, nodes::core::display::DisplayNode);
-    register_builtin!(NodeTypeId::PLOT, nodes::core::plot::PlotNode);
+    register_builtin!(NodeTypeId::DELAY, nodes::temporal_filters::delay::DelayNode);
+    register_builtin!(NodeTypeId::DISPLAY, nodes::outputs::display::DisplayNode);
+    register_builtin!(NodeTypeId::PLOT, nodes::outputs::plot::PlotNode);
     register_builtin!(
         NodeTypeId::WLED_TARGET,
-        nodes::net::wled_target::WledTargetNode
+        nodes::outputs::wled_target::WledTargetNode
     );
-    register_builtin!(NodeTypeId::WLED_SINK, nodes::net::wled_sink::WledSinkNode);
+    register_builtin!(NodeTypeId::WLED_SINK, nodes::inputs::wled_sink::WledSinkNode);
     register_builtin!(
         NodeTypeId::AUDIO_FFT_RECEIVER,
-        nodes::net::audio_fft_receiver::AudioFftReceiverNode
+        nodes::inputs::audio_fft_receiver::AudioFftReceiverNode
     );
     register_builtin!(
         NodeTypeId::HA_MQTT_NUMBER,
-        nodes::net::ha_mqtt_number::HomeAssistantMqttNumberNode
+        nodes::inputs::ha_mqtt_number::HomeAssistantMqttNumberNode
     );
     register_builtin!(
         NodeTypeId::SIGNAL_GENERATOR,
-        nodes::math::signal_generator::SignalGeneratorNode
+        nodes::inputs::signal_generator::SignalGeneratorNode
     );
     register_builtin!(NodeTypeId::ADD_FLOAT, nodes::math::add_float::AddFloatNode);
     register_builtin!(
@@ -187,68 +187,68 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
     );
     register_builtin!(
         NodeTypeId::SCALE_COLOR,
-        nodes::color::scale_color::ScaleColorNode
+        nodes::frame_operations::scale_color::ScaleColorNode
     );
     register_builtin!(
         NodeTypeId::MULTIPLY_COLOR,
-        nodes::color::multiply_color::MultiplyColorNode
+        nodes::frame_operations::multiply_color::MultiplyColorNode
     );
     register_builtin!(
         NodeTypeId::TINT_FRAME,
-        nodes::color::tint_frame::TintFrameNode
+        nodes::frame_operations::tint_frame::TintFrameNode
     );
     register_builtin!(
         NodeTypeId::MASK_FRAME,
-        nodes::color::mask_frame::MaskFrameNode
+        nodes::frame_operations::mask_frame::MaskFrameNode
     );
-    register_builtin!(NodeTypeId::MIX_COLOR, nodes::color::mix_color::MixColorNode);
+    register_builtin!(NodeTypeId::MIX_COLOR, nodes::frame_operations::mix_color::MixColorNode);
     register_builtin!(
         NodeTypeId::ALPHA_OVER,
-        nodes::color::alpha_over::AlphaOverNode
+        nodes::frame_operations::alpha_over::AlphaOverNode
     );
-    register_builtin!(NodeTypeId::FADE, nodes::color::fade::FadeNode);
+    register_builtin!(NodeTypeId::FADE, nodes::frame_operations::fade::FadeNode);
     register_builtin!(
         NodeTypeId::MOVING_AVERAGE,
-        nodes::color::moving_average::MovingAverageNode
+        nodes::temporal_filters::moving_average::MovingAverageNode
     );
-    register_builtin!(NodeTypeId::BOX_BLUR, nodes::color::box_blur::BoxBlurNode);
+    register_builtin!(NodeTypeId::BOX_BLUR, nodes::spatial_filters::box_blur::BoxBlurNode);
     register_builtin!(
         NodeTypeId::GAUSSIAN_BLUR,
-        nodes::color::gaussian_blur::GaussianBlurNode
+        nodes::spatial_filters::gaussian_blur::GaussianBlurNode
     );
     register_builtin!(
         NodeTypeId::MEDIAN_FILTER,
-        nodes::color::median_filter::MedianFilterNode
+        nodes::spatial_filters::median_filter::MedianFilterNode
     );
     register_builtin!(
         NodeTypeId::SPECTRUM_ANALYZER,
-        nodes::color::spectrum_analyzer::SpectrumAnalyzerNode
+        nodes::generators::spectrum_analyzer::SpectrumAnalyzerNode
     );
     register_builtin!(
         NodeTypeId::SOLID_FRAME,
-        nodes::color::solid_frame::SolidFrameNode
+        nodes::generators::solid_frame::SolidFrameNode
     );
     register_builtin!(
         NodeTypeId::RAINBOW_SWEEP,
-        nodes::color::rainbow_sweep::RainbowSweepNode
+        nodes::generators::rainbow_sweep::RainbowSweepNode
     );
     register_builtin!(
         NodeTypeId::CIRCLE_SWEEP,
-        nodes::color::circle_sweep::CircleSweepNode
+        nodes::generators::circle_sweep::CircleSweepNode
     );
-    register_builtin!(NodeTypeId::LEVEL_BAR, nodes::color::level_bar::LevelBarNode);
+    register_builtin!(NodeTypeId::LEVEL_BAR, nodes::generators::level_bar::LevelBarNode);
     register_builtin!(
         NodeTypeId::BOUNCING_BALLS,
-        nodes::color::bouncing_balls::BouncingBallsNode
+        nodes::generators::bouncing_balls::BouncingBallsNode
     );
     register_builtin!(
         NodeTypeId::TWINKLE_STARS,
-        nodes::color::twinkle_stars::TwinkleStarsNode
+        nodes::generators::twinkle_stars::TwinkleStarsNode
     );
-    register_builtin!(NodeTypeId::PLASMA, nodes::color::plasma::PlasmaNode);
+    register_builtin!(NodeTypeId::PLASMA, nodes::generators::plasma::PlasmaNode);
     register_builtin!(
         NodeTypeId::FRAME_BRIGHTNESS,
-        nodes::color::frame_brightness::FrameBrightnessNode
+        nodes::frame_operations::frame_brightness::FrameBrightnessNode
     );
     register_builtin!(
         NodeTypeId::WLED_DUMMY_DISPLAY,
