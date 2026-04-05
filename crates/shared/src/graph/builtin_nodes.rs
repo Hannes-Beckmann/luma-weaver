@@ -2,8 +2,9 @@ use super::{
     ColorGradientStop, EnumOption, FloatTensor, InputValue, NodeCategory, NodeConnectionDefinition,
     NodeDefinition, NodeInputDefinition, NodeOutputDefinition, NodeParameterDefinition,
     NodeRuntimeUpdateDefinition, NodeRuntimeValueDefinition, NodeTypeId, ParameterDefaultValue,
-    ParameterUiHint, RgbaColor, ValueKind,
+    ParameterUiHint, ParameterVisibilityCondition, RgbaColor, ValueKind,
 };
+use serde_json::json;
 use std::sync::LazyLock;
 
 /// Returns the canonical opaque-white default input value used by the built-in catalog.
@@ -71,6 +72,24 @@ static SIGNAL_GENERATOR_WAVEFORMS: LazyLock<Vec<EnumOption>> = LazyLock::new(|| 
         EnumOption {
             value: "rectangle".to_owned(),
             label: "Rectangle".to_owned(),
+        },
+    ]
+});
+
+/// Enumerates the supported receive modes for the audio FFT receiver node.
+static AUDIO_FFT_RECEIVE_MODES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
+    vec![
+        EnumOption {
+            value: "udp_multicast".to_owned(),
+            label: "UDP Multicast".to_owned(),
+        },
+        EnumOption {
+            value: "udp_unicast".to_owned(),
+            label: "UDP Unicast".to_owned(),
+        },
+        EnumOption {
+            value: "wled_sound_sync".to_owned(),
+            label: "WLED Sound Sync".to_owned(),
         },
     ]
 });
@@ -327,8 +346,8 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
             accepted_kinds: vec![],
         },
         NodeOutputDefinition {
-            name: "loudest_frequency".to_owned(),
-            display_name: title_case_name("loudest_frequency"),
+            name: "spectral_peak".to_owned(),
+            display_name: title_case_name("spectral_peak"),
             value_kind: ValueKind::Float,
             accepted_kinds: vec![],
         },
@@ -341,10 +360,12 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
     ],
     parameters: vec![
         NodeParameterDefinition::new(
-            "group",
-            title_case_name("group"),
-            ParameterDefaultValue::String("239.0.0.1".to_owned()),
-            ParameterUiHint::TextSingleLine,
+            "receive_mode",
+            title_case_name("receive_mode"),
+            ParameterDefaultValue::String("udp_multicast".to_owned()),
+            ParameterUiHint::EnumSelect {
+                options: AUDIO_FFT_RECEIVE_MODES.clone(),
+            },
         ),
         NodeParameterDefinition::new(
             "port",
@@ -357,25 +378,33 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
             },
         ),
         NodeParameterDefinition::new(
-            "sample_rate_hz",
-            title_case_name("sample_rate_hz"),
-            ParameterDefaultValue::Integer(16_000),
-            ParameterUiHint::IntegerDrag {
-                speed: 1.0,
-                min: 1,
-                max: 384_000,
-            },
-        ),
+            "multicast_group",
+            title_case_name("multicast_group"),
+            ParameterDefaultValue::String("239.0.0.1".to_owned()),
+            ParameterUiHint::TextSingleLine,
+        )
+        .visible_when(ParameterVisibilityCondition::Any {
+            conditions: vec![
+                ParameterVisibilityCondition::Equals {
+                    parameter: "receive_mode".to_owned(),
+                    value: json!("udp_multicast"),
+                },
+                ParameterVisibilityCondition::Equals {
+                    parameter: "receive_mode".to_owned(),
+                    value: json!("wled_sound_sync"),
+                },
+            ],
+        }),
         NodeParameterDefinition::new(
-            "fft_size",
-            title_case_name("fft_size"),
-            ParameterDefaultValue::Integer(512),
-            ParameterUiHint::IntegerDrag {
-                speed: 1.0,
-                min: 1,
-                max: 65_536,
-            },
-        ),
+            "bind_host",
+            title_case_name("bind_host"),
+            ParameterDefaultValue::String("0.0.0.0".to_owned()),
+            ParameterUiHint::TextSingleLine,
+        )
+        .visible_when(ParameterVisibilityCondition::Equals {
+            parameter: "receive_mode".to_owned(),
+            value: json!("udp_unicast"),
+        }),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,

@@ -33,8 +33,7 @@ pub(crate) use conversions::{FastNodeEvaluator, FromInputValue, IntoInputValue};
 /// Parameter-normalization helpers and construction-diagnostic builders.
 pub(crate) use diagnostics::{
     IntoParameterAdjustment, clamp_f64_to_f32, clamp_u64_to_u16, clamp_u64_to_usize,
-    invalid_parameter_diagnostic, max_f64_to_f32, max_u64_to_f32, max_u64_to_usize,
-    non_empty_gradient,
+    invalid_parameter_diagnostic, max_f64_to_f32, max_u64_to_usize, non_empty_gradient,
 };
 /// Declarative macros for runtime node boilerplate.
 pub(crate) use macros::{

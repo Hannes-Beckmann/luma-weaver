@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use serde_json::Value as JsonValue;
 use shared::{FloatTensor, NodeDiagnostic, NodeDiagnosticSeverity};
 use socket2::{Domain, Protocol, Socket, Type};
@@ -10,8 +10,10 @@ use crate::node_runtime::{
     NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, TypedNodeEvaluation,
 };
 
-const EQ_BAND_COUNT: usize = 16;
-const PACKET_LEN: usize = EQ_BAND_COUNT + 1;
+const WLED_SOUND_SYNC_V2_HEADER: &[u8; 5] = b"00002";
+const WLED_SOUND_SYNC_V2_PACKET_LEN: usize = 44;
+const WLED_SOUND_SYNC_MULTICAST_GROUP: &str = "239.0.0.1";
+const WLED_SOUND_SYNC_DEFAULT_PORT: u16 = 11_988;
 
 #[derive(Default)]
 pub(crate) struct AudioFftReceiverNode {
@@ -21,54 +23,67 @@ pub(crate) struct AudioFftReceiverNode {
     has_received_frame: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ReceiveMode {
+    UdpMulticast,
+    UdpUnicast,
+    WledSoundSync,
+}
+
+impl ReceiveMode {
+    fn parse(value: &str) -> Self {
+        match value.trim() {
+            "udp_unicast" => Self::UdpUnicast,
+            "wled_sound_sync" => Self::WledSoundSync,
+            _ => Self::UdpMulticast,
+        }
+    }
+
+    fn bind_label(self) -> &'static str {
+        match self {
+            Self::UdpMulticast => "multicast",
+            Self::UdpUnicast => "unicast",
+            Self::WledSoundSync => "WLED Sound Sync",
+        }
+    }
+}
+
 #[derive(Clone)]
 struct ReceiverConfig {
-    group: String,
+    receive_mode: ReceiveMode,
     port: u16,
-    sample_rate_hz: f32,
-    fft_size: f32,
+    multicast_group: String,
+    bind_host: String,
 }
 
 impl Default for ReceiverConfig {
-    /// Builds the default multicast receiver configuration for the FFT input node.
     fn default() -> Self {
         Self {
-            group: "239.0.0.1".to_owned(),
-            port: 11_988,
-            sample_rate_hz: 16_000.0,
-            fft_size: 512.0,
+            receive_mode: ReceiveMode::UdpMulticast,
+            port: WLED_SOUND_SYNC_DEFAULT_PORT,
+            multicast_group: WLED_SOUND_SYNC_MULTICAST_GROUP.to_owned(),
+            bind_host: "0.0.0.0".to_owned(),
         }
     }
 }
 
 crate::node_runtime::impl_runtime_parameters!(ReceiverConfig {
-    group: String => |value| value.trim().to_owned(), default "239.0.0.1".to_owned(),
-    port: u64 => |value| crate::node_runtime::clamp_u64_to_u16(value, 1, 65_535), default 11_988u16,
-    sample_rate_hz: u64 => |value| crate::node_runtime::max_u64_to_f32(value, 1), default 16_000.0f32,
-    fft_size: u64 => |value| crate::node_runtime::max_u64_to_f32(value, 1), default 512.0f32,
+    receive_mode: String => |value| ReceiveMode::parse(&value), default ReceiveMode::UdpMulticast,
+    port: u64 => |value| crate::node_runtime::clamp_u64_to_u16(value, 1, 65_535), default WLED_SOUND_SYNC_DEFAULT_PORT,
+    multicast_group: String => |value| value.trim().to_owned(), default WLED_SOUND_SYNC_MULTICAST_GROUP.to_owned(),
+    bind_host: String => |value| value.trim().to_owned(), default "0.0.0.0".to_owned(),
 });
 
-#[derive(Clone)]
+#[derive(Clone, Debug, Default)]
 struct AudioFftFrame {
-    spectrum: [f32; EQ_BAND_COUNT],
-    loudest_frequency: f32,
+    spectrum: Vec<f32>,
+    spectral_peak: f32,
     overall_loudness: f32,
 }
 
-impl Default for AudioFftFrame {
-    fn default() -> Self {
-        Self {
-            spectrum: [0.0; EQ_BAND_COUNT],
-            loudest_frequency: 0.0,
-            overall_loudness: 0.0,
-        }
-    }
-}
-
 impl AudioFftReceiverNode {
-    /// Creates a receiver node from parsed parameters and eagerly attempts to bind its socket.
     fn from_config(config: ReceiverConfig) -> Self {
-        let socket = bind_multicast_socket(&config).ok();
+        let socket = bind_socket(&config).ok();
         Self {
             config,
             socket,
@@ -95,13 +110,13 @@ impl RuntimeNodeFromParameters for AudioFftReceiverNode {
 
 pub(crate) struct AudioFftReceiverOutputs {
     spectrum: FloatTensor,
-    loudest_frequency: f32,
+    spectral_peak: f32,
     overall_loudness: f32,
 }
 
 crate::node_runtime::impl_runtime_outputs!(AudioFftReceiverOutputs {
     spectrum,
-    loudest_frequency,
+    spectral_peak,
     overall_loudness,
 });
 
@@ -109,7 +124,6 @@ impl RuntimeNode for AudioFftReceiverNode {
     type Inputs = ();
     type Outputs = AudioFftReceiverOutputs;
 
-    /// Polls the multicast socket, updates the cached FFT frame, and exposes the latest values.
     fn evaluate(
         &mut self,
         _context: &NodeEvaluationContext,
@@ -123,8 +137,9 @@ impl RuntimeNode for AudioFftReceiverNode {
                 severity: NodeDiagnosticSeverity::Info,
                 code: Some("audio_fft_waiting_for_data".to_owned()),
                 message: format!(
-                    "Waiting for audio FFT data on {}:{}.",
-                    self.config.group, self.config.port
+                    "Waiting for {} audio data on {}.",
+                    self.config.receive_mode.bind_label(),
+                    self.config.endpoint_description()
                 ),
             });
         }
@@ -132,10 +147,10 @@ impl RuntimeNode for AudioFftReceiverNode {
         Ok(TypedNodeEvaluation {
             outputs: AudioFftReceiverOutputs {
                 spectrum: FloatTensor {
-                    shape: vec![EQ_BAND_COUNT],
-                    values: self.latest_frame.spectrum.to_vec(),
+                    shape: vec![self.latest_frame.spectrum.len()],
+                    values: self.latest_frame.spectrum.clone(),
                 },
-                loudest_frequency: self.latest_frame.loudest_frequency,
+                spectral_peak: self.latest_frame.spectral_peak,
                 overall_loudness: self.latest_frame.overall_loudness,
             },
             frontend_updates: Vec::new(),
@@ -145,13 +160,12 @@ impl RuntimeNode for AudioFftReceiverNode {
 }
 
 impl AudioFftReceiverNode {
-    /// Rebinds the multicast socket when the current receiver socket is missing.
     fn refresh_socket_if_needed(&mut self) -> Vec<NodeDiagnostic> {
         let mut diagnostics = Vec::new();
         if self.socket.is_some() {
             return diagnostics;
         }
-        match bind_multicast_socket(&self.config) {
+        match bind_socket(&self.config) {
             Ok(socket) => {
                 self.socket = Some(socket);
             }
@@ -161,13 +175,14 @@ impl AudioFftReceiverNode {
                     severity: NodeDiagnosticSeverity::Error,
                     code: Some("audio_fft_bind_failed".to_owned()),
                     message: format!(
-                        "Failed to bind audio FFT receiver on {}:{}.",
-                        self.config.group, self.config.port
+                        "Failed to bind {} receiver on {}.",
+                        self.config.receive_mode.bind_label(),
+                        self.config.endpoint_description()
                     ),
                 });
                 tracing::warn!(
-                    group = %self.config.group,
-                    port = self.config.port,
+                    mode = ?self.config.receive_mode,
+                    endpoint = %self.config.endpoint_description(),
                     %error,
                     "failed to bind audio FFT receiver socket"
                 );
@@ -176,22 +191,33 @@ impl AudioFftReceiverNode {
         diagnostics
     }
 
-    /// Drains all pending FFT packets and keeps only the most recently received frame.
     fn read_latest_frame(&mut self) -> Vec<NodeDiagnostic> {
         let mut diagnostics = Vec::new();
         let Some(socket) = &self.socket else {
             return diagnostics;
         };
 
-        let mut packet = [0u8; PACKET_LEN];
+        let mut packet = [0u8; 2048];
         loop {
             match socket.recv_from(&mut packet) {
-                Ok((PACKET_LEN, _)) => {
-                    self.latest_frame =
-                        decode_packet(&packet, self.config.sample_rate_hz, self.config.fft_size);
-                    self.has_received_frame = true;
-                }
-                Ok(_) => {}
+                Ok((len, _)) => match decode_packet(self.config.receive_mode, &packet[..len]) {
+                    Ok(frame) => {
+                        self.latest_frame = frame;
+                        self.has_received_frame = true;
+                    }
+                    Err(error) => {
+                        diagnostics.push(NodeDiagnostic {
+                            severity: NodeDiagnosticSeverity::Warning,
+                            code: Some("audio_fft_packet_decode_failed".to_owned()),
+                            message: format!(
+                                "Ignored invalid {} packet on {}: {}",
+                                self.config.receive_mode.bind_label(),
+                                self.config.endpoint_description(),
+                                error
+                            ),
+                        });
+                    }
+                },
                 Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => break,
                 Err(error) => {
                     self.socket = None;
@@ -199,13 +225,13 @@ impl AudioFftReceiverNode {
                         severity: NodeDiagnosticSeverity::Error,
                         code: Some("audio_fft_receive_failed".to_owned()),
                         message: format!(
-                            "Audio FFT receiver lost its socket on {}:{}.",
-                            self.config.group, self.config.port
+                            "Audio FFT receiver lost its socket on {}.",
+                            self.config.endpoint_description()
                         ),
                     });
                     tracing::warn!(
-                        group = %self.config.group,
-                        port = self.config.port,
+                        mode = ?self.config.receive_mode,
+                        endpoint = %self.config.endpoint_description(),
                         %error,
                         "audio FFT receiver socket read failed"
                     );
@@ -217,12 +243,29 @@ impl AudioFftReceiverNode {
     }
 }
 
-/// Binds a nonblocking UDP socket and joins the configured multicast group.
+impl ReceiverConfig {
+    fn endpoint_description(&self) -> String {
+        match self.receive_mode {
+            ReceiveMode::UdpUnicast => format!("{}:{}", self.bind_host, self.port),
+            ReceiveMode::UdpMulticast | ReceiveMode::WledSoundSync => {
+                format!("{}:{}", self.multicast_group, self.port)
+            }
+        }
+    }
+}
+
+fn bind_socket(config: &ReceiverConfig) -> Result<UdpSocket> {
+    match config.receive_mode {
+        ReceiveMode::UdpMulticast | ReceiveMode::WledSoundSync => bind_multicast_socket(config),
+        ReceiveMode::UdpUnicast => bind_unicast_socket(config),
+    }
+}
+
 fn bind_multicast_socket(config: &ReceiverConfig) -> Result<UdpSocket> {
     let group: Ipv4Addr = config
-        .group
+        .multicast_group
         .parse()
-        .with_context(|| format!("parse multicast group {}", config.group))?;
+        .with_context(|| format!("parse multicast group {}", config.multicast_group))?;
     let bind_addr = SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, config.port);
     let socket = Socket::new(Domain::IPV4, Type::DGRAM, Some(Protocol::UDP))
         .context("create audio FFT multicast socket")?;
@@ -241,7 +284,7 @@ fn bind_multicast_socket(config: &ReceiverConfig) -> Result<UdpSocket> {
                 Err(error)
             } else {
                 tracing::warn!(
-                    group = %config.group,
+                    group = %config.multicast_group,
                     %interface,
                     %error,
                     "failed to join multicast group on preferred interface; falling back to INADDR_ANY"
@@ -249,7 +292,7 @@ fn bind_multicast_socket(config: &ReceiverConfig) -> Result<UdpSocket> {
                 socket.join_multicast_v4(&group, &Ipv4Addr::UNSPECIFIED)
             }
         })
-        .with_context(|| format!("join UDP multicast group {}", config.group))?;
+        .with_context(|| format!("join UDP multicast group {}", config.multicast_group))?;
 
     let socket: UdpSocket = socket.into();
     socket
@@ -258,7 +301,19 @@ fn bind_multicast_socket(config: &ReceiverConfig) -> Result<UdpSocket> {
     Ok(socket)
 }
 
-/// Chooses a likely outward-facing IPv4 interface for multicast joins.
+fn bind_unicast_socket(config: &ReceiverConfig) -> Result<UdpSocket> {
+    let host: Ipv4Addr = config
+        .bind_host
+        .parse()
+        .with_context(|| format!("parse unicast bind host {}", config.bind_host))?;
+    let socket = UdpSocket::bind(SocketAddrV4::new(host, config.port))
+        .with_context(|| format!("bind UDP unicast receiver on {}:{}", host, config.port))?;
+    socket
+        .set_nonblocking(true)
+        .context("set audio FFT unicast socket nonblocking")?;
+    Ok(socket)
+}
+
 fn preferred_ipv4_interface() -> Option<Ipv4Addr> {
     let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)).ok()?;
     socket
@@ -270,45 +325,125 @@ fn preferred_ipv4_interface() -> Option<Ipv4Addr> {
     }
 }
 
-/// Decodes one FFT UDP packet into normalized band magnitudes and summary metrics.
-fn decode_packet(packet: &[u8; PACKET_LEN], sample_rate_hz: f32, fft_size: f32) -> AudioFftFrame {
-    let mut spectrum = [0.0; EQ_BAND_COUNT];
-    let mut sum_squares = 0.0;
+fn decode_packet(receive_mode: ReceiveMode, packet: &[u8]) -> Result<AudioFftFrame> {
+    match receive_mode {
+        ReceiveMode::UdpMulticast | ReceiveMode::UdpUnicast => decode_raw_packet(packet),
+        ReceiveMode::WledSoundSync => decode_wled_sound_sync_v2_packet(packet),
+    }
+}
 
-    for (index, byte) in packet[..EQ_BAND_COUNT].iter().enumerate() {
+fn decode_raw_packet(packet: &[u8]) -> Result<AudioFftFrame> {
+    if packet.len() < 2 {
+        bail!("raw packet must contain at least one spectrum channel and one metadata byte");
+    }
+
+    let channel_count = packet.len() - 1;
+    let mut spectrum = Vec::with_capacity(channel_count);
+    let mut sum_squares = 0.0;
+    for byte in &packet[..channel_count] {
         let value = *byte as f32 / 255.0;
-        spectrum[index] = value;
+        spectrum.push(value);
         sum_squares += value * value;
     }
 
-    let loudest_bin = packet[EQ_BAND_COUNT] as f32;
-    let loudest_frequency = loudest_bin * sample_rate_hz / fft_size.max(1.0);
-    let overall_loudness = (sum_squares / EQ_BAND_COUNT as f32).sqrt();
+    let loudest_position = if channel_count == 1 {
+        1.0
+    } else {
+        (packet[channel_count] as f32 / (channel_count - 1) as f32).clamp(0.0, 1.0)
+    };
+    let overall_loudness = (sum_squares / channel_count as f32).sqrt();
 
-    AudioFftFrame {
+    Ok(AudioFftFrame {
         spectrum,
-        loudest_frequency,
+        spectral_peak: loudest_position,
         overall_loudness,
+    })
+}
+
+fn decode_wled_sound_sync_v2_packet(packet: &[u8]) -> Result<AudioFftFrame> {
+    if packet.len() != WLED_SOUND_SYNC_V2_PACKET_LEN {
+        bail!(
+            "expected {} bytes for WLED Sound Sync V2, got {}",
+            WLED_SOUND_SYNC_V2_PACKET_LEN,
+            packet.len()
+        );
     }
+    if &packet[..5] != WLED_SOUND_SYNC_V2_HEADER {
+        bail!("missing WLED Sound Sync V2 header 00002");
+    }
+
+    let sample_smth = f32::from_le_bytes(packet[12..16].try_into().expect("sampleSmth bytes"));
+    let spectrum = packet[18..34]
+        .iter()
+        .map(|value| *value as f32 / 255.0)
+        .collect::<Vec<_>>();
+    let major_peak_hz = f32::from_le_bytes(packet[40..44].try_into().expect("FFT_MajorPeak bytes"));
+
+    Ok(AudioFftFrame {
+        spectrum,
+        spectral_peak: normalize_frequency_hz(major_peak_hz),
+        overall_loudness: (sample_smth / 255.0).clamp(0.0, 1.0),
+    })
+}
+
+fn normalize_frequency_hz(value: f32) -> f32 {
+    (value / 20_000.0).clamp(0.0, 1.0)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{EQ_BAND_COUNT, PACKET_LEN, decode_packet};
+    use super::{
+        ReceiveMode, WLED_SOUND_SYNC_V2_PACKET_LEN, decode_packet, decode_raw_packet,
+        decode_wled_sound_sync_v2_packet,
+    };
 
-    /// Tests that packet decoding maps spectrum bytes, loudest bin, and loudness correctly.
     #[test]
-    fn decode_packet_maps_spectrum_frequency_and_loudness() {
-        let mut packet = [0u8; PACKET_LEN];
-        for (index, byte) in packet[..EQ_BAND_COUNT].iter_mut().enumerate() {
-            *byte = (index as u8) * 16;
-        }
-        packet[EQ_BAND_COUNT] = 32;
+    fn raw_packets_follow_the_received_channel_count() {
+        let packet = [0u8, 64, 128, 255, 3];
+        let frame = decode_raw_packet(&packet).expect("decode raw packet");
 
-        let frame = decode_packet(&packet, 16_000.0, 512.0);
-        assert_eq!(frame.spectrum.len(), EQ_BAND_COUNT);
-        assert!((frame.spectrum[1] - (16.0 / 255.0)).abs() < 0.0001);
-        assert!((frame.loudest_frequency - 1_000.0).abs() < 0.0001);
+        assert_eq!(frame.spectrum.len(), 4);
+        assert_eq!(frame.spectrum[0], 0.0);
+        assert!((frame.spectrum[2] - (128.0 / 255.0)).abs() < 0.0001);
+        assert!((frame.spectral_peak - 1.0).abs() < 0.0001);
         assert!(frame.overall_loudness > 0.0);
+    }
+
+    #[test]
+    fn raw_packets_normalize_loudest_position_for_multiple_channels() {
+        let packet = [10u8, 20, 30, 1];
+        let frame = decode_packet(ReceiveMode::UdpUnicast, &packet).expect("decode raw packet");
+
+        assert_eq!(frame.spectrum.len(), 3);
+        assert!((frame.spectral_peak - 0.5).abs() < 0.0001);
+    }
+
+    #[test]
+    fn wled_sound_sync_v2_packets_decode_major_peak_and_spectrum() {
+        let mut packet = [0u8; WLED_SOUND_SYNC_V2_PACKET_LEN];
+        packet[..6].copy_from_slice(b"00002\0");
+        packet[12..16].copy_from_slice(&127.5f32.to_le_bytes());
+        packet[18..34].copy_from_slice(&[
+            0, 16, 32, 48, 64, 80, 96, 112, 128, 144, 160, 176, 192, 208, 224, 240,
+        ]);
+        packet[40..44].copy_from_slice(&10_000.0f32.to_le_bytes());
+
+        let frame = decode_wled_sound_sync_v2_packet(&packet).expect("decode wled packet");
+
+        assert_eq!(frame.spectrum.len(), 16);
+        assert!((frame.spectrum[1] - (16.0 / 255.0)).abs() < 0.0001);
+        assert!((frame.spectral_peak - 0.5).abs() < 0.0001);
+        assert!((frame.overall_loudness - 0.5).abs() < 0.01);
+    }
+
+    #[test]
+    fn wled_sound_sync_requires_the_v2_packet_shape() {
+        let error = decode_wled_sound_sync_v2_packet(&[0u8; 8]).expect_err("reject short packet");
+
+        assert!(
+            error
+                .to_string()
+                .contains("expected 44 bytes for WLED Sound Sync V2")
+        );
     }
 }
