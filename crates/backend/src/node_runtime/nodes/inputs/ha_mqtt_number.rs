@@ -89,7 +89,7 @@ impl RuntimeNode for HomeAssistantMqttNumberNode {
 
     fn evaluate(
         &mut self,
-        _context: &NodeEvaluationContext,
+        context: &NodeEvaluationContext,
         _inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let mut diagnostics = Vec::new();
@@ -142,6 +142,8 @@ impl RuntimeNode for HomeAssistantMqttNumberNode {
         match service.ensure_number_entity(
             &self.config.broker_id,
             HaMqttNumberRegistration {
+                graph_id: context.graph_id.clone(),
+                graph_name: context.graph_name.clone(),
                 entity_id: self.config.entity_id.clone(),
                 display_name: self.config.display_name.clone(),
                 default_value: self.config.default_value,

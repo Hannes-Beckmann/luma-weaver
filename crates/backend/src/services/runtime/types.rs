@@ -35,6 +35,8 @@ pub(crate) struct RuntimeTask {
 
 /// Represents a compiled graph ready for runtime execution.
 pub(crate) struct CompiledGraph {
+    pub(crate) graph_id: String,
+    pub(crate) graph_name: String,
     pub(crate) execution_frequency_hz: u32,
     pub(crate) node_registry: Arc<NodeRegistry>,
     pub(crate) nodes: Vec<CompiledNode>,
