@@ -1359,7 +1359,7 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
             display_name: title_case_name("radius"),
             value_kind: ValueKind::Float,
             accepted_kinds: vec![],
-            default_value: Some(InputValue::Float(0.12)),
+            default_value: Some(InputValue::Float(0.5)),
         },
     ],
     outputs: vec![NodeOutputDefinition {
