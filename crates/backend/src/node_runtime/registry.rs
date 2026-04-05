@@ -218,6 +218,10 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
         nodes::temporal_filters::moving_average::MovingAverageNode
     );
     register_builtin!(
+        NodeTypeId::MOVING_MEDIAN,
+        nodes::temporal_filters::moving_median::MovingMedianNode
+    );
+    register_builtin!(
         NodeTypeId::BOX_BLUR,
         nodes::spatial_filters::box_blur::BoxBlurNode
     );
