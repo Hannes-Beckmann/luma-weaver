@@ -248,7 +248,9 @@ pub(crate) fn render(ctx: &egui::Context, ui: &mut egui::Ui, app: &mut FrontendA
         egui::Window::new("MQTT Brokers")
             .open(&mut open)
             .show(ctx, |ui| {
-                ui.label("Configure reusable brokers for Home Assistant MQTT nodes.");
+                ui.label(
+                    "Configure reusable brokers for Home Assistant MQTT nodes. Unchecked brokers stay stored, but are hidden from Home Assistant node selectors.",
+                );
                 ui.add_space(8.0);
 
                 for (index, broker) in app.ui.mqtt_broker_draft.iter_mut().enumerate() {
@@ -304,6 +306,13 @@ pub(crate) fn render(ctx: &egui::Context, ui: &mut egui::Ui, app: &mut FrontendA
                                     TEXT_EDIT_WIDTH,
                                 );
                                 ui.end_row();
+
+                                ui.label("Home Assistant");
+                                ui.checkbox(
+                                    &mut broker.is_home_assistant,
+                                    "Use for Home Assistant MQTT nodes",
+                                );
+                                ui.end_row();
                             });
                     });
                     ui.add_space(6.0);
@@ -322,6 +331,7 @@ pub(crate) fn render(ctx: &egui::Context, ui: &mut egui::Ui, app: &mut FrontendA
                         username: String::new(),
                         password: String::new(),
                         discovery_prefix: "homeassistant".to_owned(),
+                        is_home_assistant: true,
                     });
                 }
 

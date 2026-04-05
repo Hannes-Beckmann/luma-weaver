@@ -206,6 +206,8 @@ The backend includes mDNS-based WLED discovery and output support. Discovered de
 
 Luma Weaver can expose values through Home Assistant MQTT `number` entities. The backend manages broker connections, discovery payloads, command/state topics, and value synchronization for registered graph nodes.
 
+Reusable broker configs can be marked as Home Assistant brokers in the UI. Only marked brokers are offered to Home Assistant nodes, while unmarked configs remain stored for future generic MQTT use.
+
 ## Status
 
 The project already contains a substantial runtime and node catalog, but it is still best understood as an actively evolving tool. If you deploy it, expect the graph format, node set, and integrations to continue growing.
