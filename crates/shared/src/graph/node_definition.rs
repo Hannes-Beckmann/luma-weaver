@@ -94,6 +94,51 @@ pub enum NodeCategory {
     Debug,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+/// Groups nodes by the implementation family reflected in their stable node type IDs.
+///
+/// These groups are derived from the `core.`, `math.`, `color.`, `anim.`, `net.`, and
+/// `debug.` prefixes used throughout the built-in catalog. The editor uses them as a secondary
+/// menu grouping so contributors can map UI placement back to the code layout more easily.
+pub enum NodeImplementationGroup {
+    Core,
+    Math,
+    Color,
+    Anim,
+    Net,
+    Debug,
+    Other,
+}
+
+impl NodeImplementationGroup {
+    /// Returns a short label suitable for menu grouping and documentation.
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Core => "core",
+            Self::Math => "math",
+            Self::Color => "color",
+            Self::Anim => "anim",
+            Self::Net => "net",
+            Self::Debug => "debug",
+            Self::Other => "other",
+        }
+    }
+
+    /// Infers the implementation group from a stable node type identifier.
+    pub fn from_node_type_id(node_type_id: &str) -> Self {
+        match node_type_id.split('.').next().unwrap_or_default() {
+            "core" => Self::Core,
+            "math" => Self::Math,
+            "color" => Self::Color,
+            "anim" => Self::Anim,
+            "net" => Self::Net,
+            "debug" => Self::Debug,
+            _ => Self::Other,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes the shared schema for a single node type.
 ///
@@ -147,6 +192,11 @@ impl NodeDefinition {
             .values
             .iter()
             .find(|value| value.name == name)
+    }
+
+    /// Returns the implementation family inferred from the node's stable identifier.
+    pub fn implementation_group(&self) -> NodeImplementationGroup {
+        NodeImplementationGroup::from_node_type_id(&self.id)
     }
 }
 
@@ -342,4 +392,52 @@ pub struct NodeConnectionDefinition {
 pub struct NodeRuntimeUpdateDefinition {
     pub auto_subscribe_in_editor: bool,
     pub values: Vec<NodeRuntimeValueDefinition>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NodeDefinition, NodeImplementationGroup};
+
+    #[test]
+    fn implementation_group_is_inferred_from_node_type_prefix() {
+        let cases = [
+            ("core.float_constant", NodeImplementationGroup::Core),
+            ("math.add_float", NodeImplementationGroup::Math),
+            ("color.box_blur", NodeImplementationGroup::Color),
+            ("anim.plasma", NodeImplementationGroup::Anim),
+            ("net.wled_target", NodeImplementationGroup::Net),
+            ("debug.wled_dummy_display", NodeImplementationGroup::Debug),
+            ("custom.node", NodeImplementationGroup::Other),
+            ("node_without_prefix", NodeImplementationGroup::Other),
+        ];
+
+        for (node_type_id, expected) in cases {
+            assert_eq!(
+                NodeImplementationGroup::from_node_type_id(node_type_id),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn node_definition_exposes_implementation_group_helper() {
+        let definition = NodeDefinition {
+            id: "math.add_float".to_owned(),
+            display_name: "Add Float".to_owned(),
+            category: super::NodeCategory::Math,
+            inputs: vec![],
+            outputs: vec![],
+            parameters: vec![],
+            connection: super::NodeConnectionDefinition {
+                max_input_connections: 1,
+                require_value_kind_match: true,
+            },
+            runtime_updates: None,
+        };
+
+        assert_eq!(
+            definition.implementation_group(),
+            NodeImplementationGroup::Math
+        );
+    }
 }

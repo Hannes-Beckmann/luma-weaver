@@ -1,10 +1,10 @@
-use std::sync::LazyLock;
 use super::{
-    ColorGradientStop, EnumOption, FloatTensor, InputValue, NodeCategory,
-    NodeConnectionDefinition, NodeDefinition, NodeInputDefinition, NodeOutputDefinition,
-    NodeParameterDefinition, NodeRuntimeUpdateDefinition, NodeRuntimeValueDefinition,
-    NodeTypeId, ParameterDefaultValue, ParameterUiHint, RgbaColor, ValueKind,
+    ColorGradientStop, EnumOption, FloatTensor, InputValue, NodeCategory, NodeConnectionDefinition,
+    NodeDefinition, NodeInputDefinition, NodeOutputDefinition, NodeParameterDefinition,
+    NodeRuntimeUpdateDefinition, NodeRuntimeValueDefinition, NodeTypeId, ParameterDefaultValue,
+    ParameterUiHint, RgbaColor, ValueKind,
 };
+use std::sync::LazyLock;
 
 /// Returns the canonical opaque-white default input value used by the built-in catalog.
 fn white_input() -> InputValue {
@@ -52,6 +52,13 @@ fn title_case_name(name: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
+
+// Built-in node IDs intentionally use stable implementation prefixes such as `core.`,
+// `math.`, `color.`, `anim.`, `net.`, and `debug.`.
+//
+// The frontend uses those prefixes to add a secondary implementation-oriented grouping inside
+// each user-facing node menu category, so menu placement stays readable for users and legible
+// for contributors.
 
 /// Enumerates the waveform options exposed by the built-in signal generator node.
 static SIGNAL_GENERATOR_WAVEFORMS: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
@@ -278,32 +285,35 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "protocol".to_owned(),
-        display_name: title_case_name("protocol"),
-        default_value: ParameterDefaultValue::String("ddp".to_owned()),
-        ui_hint: ParameterUiHint::EnumSelect {
-            options: vec![
-                EnumOption {
-                    value: "ddp".to_owned(),
-                    label: "DDP".to_owned(),
-                },
-                EnumOption {
-                    value: "udp_raw".to_owned(),
-                    label: "UDP Raw".to_owned(),
-                },
-            ],
+    parameters: vec![
+        NodeParameterDefinition {
+            name: "protocol".to_owned(),
+            display_name: title_case_name("protocol"),
+            default_value: ParameterDefaultValue::String("ddp".to_owned()),
+            ui_hint: ParameterUiHint::EnumSelect {
+                options: vec![
+                    EnumOption {
+                        value: "ddp".to_owned(),
+                        label: "DDP".to_owned(),
+                    },
+                    EnumOption {
+                        value: "udp_raw".to_owned(),
+                        label: "UDP Raw".to_owned(),
+                    },
+                ],
+            },
         },
-    }, NodeParameterDefinition {
-        name: "port".to_owned(),
-        display_name: title_case_name("port"),
-        default_value: ParameterDefaultValue::Integer(4048),
-        ui_hint: ParameterUiHint::IntegerDrag {
-            speed: 1.0,
-            min: 1,
-            max: 65535,
+        NodeParameterDefinition {
+            name: "port".to_owned(),
+            display_name: title_case_name("port"),
+            default_value: ParameterDefaultValue::Integer(4048),
+            ui_hint: ParameterUiHint::IntegerDrag {
+                speed: 1.0,
+                min: 1,
+                max: 65535,
+            },
         },
-    }],
+    ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,

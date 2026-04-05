@@ -5,8 +5,9 @@ use egui_snarl::ui::{NodeLayout, PinInfo, PinPlacement, SnarlPin, SnarlStyle, Sn
 use egui_snarl::{InPin, NodeId, OutPin, Snarl};
 use shared::{
     GraphDocument, MqttBrokerConfig, NodeCategory, NodeDefinition, NodeDiagnosticSeverity,
-    NodeDiagnosticSummary, NodeTypeId, ValueKind, WledInstance,
+    NodeDiagnosticSummary, NodeImplementationGroup, NodeTypeId, ValueKind, WledInstance,
 };
+use std::collections::BTreeMap;
 
 use super::EditorSnarlNode;
 use super::model::{
@@ -385,11 +386,16 @@ fn render_graph_menu_contents(
     let mut selected_definition_id: Option<String> = None;
     if searching {
         for category in &categories {
-            for definition in &category.definitions {
-                let label = format!("{} ({})", definition.display_name, category.label);
-                if ui.button(label).clicked() {
-                    selected_definition_id = Some(definition.id.clone());
-                    ui.close();
+            for group in &category.groups {
+                for definition in &group.definitions {
+                    let label = format!(
+                        "{} ({} / {})",
+                        definition.display_name, category.label, group.label
+                    );
+                    if ui.button(label).clicked() {
+                        selected_definition_id = Some(definition.id.clone());
+                        ui.close();
+                    }
                 }
             }
         }
@@ -397,10 +403,24 @@ fn render_graph_menu_contents(
         for category in categories {
             ui.menu_button(category.label, |ui| {
                 ui.set_min_width(220.0);
-                for definition in &category.definitions {
-                    if ui.button(&definition.display_name).clicked() {
-                        selected_definition_id = Some(definition.id.clone());
-                        ui.close();
+                for group in &category.groups {
+                    if category.groups.len() > 1 {
+                        ui.menu_button(group.label, |ui| {
+                            ui.set_min_width(220.0);
+                            for definition in &group.definitions {
+                                if ui.button(&definition.display_name).clicked() {
+                                    selected_definition_id = Some(definition.id.clone());
+                                    ui.close();
+                                }
+                            }
+                        });
+                    } else {
+                        for definition in &group.definitions {
+                            if ui.button(&definition.display_name).clicked() {
+                                selected_definition_id = Some(definition.id.clone());
+                                ui.close();
+                            }
+                        }
                     }
                 }
             });
@@ -611,6 +631,11 @@ fn next_context_menu_node_id(snarl: &Snarl<EditorSnarlNode>, node_type_id: &str)
 
 struct NodeMenuCategory {
     label: &'static str,
+    groups: Vec<NodeMenuGroup>,
+}
+
+struct NodeMenuGroup {
+    label: &'static str,
     definitions: Vec<NodeDefinition>,
 }
 
@@ -666,15 +691,114 @@ fn node_menu_categories(
     categories
 }
 
-/// Appends a node menu category after sorting its definitions by display name.
+/// Appends a node menu category after sorting and grouping its definitions by implementation family.
 fn push_node_menu_category(
     categories: &mut Vec<NodeMenuCategory>,
     label: &'static str,
-    mut definitions: Vec<NodeDefinition>,
+    definitions: Vec<NodeDefinition>,
 ) {
     if definitions.is_empty() {
         return;
     }
-    definitions.sort_by(|left, right| left.display_name.cmp(&right.display_name));
-    categories.push(NodeMenuCategory { label, definitions });
+    let mut grouped_definitions: BTreeMap<NodeImplementationGroup, Vec<NodeDefinition>> =
+        BTreeMap::new();
+    for definition in definitions {
+        grouped_definitions
+            .entry(definition.implementation_group())
+            .or_default()
+            .push(definition);
+    }
+
+    let groups = grouped_definitions
+        .into_iter()
+        .map(|(group, mut definitions)| {
+            definitions.sort_by(|left, right| left.display_name.cmp(&right.display_name));
+            NodeMenuGroup {
+                label: group.label(),
+                definitions,
+            }
+        })
+        .collect();
+
+    categories.push(NodeMenuCategory { label, groups });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::node_menu_categories;
+    use shared::{
+        NodeCategory, NodeConnectionDefinition, NodeDefinition, NodeImplementationGroup,
+        NodeInputDefinition, NodeOutputDefinition, NodeTypeId, ValueKind,
+    };
+
+    fn test_node(id: &str, category: NodeCategory, display_name: &str) -> NodeDefinition {
+        NodeDefinition {
+            id: id.to_owned(),
+            display_name: display_name.to_owned(),
+            category,
+            inputs: vec![NodeInputDefinition {
+                name: "value".to_owned(),
+                display_name: "Value".to_owned(),
+                value_kind: ValueKind::Float,
+                accepted_kinds: vec![],
+                default_value: None,
+            }],
+            outputs: vec![NodeOutputDefinition {
+                name: "value".to_owned(),
+                display_name: "Value".to_owned(),
+                value_kind: ValueKind::Float,
+                accepted_kinds: vec![],
+            }],
+            parameters: vec![],
+            connection: NodeConnectionDefinition {
+                max_input_connections: 1,
+                require_value_kind_match: true,
+            },
+            runtime_updates: None,
+        }
+    }
+
+    #[test]
+    fn node_menu_categories_group_nodes_by_implementation_family() {
+        let definitions = vec![
+            test_node(
+                "core.float_constant",
+                NodeCategory::Inputs,
+                "Float Constant",
+            ),
+            test_node(
+                "net.audio_fft_receiver",
+                NodeCategory::Inputs,
+                "Audio FFT Receiver",
+            ),
+            test_node("anim.plasma", NodeCategory::Generators, "Plasma"),
+        ];
+
+        let categories = node_menu_categories(&definitions, "");
+        assert_eq!(categories.len(), 2);
+        assert_eq!(categories[0].label, "Inputs");
+        assert_eq!(categories[0].groups.len(), 2);
+        assert_eq!(
+            categories[0].groups[0].label,
+            NodeImplementationGroup::Core.label()
+        );
+        assert_eq!(
+            categories[0].groups[0].definitions[0].id,
+            NodeTypeId::FLOAT_CONSTANT
+        );
+        assert_eq!(
+            categories[0].groups[1].label,
+            NodeImplementationGroup::Net.label()
+        );
+        assert_eq!(
+            categories[0].groups[1].definitions[0].id,
+            NodeTypeId::AUDIO_FFT_RECEIVER
+        );
+        assert_eq!(categories[1].label, "Generators");
+        assert_eq!(
+            categories[1].groups[0].label,
+            NodeImplementationGroup::Anim.label()
+        );
+        assert_eq!(categories[1].groups[0].definitions[0].id, "anim.plasma");
+    }
 }
