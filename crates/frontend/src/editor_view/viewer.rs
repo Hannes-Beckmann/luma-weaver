@@ -11,7 +11,7 @@ use shared::{
 use super::EditorSnarlNode;
 use super::model::{
     build_snarl_from_document, editor_node_from_definition, find_node_definition,
-    sync_document_from_snarl,
+    sync_document_from_snarl, visible_parameter_definitions,
 };
 use super::widgets::{
     draw_color_frame_preview, draw_float_plot, edit_input_value, edit_parameter_value,
@@ -240,23 +240,25 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
             return;
         };
         ui.with_layout(egui::Layout::top_down(egui::Align::Min), |ui| {
-            if !definition.inputs.is_empty()
-                && (!definition.parameters.is_empty()
-                    || !editor_node.runtime_values.is_empty()
-                    || !definition.outputs.is_empty())
-            {
-                ui.separator();
-            }
             ensure_parameter_defaults(
                 &mut editor_node.parameters,
                 &editor_node.node_type_id,
                 &self.available_node_definitions,
             );
+            let visible_parameters =
+                visible_parameter_definitions(definition, &editor_node.parameters);
+            if !definition.inputs.is_empty()
+                && (!visible_parameters.is_empty()
+                    || !editor_node.runtime_values.is_empty()
+                    || !definition.outputs.is_empty())
+            {
+                ui.separator();
+            }
             egui::Grid::new(ui.id().with("parameter_grid"))
                 .num_columns(2)
                 .spacing([12.0, 6.0])
                 .show(ui, |ui| {
-                    for parameter_definition in &definition.parameters {
+                    for parameter_definition in &visible_parameters {
                         ui.label(&parameter_definition.display_name);
                         edit_parameter_value(
                             ui,
@@ -270,7 +272,7 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
                         ui.end_row();
                     }
                 });
-            if !editor_node.parameters.is_empty()
+            if !visible_parameters.is_empty()
                 && (!editor_node.runtime_values.is_empty() || !definition.outputs.is_empty())
             {
                 ui.separator();

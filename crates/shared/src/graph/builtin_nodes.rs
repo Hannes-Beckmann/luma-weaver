@@ -1,10 +1,10 @@
-use std::sync::LazyLock;
 use super::{
-    ColorGradientStop, EnumOption, FloatTensor, InputValue, NodeCategory,
-    NodeConnectionDefinition, NodeDefinition, NodeInputDefinition, NodeOutputDefinition,
-    NodeParameterDefinition, NodeRuntimeUpdateDefinition, NodeRuntimeValueDefinition,
-    NodeTypeId, ParameterDefaultValue, ParameterUiHint, RgbaColor, ValueKind,
+    ColorGradientStop, EnumOption, FloatTensor, InputValue, NodeCategory, NodeConnectionDefinition,
+    NodeDefinition, NodeInputDefinition, NodeOutputDefinition, NodeParameterDefinition,
+    NodeRuntimeUpdateDefinition, NodeRuntimeValueDefinition, NodeTypeId, ParameterDefaultValue,
+    ParameterUiHint, RgbaColor, ValueKind,
 };
+use std::sync::LazyLock;
 
 /// Returns the canonical opaque-white default input value used by the built-in catalog.
 fn white_input() -> InputValue {
@@ -95,6 +95,7 @@ static FLOAT_CONSTANT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
             min: -10_000.0,
             max: 10_000.0,
         },
+        visible_when: None,
     }],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -124,6 +125,7 @@ static COLOR_CONSTANT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
             a: 1.0,
         }),
         ui_hint: ParameterUiHint::ColorPicker,
+        visible_when: None,
     }],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -222,6 +224,7 @@ static DELAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefiniti
             min: 1,
             max: 10_000,
         },
+        visible_when: None,
     }],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -248,6 +251,7 @@ static WLED_TARGET_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
             display_name: title_case_name("target"),
             default_value: ParameterDefaultValue::String("".to_owned()),
             ui_hint: ParameterUiHint::WledInstanceOrHost,
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "led_count".to_owned(),
@@ -258,6 +262,7 @@ static WLED_TARGET_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
                 min: 1,
                 max: 8192,
             },
+            visible_when: None,
         },
     ],
     connection: NodeConnectionDefinition {
@@ -278,32 +283,37 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "protocol".to_owned(),
-        display_name: title_case_name("protocol"),
-        default_value: ParameterDefaultValue::String("ddp".to_owned()),
-        ui_hint: ParameterUiHint::EnumSelect {
-            options: vec![
-                EnumOption {
-                    value: "ddp".to_owned(),
-                    label: "DDP".to_owned(),
-                },
-                EnumOption {
-                    value: "udp_raw".to_owned(),
-                    label: "UDP Raw".to_owned(),
-                },
-            ],
+    parameters: vec![
+        NodeParameterDefinition {
+            name: "protocol".to_owned(),
+            display_name: title_case_name("protocol"),
+            default_value: ParameterDefaultValue::String("ddp".to_owned()),
+            ui_hint: ParameterUiHint::EnumSelect {
+                options: vec![
+                    EnumOption {
+                        value: "ddp".to_owned(),
+                        label: "DDP".to_owned(),
+                    },
+                    EnumOption {
+                        value: "udp_raw".to_owned(),
+                        label: "UDP Raw".to_owned(),
+                    },
+                ],
+            },
+            visible_when: None,
         },
-    }, NodeParameterDefinition {
-        name: "port".to_owned(),
-        display_name: title_case_name("port"),
-        default_value: ParameterDefaultValue::Integer(4048),
-        ui_hint: ParameterUiHint::IntegerDrag {
-            speed: 1.0,
-            min: 1,
-            max: 65535,
+        NodeParameterDefinition {
+            name: "port".to_owned(),
+            display_name: title_case_name("port"),
+            default_value: ParameterDefaultValue::Integer(4048),
+            ui_hint: ParameterUiHint::IntegerDrag {
+                speed: 1.0,
+                min: 1,
+                max: 65535,
+            },
+            visible_when: None,
         },
-    }],
+    ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -342,6 +352,7 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
             display_name: title_case_name("group"),
             default_value: ParameterDefaultValue::String("239.0.0.1".to_owned()),
             ui_hint: ParameterUiHint::TextSingleLine,
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "port".to_owned(),
@@ -352,6 +363,7 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
                 min: 1,
                 max: 65535,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "sample_rate_hz".to_owned(),
@@ -362,6 +374,7 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
                 min: 1,
                 max: 384_000,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "fft_size".to_owned(),
@@ -372,6 +385,7 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
                 min: 1,
                 max: 65_536,
             },
+            visible_when: None,
         },
     ],
     connection: NodeConnectionDefinition {
@@ -398,18 +412,21 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
             display_name: title_case_name("broker_id"),
             default_value: ParameterDefaultValue::String(String::new()),
             ui_hint: ParameterUiHint::MqttBrokerSelect,
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "entity_id".to_owned(),
             display_name: title_case_name("entity_id"),
             default_value: ParameterDefaultValue::String("animation_builder_number".to_owned()),
             ui_hint: ParameterUiHint::TextSingleLine,
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "display_name".to_owned(),
             display_name: title_case_name("display_name"),
             default_value: ParameterDefaultValue::String("Luma Weaver Number".to_owned()),
             ui_hint: ParameterUiHint::TextSingleLine,
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "default_value".to_owned(),
@@ -420,6 +437,7 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
                 min: -10_000.0,
                 max: 10_000.0,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "min".to_owned(),
@@ -430,6 +448,7 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
                 min: -10_000.0,
                 max: 10_000.0,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "max".to_owned(),
@@ -440,6 +459,7 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
                 min: -10_000.0,
                 max: 10_000.0,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "step".to_owned(),
@@ -450,12 +470,14 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
                 min: 0.0001,
                 max: 10_000.0,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "retain".to_owned(),
             display_name: title_case_name("retain"),
             default_value: ParameterDefaultValue::Bool(true),
             ui_hint: ParameterUiHint::Checkbox,
+            visible_when: None,
         },
     ],
     connection: NodeConnectionDefinition {
@@ -518,6 +540,7 @@ static SIGNAL_GENERATOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
             ui_hint: ParameterUiHint::EnumSelect {
                 options: SIGNAL_GENERATOR_WAVEFORMS.clone(),
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "frequency".to_owned(),
@@ -528,6 +551,7 @@ static SIGNAL_GENERATOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
                 min: -10_000.0,
                 max: 10_000.0,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "amplitude".to_owned(),
@@ -538,6 +562,7 @@ static SIGNAL_GENERATOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
                 min: -10_000.0,
                 max: 10_000.0,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "phase".to_owned(),
@@ -548,6 +573,7 @@ static SIGNAL_GENERATOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
                 min: -10_000.0,
                 max: 10_000.0,
             },
+            visible_when: None,
         },
     ],
     connection: NodeConnectionDefinition {
@@ -1042,6 +1068,7 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
             display_name: title_case_name("gradient"),
             default_value: ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
             ui_hint: ParameterUiHint::ColorGradient,
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "background".to_owned(),
@@ -1053,6 +1080,7 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
                 a: 1.0,
             }),
             ui_hint: ParameterUiHint::ColorPicker,
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "gain".to_owned(),
@@ -1063,6 +1091,7 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
                 min: 0.0,
                 max: 8.0,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "bar_gap".to_owned(),
@@ -1073,6 +1102,7 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
                 min: 0.0,
                 max: 0.95,
             },
+            visible_when: None,
         },
     ],
     connection: NodeConnectionDefinition {
@@ -1145,6 +1175,7 @@ static RAINBOW_SWEEP_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
         display_name: title_case_name("gradient"),
         default_value: ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
         ui_hint: ParameterUiHint::ColorGradient,
+        visible_when: None,
     }],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1191,6 +1222,7 @@ static CIRCLE_SWEEP_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeD
         display_name: title_case_name("gradient"),
         default_value: ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
         ui_hint: ParameterUiHint::ColorGradient,
+        visible_when: None,
     }],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1221,6 +1253,7 @@ static LEVEL_BAR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
         display_name: title_case_name("gradient"),
         default_value: ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
         ui_hint: ParameterUiHint::ColorGradient,
+        visible_when: None,
     }],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1274,6 +1307,7 @@ static TWINKLE_STARS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
         display_name: title_case_name("gradient"),
         default_value: ParameterDefaultValue::Gradient(DEFAULT_TWINKLE_GRADIENT_STOPS.to_vec()),
         ui_hint: ParameterUiHint::ColorGradient,
+        visible_when: None,
     }],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1334,6 +1368,7 @@ static PLASMA_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinit
         display_name: title_case_name("gradient"),
         default_value: ParameterDefaultValue::Gradient(DEFAULT_PLASMA_GRADIENT_STOPS.to_vec()),
         ui_hint: ParameterUiHint::ColorGradient,
+        visible_when: None,
     }],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1378,6 +1413,7 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
                 min: 1,
                 max: 64,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "radius_variance".to_owned(),
@@ -1388,6 +1424,7 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
                 min: 0.0,
                 max: 1.0,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "gradient".to_owned(),
@@ -1396,6 +1433,7 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
                 DEFAULT_BOUNCING_BALLS_GRADIENT_STOPS.to_vec(),
             ),
             ui_hint: ParameterUiHint::ColorGradient,
+            visible_when: None,
         },
     ],
     connection: NodeConnectionDefinition {
@@ -1427,6 +1465,7 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
                 min: 1,
                 max: 256,
             },
+            visible_when: None,
         },
         NodeParameterDefinition {
             name: "height".to_owned(),
@@ -1437,6 +1476,7 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
                 min: 1,
                 max: 256,
             },
+            visible_when: None,
         },
     ],
     connection: NodeConnectionDefinition {

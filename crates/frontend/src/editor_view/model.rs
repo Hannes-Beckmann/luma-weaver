@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use egui_snarl::{NodeId, Snarl};
 use shared::{
     GraphDocument, GraphEdge, GraphNode, InputValue, NodeDefinition, NodeInputValue, NodeMetadata,
-    NodeParameter, NodeTypeId, ValueKind,
+    NodeParameter, NodeParameterDefinition, NodeTypeId, ValueKind,
 };
 
 use super::{EditorInputPort, EditorOutputPort, EditorSnarlNode};
@@ -394,6 +394,18 @@ pub(super) fn parameters_with_defaults(
     merged
 }
 
+/// Returns the subset of parameters that should currently be shown in the editor.
+pub(super) fn visible_parameter_definitions<'a>(
+    definition: &'a NodeDefinition,
+    parameters: &[NodeParameter],
+) -> Vec<&'a NodeParameterDefinition> {
+    definition
+        .parameters
+        .iter()
+        .filter(|parameter_definition| parameter_definition.is_visible(parameters))
+        .collect()
+}
+
 /// Returns the index of the named input port.
 fn input_port_index(ports: &[EditorInputPort], name: &str) -> Option<usize> {
     ports.iter().position(|port| port.name == name)
@@ -423,7 +435,7 @@ fn graph_node_input_value_or_default(
                 kind,
                 available_node_definitions,
             )
-    });
+        });
     coerce_input_value_kind(value, kind)
 }
 
@@ -451,4 +463,107 @@ pub(super) fn find_node_definition<'a>(
     available_node_definitions
         .iter()
         .find(|definition| definition.id == node_type_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use shared::{
+        NodeCategory, NodeConnectionDefinition, ParameterDefaultValue, ParameterUiHint,
+        ParameterVisibilityCondition,
+    };
+
+    fn sample_definition() -> NodeDefinition {
+        NodeDefinition {
+            id: "test.visibility".to_owned(),
+            display_name: "Test Visibility".to_owned(),
+            category: NodeCategory::Debug,
+            inputs: vec![],
+            outputs: vec![],
+            parameters: vec![
+                NodeParameterDefinition {
+                    name: "mode".to_owned(),
+                    display_name: "Mode".to_owned(),
+                    default_value: ParameterDefaultValue::String("basic".to_owned()),
+                    ui_hint: ParameterUiHint::TextSingleLine,
+                    visible_when: None,
+                },
+                NodeParameterDefinition {
+                    name: "advanced_value".to_owned(),
+                    display_name: "Advanced Value".to_owned(),
+                    default_value: ParameterDefaultValue::Float(1.5),
+                    ui_hint: ParameterUiHint::DragFloat {
+                        speed: 0.1,
+                        min: 0.0,
+                        max: 10.0,
+                    },
+                    visible_when: Some(ParameterVisibilityCondition {
+                        parameter: "mode".to_owned(),
+                        equals: json!("advanced"),
+                    }),
+                },
+            ],
+            connection: NodeConnectionDefinition {
+                max_input_connections: 1,
+                require_value_kind_match: true,
+            },
+            runtime_updates: None,
+        }
+    }
+
+    #[test]
+    fn visible_parameter_definitions_hides_conditionally_hidden_controls() {
+        let definition = sample_definition();
+        let parameters = parameters_with_defaults(&[], &definition.id, &[definition.clone()]);
+
+        let visible = visible_parameter_definitions(&definition, &parameters);
+        assert_eq!(
+            visible
+                .iter()
+                .map(|parameter| parameter.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["mode"]
+        );
+    }
+
+    #[test]
+    fn visible_parameter_definitions_shows_controls_when_the_condition_matches() {
+        let definition = sample_definition();
+        let mut parameters = parameters_with_defaults(&[], &definition.id, &[definition.clone()]);
+        let mode = parameters
+            .iter_mut()
+            .find(|parameter| parameter.name == "mode")
+            .unwrap();
+        mode.value = json!("advanced");
+
+        let visible = visible_parameter_definitions(&definition, &parameters);
+        assert_eq!(
+            visible
+                .iter()
+                .map(|parameter| parameter.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["mode", "advanced_value"]
+        );
+    }
+
+    #[test]
+    fn parameters_with_defaults_still_preserves_hidden_values() {
+        let definition = sample_definition();
+        let definition_id = definition.id.clone();
+        let parameters = parameters_with_defaults(
+            &[NodeParameter {
+                name: "advanced_value".to_owned(),
+                value: json!(9.0),
+            }],
+            &definition_id,
+            &[definition],
+        );
+
+        assert!(
+            parameters
+                .iter()
+                .any(|parameter| parameter.name == "advanced_value")
+        );
+    }
 }
