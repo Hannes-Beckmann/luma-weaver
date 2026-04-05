@@ -25,6 +25,17 @@ impl NodeTypeId {
     pub const HA_MQTT_NUMBER: &'static str = "inputs.ha_mqtt_number";
     pub const SIGNAL_GENERATOR: &'static str = "inputs.signal_generator";
     pub const ADD_FLOAT: &'static str = "math.add_float";
+    pub const SUBTRACT_FLOAT: &'static str = "math.subtract_float";
+    pub const DIVIDE_FLOAT: &'static str = "math.divide_float";
+    pub const ABS_FLOAT: &'static str = "math.abs_float";
+    pub const MIN_MAX_FLOAT: &'static str = "math.min_max_float";
+    pub const CLAMP_FLOAT: &'static str = "math.clamp_float";
+    pub const POWER_FLOAT: &'static str = "math.power_float";
+    pub const ROOT_FLOAT: &'static str = "math.root_float";
+    pub const EXPONENTIAL_FLOAT: &'static str = "math.exponential_float";
+    pub const LOG_FLOAT: &'static str = "math.log_float";
+    pub const MAP_RANGE_FLOAT: &'static str = "math.map_range_float";
+    pub const ROUND_FLOAT: &'static str = "math.round_float";
     pub const MULTIPLY_FLOAT: &'static str = "math.multiply_float";
     pub const SCALE_TENSOR: &'static str = "math.scale_tensor";
     pub const SCALE_COLOR: &'static str = "frame_operations.scale";
