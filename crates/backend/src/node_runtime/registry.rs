@@ -181,8 +181,46 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
     );
     register_builtin!(NodeTypeId::ADD_FLOAT, nodes::math::add_float::AddFloatNode);
     register_builtin!(
+        NodeTypeId::SUBTRACT_FLOAT,
+        nodes::math::subtract_float::SubtractFloatNode
+    );
+    register_builtin!(
+        NodeTypeId::DIVIDE_FLOAT,
+        nodes::math::divide_float::DivideFloatNode
+    );
+    register_builtin!(
+        NodeTypeId::MIN_MAX_FLOAT,
+        nodes::math::min_max_float::MinMaxFloatNode
+    );
+    register_builtin!(
         NodeTypeId::MULTIPLY_FLOAT,
         nodes::math::multiply_float::MultiplyFloatNode
+    );
+    register_builtin!(NodeTypeId::ABS_FLOAT, nodes::math::abs_float::AbsFloatNode);
+    register_builtin!(
+        NodeTypeId::CLAMP_FLOAT,
+        nodes::math::clamp_float::ClampFloatNode
+    );
+    register_builtin!(
+        NodeTypeId::POWER_FLOAT,
+        nodes::math::power_float::PowerFloatNode
+    );
+    register_builtin!(
+        NodeTypeId::ROOT_FLOAT,
+        nodes::math::root_float::RootFloatNode
+    );
+    register_builtin!(
+        NodeTypeId::EXPONENTIAL_FLOAT,
+        nodes::math::exponential_float::ExponentialFloatNode
+    );
+    register_builtin!(NodeTypeId::LOG_FLOAT, nodes::math::log_float::LogFloatNode);
+    register_builtin!(
+        NodeTypeId::MAP_RANGE_FLOAT,
+        nodes::math::map_range_float::MapRangeFloatNode
+    );
+    register_builtin!(
+        NodeTypeId::ROUND_FLOAT,
+        nodes::math::round_float::RoundFloatNode
     );
     register_builtin!(
         NodeTypeId::SCALE_TENSOR,
