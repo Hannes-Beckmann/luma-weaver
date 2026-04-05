@@ -145,21 +145,6 @@ pub(crate) fn clamp_u64_to_u16(value: u64, min: u64, max: u64) -> ParameterAdjus
     }
 }
 
-/// Enforces a minimum bound for a `u64` parameter converted to `f32`.
-pub(crate) fn max_u64_to_f32(value: u64, min: u64) -> ParameterAdjustment<f32> {
-    let adjusted = value.max(min);
-    if adjusted == value {
-        ParameterAdjustment::unchanged(adjusted as f32)
-    } else {
-        ParameterAdjustment::with_diagnostic(
-            adjusted as f32,
-            NodeDiagnosticSeverity::Warning,
-            "clamped",
-            format!("Parameter value {} was raised to {}.", value, adjusted),
-        )
-    }
-}
-
 /// Enforces a minimum bound for an `f64` parameter converted to `f32`.
 pub(crate) fn max_f64_to_f32(value: f64, min: f64) -> ParameterAdjustment<f32> {
     let adjusted = value.max(min);

@@ -498,9 +498,9 @@ mod tests {
                         max: 10.0,
                     },
                 )
-                .visible_when(ParameterVisibilityCondition {
+                .visible_when(ParameterVisibilityCondition::Equals {
                     parameter: "mode".to_owned(),
-                    equals: json!("advanced"),
+                    value: json!("advanced"),
                 }),
             ],
             connection: NodeConnectionDefinition {

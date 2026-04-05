@@ -299,11 +299,42 @@ pub struct NodeParameterDefinition {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes when a parameter should be rendered in the editor.
 ///
-/// The first version keeps the rule intentionally small: a parameter is visible when another
-/// parameter has the expected JSON value.
-pub struct ParameterVisibilityCondition {
-    pub parameter: String,
-    pub equals: JsonValue,
+/// Conditions are intentionally small but composable so mode-based node UIs can be expressed in
+/// shared schema without frontend-specific hardcoding.
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ParameterVisibilityCondition {
+    Equals {
+        parameter: String,
+        value: JsonValue,
+    },
+    Any {
+        conditions: Vec<ParameterVisibilityCondition>,
+    },
+    All {
+        conditions: Vec<ParameterVisibilityCondition>,
+    },
+    Not {
+        condition: Box<ParameterVisibilityCondition>,
+    },
+}
+
+impl ParameterVisibilityCondition {
+    /// Returns whether this visibility condition matches the current parameter values.
+    pub fn matches(&self, parameters: &[NodeParameter]) -> bool {
+        match self {
+            Self::Equals { parameter, value } => parameters
+                .iter()
+                .find(|candidate| candidate.name == *parameter)
+                .is_some_and(|candidate| candidate.value == *value),
+            Self::Any { conditions } => conditions
+                .iter()
+                .any(|condition| condition.matches(parameters)),
+            Self::All { conditions } => conditions
+                .iter()
+                .all(|condition| condition.matches(parameters)),
+            Self::Not { condition } => !condition.matches(parameters),
+        }
+    }
 }
 
 impl NodeParameterDefinition {
@@ -331,10 +362,7 @@ impl NodeParameterDefinition {
     pub fn is_visible(&self, parameters: &[NodeParameter]) -> bool {
         match &self.visible_when {
             None => true,
-            Some(condition) => parameters
-                .iter()
-                .find(|parameter| parameter.name == condition.parameter)
-                .is_some_and(|parameter| parameter.value == condition.equals),
+            Some(condition) => condition.matches(parameters),
         }
     }
 }
@@ -421,9 +449,9 @@ mod tests {
                 max: 10.0,
             },
         )
-        .visible_when(ParameterVisibilityCondition {
+        .visible_when(ParameterVisibilityCondition::Equals {
             parameter: "use_custom_value".to_owned(),
-            equals: JsonValue::from(true),
+            value: JsonValue::from(true),
         });
         let enabled_parameters = vec![NodeParameter {
             name: "use_custom_value".to_owned(),
@@ -451,9 +479,9 @@ mod tests {
                 max: 10.0,
             },
         )
-        .visible_when(ParameterVisibilityCondition {
+        .visible_when(ParameterVisibilityCondition::Equals {
             parameter: "mode".to_owned(),
-            equals: json!("advanced"),
+            value: json!("advanced"),
         });
         let parameters = vec![NodeParameter {
             name: "mode".to_owned(),
@@ -461,6 +489,41 @@ mod tests {
         }];
 
         assert!(definition.is_visible(&parameters));
+    }
+
+    #[test]
+    fn parameters_follow_any_visibility_conditions() {
+        let definition = NodeParameterDefinition::new(
+            "multicast_group",
+            String::new(),
+            ParameterDefaultValue::String("239.0.0.1".to_owned()),
+            ParameterUiHint::TextSingleLine,
+        )
+        .visible_when(ParameterVisibilityCondition::Any {
+            conditions: vec![
+                ParameterVisibilityCondition::Equals {
+                    parameter: "mode".to_owned(),
+                    value: json!("udp_multicast"),
+                },
+                ParameterVisibilityCondition::Equals {
+                    parameter: "mode".to_owned(),
+                    value: json!("wled_sound_sync"),
+                },
+            ],
+        });
+
+        assert!(definition.is_visible(&[NodeParameter {
+            name: "mode".to_owned(),
+            value: json!("udp_multicast"),
+        }]));
+        assert!(definition.is_visible(&[NodeParameter {
+            name: "mode".to_owned(),
+            value: json!("wled_sound_sync"),
+        }]));
+        assert!(!definition.is_visible(&[NodeParameter {
+            name: "mode".to_owned(),
+            value: json!("udp_unicast"),
+        }]));
     }
 }
 
