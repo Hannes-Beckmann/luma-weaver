@@ -1,5 +1,9 @@
-pub(crate) mod color;
-pub(crate) mod core;
 pub(crate) mod debug;
+pub(crate) mod filter_utils;
+pub(crate) mod frame_operations;
+pub(crate) mod generators;
+pub(crate) mod inputs;
 pub(crate) mod math;
-pub(crate) mod net;
+pub(crate) mod outputs;
+pub(crate) mod spatial_filters;
+pub(crate) mod temporal_filters;
