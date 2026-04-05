@@ -101,6 +101,14 @@ When adding a node:
 - verify it is discoverable in the editor menu
 - verify the category choice remains coherent with the current node menu structure
 - note that menu organization and implementation organization are related but not always identical
+- keep the stable node type prefix aligned with the implementation family used in the codebase
+
+The current add menu uses the user-facing category as the top-level grouping and then sub-groups
+nodes by the implementation prefix in the stable node type ID, such as `core.`, `math.`,
+`color.`, `anim.`, `net.`, or `debug.`.
+
+That means a node can still live in a user-friendly category like `Inputs` or `Outputs` while the
+menu also shows contributors which code area it comes from.
 
 ## Compatibility And Unknown Nodes
 
