@@ -128,6 +128,8 @@ mod tests {
         let first = RuntimeNode::evaluate(
             &mut node,
             &NodeEvaluationContext {
+                graph_id: "test-graph".to_owned(),
+                graph_name: "Test Graph".to_owned(),
                 elapsed_seconds: 0.0,
                 render_layout: None,
             },
@@ -155,6 +157,8 @@ mod tests {
         let second = RuntimeNode::evaluate(
             &mut node,
             &NodeEvaluationContext {
+                graph_id: "test-graph".to_owned(),
+                graph_name: "Test Graph".to_owned(),
                 elapsed_seconds: 1.0,
                 render_layout: None,
             },
