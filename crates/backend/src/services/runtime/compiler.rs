@@ -15,9 +15,11 @@ pub(crate) fn compile_graph_document(
     document: GraphDocument,
     node_registry: Arc<NodeRegistry>,
 ) -> anyhow::Result<CompiledGraph> {
+    let graph_id = document.metadata.id.clone();
+    let graph_name = document.metadata.name.clone();
     tracing::debug!(
-        graph_id = %document.metadata.id,
-        graph_name = %document.metadata.name,
+        graph_id = %graph_id,
+        graph_name = %graph_name,
         node_count = document.nodes.len(),
         edge_count = document.edges.len(),
         execution_frequency_hz = document.metadata.execution_frequency_hz,
@@ -85,6 +87,8 @@ pub(crate) fn compile_graph_document(
     );
 
     Ok(CompiledGraph {
+        graph_id,
+        graph_name,
         execution_frequency_hz: document.metadata.execution_frequency_hz,
         node_registry,
         nodes,
@@ -289,6 +293,8 @@ mod tests {
     fn builtin_defaults_do_not_emit_clamp_diagnostics() {
         let node_registry = build_builtin_node_registry().expect("build builtin node registry");
         let context = NodeEvaluationContext {
+            graph_id: "default-audit-graph".to_owned(),
+            graph_name: "Default Audit Graph".to_owned(),
             elapsed_seconds: 1.0 / 60.0,
             render_layout: Some(LedLayout {
                 id: "default-audit-layout".to_owned(),

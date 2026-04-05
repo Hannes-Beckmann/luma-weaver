@@ -7,6 +7,8 @@ use super::serialize_outputs;
 
 /// Carries per-evaluation runtime context that is shared across all node executions in a tick.
 pub(crate) struct NodeEvaluationContext {
+    pub(crate) graph_id: String,
+    pub(crate) graph_name: String,
     pub(crate) elapsed_seconds: f64,
     pub(crate) render_layout: Option<LedLayout>,
 }
