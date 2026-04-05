@@ -736,7 +736,10 @@ mod tests {
         assert_eq!(categories.len(), 2);
         assert_eq!(categories[0].label, "Inputs");
         assert_eq!(categories[0].definitions.len(), 2);
-        assert_eq!(categories[0].definitions[0].id, NodeTypeId::AUDIO_FFT_RECEIVER);
+        assert_eq!(
+            categories[0].definitions[0].id,
+            NodeTypeId::AUDIO_FFT_RECEIVER
+        );
         assert_eq!(categories[0].definitions[1].id, NodeTypeId::FLOAT_CONSTANT);
         assert_eq!(categories[1].label, "Generators");
         assert_eq!(categories[1].definitions.len(), 1);

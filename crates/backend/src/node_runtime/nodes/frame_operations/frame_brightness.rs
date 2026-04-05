@@ -105,6 +105,8 @@ mod tests {
         let evaluation = node
             .evaluate(
                 &NodeEvaluationContext {
+                    graph_id: "test-graph".to_owned(),
+                    graph_name: "Test Graph".to_owned(),
                     elapsed_seconds: 0.0,
                     render_layout: None,
                 },

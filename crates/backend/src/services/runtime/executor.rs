@@ -67,6 +67,8 @@ impl CompiledGraph {
                 }
 
                 let context = NodeEvaluationContext {
+                    graph_id: self.graph_id.clone(),
+                    graph_name: self.graph_name.clone(),
                     elapsed_seconds,
                     render_layout: render_context.as_ref().map(|ctx| ctx.layout.clone()),
                 };
@@ -518,6 +520,8 @@ mod tests {
                     }
 
                     let context = NodeEvaluationContext {
+                        graph_id: graph.graph_id.clone(),
+                        graph_name: graph.graph_name.clone(),
                         elapsed_seconds,
                         render_layout: render_context.as_ref().map(|ctx| ctx.layout.clone()),
                     };

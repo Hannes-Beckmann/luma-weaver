@@ -32,6 +32,8 @@ pub(crate) fn global_home_assistant_mqtt_service() -> Option<&'static Arc<HomeAs
 
 #[derive(Clone, PartialEq)]
 pub(crate) struct HaMqttNumberRegistration {
+    pub(crate) graph_id: String,
+    pub(crate) graph_name: String,
     pub(crate) entity_id: String,
     pub(crate) display_name: String,
     pub(crate) default_value: f32,
@@ -45,6 +47,21 @@ pub(crate) struct HaMqttNumberSnapshot {
     pub(crate) connected: bool,
     pub(crate) value: f32,
     pub(crate) waiting_for_first_value: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct NumberEntityKey {
+    graph_id: String,
+    entity_id: String,
+}
+
+impl NumberEntityKey {
+    fn from_registration(registration: &HaMqttNumberRegistration) -> Self {
+        Self {
+            graph_id: registration.graph_id.clone(),
+            entity_id: registration.entity_id.clone(),
+        }
+    }
 }
 
 pub(crate) struct HomeAssistantMqttService {
@@ -178,9 +195,10 @@ impl HomeAssistantMqttService {
                 .write()
                 .map_err(|_| anyhow::anyhow!("mqtt broker state lock poisoned"))?;
             let connected = state.connected;
+            let key = NumberEntityKey::from_registration(&registration);
             let entity = state
                 .numbers
-                .entry(registration.entity_id.clone())
+                .entry(key)
                 .or_insert_with(|| NumberEntityState {
                     registration: registration.clone(),
                     latest_value: None,
@@ -223,6 +241,7 @@ impl HomeAssistantMqttService {
             handle
                 .command_tx
                 .send(BrokerCommand::PublishNumberState {
+                    graph_id: registration.graph_id,
                     entity_id: registration.entity_id,
                     value: snapshot.value,
                     retain: registration.retain,
@@ -243,8 +262,16 @@ struct BrokerHandle {
 
 #[cfg(test)]
 mod tests {
-    use super::{HaMqttNumberRegistration, HomeAssistantMqttService};
+    use super::{
+        BrokerRuntimeState, HaMqttNumberRegistration, HomeAssistantMqttService, NumberEntityKey,
+        NumberEntityState, device_identifier, discovery_topic, entity_object_id, entity_unique_id,
+        graph_display_name, handle_publish, number_command_topic, number_state_topic,
+    };
+    use rumqttc::{AsyncClient, MqttOptions};
     use shared::MqttBrokerConfig;
+    use std::collections::HashMap;
+    use std::sync::{Arc, RwLock};
+    use std::time::Instant;
 
     fn broker_config(id: &str, is_home_assistant: bool) -> MqttBrokerConfig {
         MqttBrokerConfig {
@@ -261,6 +288,8 @@ mod tests {
 
     fn registration() -> HaMqttNumberRegistration {
         HaMqttNumberRegistration {
+            graph_id: "graph_one".to_owned(),
+            graph_name: "Graph One".to_owned(),
             entity_id: "number_one".to_owned(),
             display_name: "Number One".to_owned(),
             default_value: 42.0,
@@ -305,12 +334,142 @@ mod tests {
                 .contains("not marked as a Home Assistant broker")
         );
     }
+
+    #[test]
+    fn graph_scoped_identifiers_use_graph_identity() {
+        let config = broker_config("primary", true);
+        let registration = registration();
+
+        assert_eq!(
+            discovery_topic(&config, &registration.graph_id, &registration.entity_id),
+            "homeassistant/number/animation_builder/graph_one_number_one/config"
+        );
+        assert_eq!(
+            number_state_topic(&config.id, &registration.graph_id, &registration.entity_id),
+            "animation_builder/primary/graph/graph_one/number/number_one/state"
+        );
+        assert_eq!(
+            number_command_topic(&config.id, &registration.graph_id, &registration.entity_id),
+            "animation_builder/primary/graph/graph_one/number/number_one/set"
+        );
+        assert_eq!(
+            device_identifier(&registration.graph_id),
+            "animation_builder_graph_graph_one"
+        );
+        assert_eq!(
+            entity_object_id(&registration.graph_id, &registration.entity_id),
+            "graph_one_number_one"
+        );
+        assert_eq!(
+            entity_unique_id(&config.id, &registration.graph_id, &registration.entity_id),
+            "animation_builder_primary_graph_one_number_one"
+        );
+    }
+
+    #[test]
+    fn graph_display_name_falls_back_when_graph_name_is_empty() {
+        let mut registration = registration();
+        assert_eq!(graph_display_name(&registration), "Graph One");
+
+        registration.graph_name.clear();
+        assert_eq!(graph_display_name(&registration), "Luma Weaver Graph");
+    }
+
+    #[tokio::test]
+    async fn ensure_number_entity_keeps_same_entity_id_separate_per_graph() {
+        let service = HomeAssistantMqttService::new();
+        service
+            .sync_brokers(vec![broker_config("primary", true)])
+            .expect("sync brokers");
+
+        let registration_one = registration();
+        let mut registration_two = registration();
+        registration_two.graph_id = "graph_two".to_owned();
+        registration_two.graph_name = "Graph Two".to_owned();
+
+        service
+            .ensure_number_entity("primary", registration_one.clone())
+            .expect("register first entity");
+        service
+            .ensure_number_entity("primary", registration_two.clone())
+            .expect("register second entity");
+
+        let brokers = service.brokers.read().expect("read brokers");
+        let handle = brokers.get("primary").expect("active broker");
+        let state = handle.state.read().expect("read broker state");
+
+        assert!(state.numbers.contains_key(&NumberEntityKey::from_registration(&registration_one)));
+        assert!(state.numbers.contains_key(&NumberEntityKey::from_registration(&registration_two)));
+        assert_eq!(state.numbers.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn handle_publish_updates_only_matching_graph_entity() {
+        let config = broker_config("primary", true);
+        let first = registration();
+        let mut second = registration();
+        second.graph_id = "graph_two".to_owned();
+        second.graph_name = "Graph Two".to_owned();
+
+        let state = Arc::new(RwLock::new(BrokerRuntimeState {
+            connected: true,
+            numbers: HashMap::from([
+                (
+                    NumberEntityKey::from_registration(&first),
+                    NumberEntityState {
+                        registration: first.clone(),
+                        latest_value: Some(1.0),
+                        first_registered_at: Instant::now(),
+                        default_published: true,
+                    },
+                ),
+                (
+                    NumberEntityKey::from_registration(&second),
+                    NumberEntityState {
+                        registration: second.clone(),
+                        latest_value: Some(2.0),
+                        first_registered_at: Instant::now(),
+                        default_published: true,
+                    },
+                ),
+            ]),
+        }));
+        let (client, _eventloop) = AsyncClient::new(
+            MqttOptions::new("mqtt-test-client", "127.0.0.1", 1883),
+            10,
+        );
+
+        handle_publish(
+            &config,
+            &state,
+            &client,
+            number_state_topic(&config.id, &second.graph_id, &second.entity_id),
+            b"7.5".to_vec(),
+        )
+        .await;
+
+        let state = state.read().expect("read broker state");
+        assert_eq!(
+            state
+                .numbers
+                .get(&NumberEntityKey::from_registration(&first))
+                .and_then(|entry| entry.latest_value),
+            Some(1.0)
+        );
+        assert_eq!(
+            state
+                .numbers
+                .get(&NumberEntityKey::from_registration(&second))
+                .and_then(|entry| entry.latest_value),
+            Some(7.5)
+        );
+    }
 }
 
 #[derive(Default)]
 struct BrokerRuntimeState {
     connected: bool,
-    numbers: HashMap<String, NumberEntityState>,
+    numbers: HashMap<NumberEntityKey, NumberEntityState>,
 }
 
 struct NumberEntityState {
@@ -323,6 +482,7 @@ struct NumberEntityState {
 enum BrokerCommand {
     UpsertNumberEntity(HaMqttNumberRegistration),
     PublishNumberState {
+        graph_id: String,
         entity_id: String,
         value: f32,
         retain: bool,
@@ -340,7 +500,7 @@ fn spawn_broker_task(
     command_rx: Receiver<BrokerCommand>,
 ) {
     tokio::spawn(async move {
-        let availability_topic = availability_topic(&config.id);
+        let availability_topic = broker_availability_topic(&config.id);
         let mut options = MqttOptions::new(
             format!("luma-weaver-{}", sanitize_identifier(&config.id)),
             config.host.clone(),
@@ -420,32 +580,31 @@ async fn handle_broker_command(
 ) -> bool {
     match command {
         BrokerCommand::UpsertNumberEntity(registration) => {
-            let command_topic = number_command_topic(&config.id, &registration.entity_id);
-            let state_topic = number_state_topic(&config.id, &registration.entity_id);
+            let state_topic =
+                number_state_topic(&config.id, &registration.graph_id, &registration.entity_id);
+            let command_topic =
+                number_command_topic(&config.id, &registration.graph_id, &registration.entity_id);
+            let key = NumberEntityKey::from_registration(&registration);
             let cached_value = state.read().ok().and_then(|current_state| {
                 current_state
                     .numbers
-                    .get(&registration.entity_id)
+                    .get(&key)
                     .and_then(|entity_state| entity_state.latest_value)
             });
             let payload = serde_json::json!({
                 "name": registration.display_name,
-                "unique_id": format!(
-                    "animation_builder_{}_{}",
-                    sanitize_identifier(&config.id),
-                    sanitize_identifier(&registration.entity_id),
-                ),
-                "object_id": sanitize_identifier(&registration.entity_id),
+                "unique_id": entity_unique_id(&config.id, &registration.graph_id, &registration.entity_id),
+                "object_id": entity_object_id(&registration.graph_id, &registration.entity_id),
                 "state_topic": state_topic,
                 "command_topic": command_topic,
-                "availability_topic": availability_topic(&config.id),
+                "availability_topic": broker_availability_topic(&config.id),
                 "min": registration.min,
                 "max": registration.max,
                 "step": registration.step,
                 "mode": "box",
                 "device": {
-                    "identifiers": [format!("animation_builder_{}", sanitize_identifier(&config.id))],
-                    "name": "Luma Weaver",
+                    "identifiers": [device_identifier(&registration.graph_id)],
+                    "name": graph_display_name(&registration),
                     "manufacturer": "Luma Weaver",
                     "model": "Graph Controls",
                 }
@@ -464,7 +623,7 @@ async fn handle_broker_command(
             }
             if let Err(error) = client
                 .publish(
-                    discovery_topic(config, &registration.entity_id),
+                    discovery_topic(config, &registration.graph_id, &registration.entity_id),
                     QoS::AtLeastOnce,
                     true,
                     payload.to_string(),
@@ -487,13 +646,14 @@ async fn handle_broker_command(
             false
         }
         BrokerCommand::PublishNumberState {
+            graph_id,
             entity_id,
             value,
             retain,
         } => {
             if let Err(error) = client
                 .publish(
-                    number_state_topic(&config.id, &entity_id),
+                    number_state_topic(&config.id, &graph_id, &entity_id),
                     QoS::AtLeastOnce,
                     retain,
                     value.to_string(),
@@ -536,40 +696,52 @@ async fn handle_publish(
             Ok(state) => state,
             Err(_) => return,
         };
-        let entity_id = state.numbers.keys().find_map(|entity_id| {
-            if topic == number_command_topic(&config.id, entity_id)
-                || topic == number_state_topic(&config.id, entity_id)
+        let entity_key = state.numbers.iter().find_map(|(entity_key, entity_state)| {
+            if topic
+                == number_command_topic(
+                    &config.id,
+                    &entity_state.registration.graph_id,
+                    &entity_key.entity_id,
+                )
+                || topic
+                    == number_state_topic(
+                        &config.id,
+                        &entity_state.registration.graph_id,
+                        &entity_key.entity_id,
+                    )
             {
-                Some(entity_id.clone())
+                Some(entity_key.clone())
             } else {
                 None
             }
         });
-        if let Some(entity_id) = entity_id.clone() {
-            if let Some(entity_state) = state.numbers.get_mut(&entity_id) {
+        if let Some(entity_key) = entity_key.clone() {
+            if let Some(entity_state) = state.numbers.get_mut(&entity_key) {
                 entity_state.latest_value = Some(value);
             }
         }
-        entity_id
+        entity_key
     };
 
-    if let Some(entity_id) = maybe_entity {
-        if topic == number_command_topic(&config.id, &entity_id) {
-            let retain = state
-                .read()
-                .ok()
-                .and_then(|state| {
-                    state
-                        .numbers
-                        .get(&entity_id)
-                        .map(|entry| entry.registration.retain)
-                })
-                .unwrap_or(true);
+    if let Some(entity_key) = maybe_entity {
+        if topic
+            == number_command_topic(&config.id, &entity_key.graph_id, &entity_key.entity_id)
+        {
+            let retain = state.read().ok().and_then(|state| {
+                state
+                    .numbers
+                    .get(&entity_key)
+                    .map(|entry| entry.registration.retain)
+            });
             let _ = client
                 .publish(
-                    number_state_topic(&config.id, &entity_id),
+                    number_state_topic(
+                        &config.id,
+                        &entity_key.graph_id,
+                        &entity_key.entity_id,
+                    ),
                     QoS::AtLeastOnce,
-                    retain,
+                    retain.unwrap_or(true),
                     value.to_string(),
                 )
                 .await;
@@ -590,38 +762,74 @@ fn update_connected(
 }
 
 /// Returns the Home Assistant discovery topic for a number entity.
-fn discovery_topic(config: &MqttBrokerConfig, entity_id: &str) -> String {
+fn discovery_topic(config: &MqttBrokerConfig, graph_id: &str, entity_id: &str) -> String {
     format!(
         "{}/number/animation_builder/{}/config",
         config.discovery_prefix.trim().trim_end_matches('/'),
-        sanitize_identifier(entity_id)
+        entity_object_id(graph_id, entity_id)
     )
 }
 
 /// Returns the MQTT state topic for a Home Assistant number entity.
-fn number_state_topic(broker_id: &str, entity_id: &str) -> String {
+fn number_state_topic(broker_id: &str, graph_id: &str, entity_id: &str) -> String {
     format!(
-        "animation_builder/{}/number/{}/state",
+        "animation_builder/{}/graph/{}/number/{}/state",
         sanitize_identifier(broker_id),
+        sanitize_identifier(graph_id),
         sanitize_identifier(entity_id)
     )
 }
 
 /// Returns the MQTT command topic for a Home Assistant number entity.
-fn number_command_topic(broker_id: &str, entity_id: &str) -> String {
+fn number_command_topic(broker_id: &str, graph_id: &str, entity_id: &str) -> String {
     format!(
-        "animation_builder/{}/number/{}/set",
+        "animation_builder/{}/graph/{}/number/{}/set",
         sanitize_identifier(broker_id),
+        sanitize_identifier(graph_id),
         sanitize_identifier(entity_id)
     )
 }
 
-/// Returns the MQTT availability topic for a broker-backed entity set.
-fn availability_topic(broker_id: &str) -> String {
+/// Returns the MQTT availability topic for a broker connection.
+fn broker_availability_topic(broker_id: &str) -> String {
     format!(
         "animation_builder/{}/availability",
         sanitize_identifier(broker_id)
     )
+}
+
+/// Returns the stable Home Assistant device identifier for a graph-backed entity set.
+fn device_identifier(graph_id: &str) -> String {
+    format!("animation_builder_graph_{}", sanitize_identifier(graph_id))
+}
+
+/// Returns the stable Home Assistant object ID for one number entity within a graph.
+fn entity_object_id(graph_id: &str, entity_id: &str) -> String {
+    format!(
+        "{}_{}",
+        sanitize_identifier(graph_id),
+        sanitize_identifier(entity_id)
+    )
+}
+
+/// Returns the stable Home Assistant unique ID for one graph-backed entity.
+fn entity_unique_id(broker_id: &str, graph_id: &str, entity_id: &str) -> String {
+    format!(
+        "animation_builder_{}_{}_{}",
+        sanitize_identifier(broker_id),
+        sanitize_identifier(graph_id),
+        sanitize_identifier(entity_id),
+    )
+}
+
+/// Returns the display name Home Assistant should show for the graph-backed device.
+fn graph_display_name(registration: &HaMqttNumberRegistration) -> String {
+    let graph_name = registration.graph_name.trim();
+    if graph_name.is_empty() {
+        "Luma Weaver Graph".to_owned()
+    } else {
+        graph_name.to_owned()
+    }
 }
 
 /// Sanitizes an identifier for use in MQTT topics and Home Assistant object IDs.

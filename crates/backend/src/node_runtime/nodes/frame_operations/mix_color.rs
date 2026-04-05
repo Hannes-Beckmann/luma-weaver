@@ -141,6 +141,8 @@ mod tests {
         let typed_inputs =
             MixColorInputs::from_runtime_inputs(&raw_inputs).expect("deserialize mix inputs");
         let context = NodeEvaluationContext {
+            graph_id: "test-graph".to_owned(),
+            graph_name: "Test Graph".to_owned(),
             elapsed_seconds: 0.0,
             render_layout: None,
         };
