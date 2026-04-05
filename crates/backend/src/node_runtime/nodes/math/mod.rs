@@ -1,3 +1,14 @@
+pub(crate) mod abs_float;
 pub(crate) mod add_float;
+pub(crate) mod clamp_float;
+pub(crate) mod divide_float;
+pub(crate) mod exponential_float;
+pub(crate) mod log_float;
+pub(crate) mod map_range_float;
+pub(crate) mod min_max_float;
 pub(crate) mod multiply_float;
+pub(crate) mod power_float;
+pub(crate) mod root_float;
+pub(crate) mod round_float;
 pub(crate) mod scale_tensor;
+pub(crate) mod subtract_float;
