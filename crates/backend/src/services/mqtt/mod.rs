@@ -398,8 +398,16 @@ mod tests {
         let handle = brokers.get("primary").expect("active broker");
         let state = handle.state.read().expect("read broker state");
 
-        assert!(state.numbers.contains_key(&NumberEntityKey::from_registration(&registration_one)));
-        assert!(state.numbers.contains_key(&NumberEntityKey::from_registration(&registration_two)));
+        assert!(
+            state
+                .numbers
+                .contains_key(&NumberEntityKey::from_registration(&registration_one))
+        );
+        assert!(
+            state
+                .numbers
+                .contains_key(&NumberEntityKey::from_registration(&registration_two))
+        );
         assert_eq!(state.numbers.len(), 2);
     }
 
@@ -434,10 +442,8 @@ mod tests {
                 ),
             ]),
         }));
-        let (client, _eventloop) = AsyncClient::new(
-            MqttOptions::new("mqtt-test-client", "127.0.0.1", 1883),
-            10,
-        );
+        let (client, _eventloop) =
+            AsyncClient::new(MqttOptions::new("mqtt-test-client", "127.0.0.1", 1883), 10);
 
         handle_publish(
             &config,
@@ -724,9 +730,7 @@ async fn handle_publish(
     };
 
     if let Some(entity_key) = maybe_entity {
-        if topic
-            == number_command_topic(&config.id, &entity_key.graph_id, &entity_key.entity_id)
-        {
+        if topic == number_command_topic(&config.id, &entity_key.graph_id, &entity_key.entity_id) {
             let retain = state.read().ok().and_then(|state| {
                 state
                     .numbers
@@ -735,11 +739,7 @@ async fn handle_publish(
             });
             let _ = client
                 .publish(
-                    number_state_topic(
-                        &config.id,
-                        &entity_key.graph_id,
-                        &entity_key.entity_id,
-                    ),
+                    number_state_topic(&config.id, &entity_key.graph_id, &entity_key.entity_id),
                     QoS::AtLeastOnce,
                     retain.unwrap_or(true),
                     value.to_string(),
