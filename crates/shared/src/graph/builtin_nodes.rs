@@ -86,17 +86,16 @@ static FLOAT_CONSTANT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
         value_kind: ValueKind::Float,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "value".to_owned(),
-        display_name: title_case_name("value"),
-        default_value: ParameterDefaultValue::Float(0.0),
-        ui_hint: ParameterUiHint::DragFloat {
+    parameters: vec![NodeParameterDefinition::new(
+        "value",
+        title_case_name("value"),
+        ParameterDefaultValue::Float(0.0),
+        ParameterUiHint::DragFloat {
             speed: 0.01,
             min: -10_000.0,
             max: 10_000.0,
         },
-        visible_when: None,
-    }],
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -115,18 +114,17 @@ static COLOR_CONSTANT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
         value_kind: ValueKind::Color,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "color".to_owned(),
-        display_name: title_case_name("color"),
-        default_value: ParameterDefaultValue::Color(RgbaColor {
+    parameters: vec![NodeParameterDefinition::new(
+        "color",
+        title_case_name("color"),
+        ParameterDefaultValue::Color(RgbaColor {
             r: 1.0,
             g: 1.0,
             b: 1.0,
             a: 1.0,
         }),
-        ui_hint: ParameterUiHint::ColorPicker,
-        visible_when: None,
-    }],
+        ParameterUiHint::ColorPicker,
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -215,17 +213,16 @@ static DELAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefiniti
         value_kind: ValueKind::Any,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "ticks".to_owned(),
-        display_name: title_case_name("ticks"),
-        default_value: ParameterDefaultValue::Integer(1),
-        ui_hint: ParameterUiHint::IntegerDrag {
+    parameters: vec![NodeParameterDefinition::new(
+        "ticks",
+        title_case_name("ticks"),
+        ParameterDefaultValue::Integer(1),
+        ParameterUiHint::IntegerDrag {
             speed: 1.0,
             min: 1,
             max: 10_000,
         },
-        visible_when: None,
-    }],
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -246,24 +243,22 @@ static WLED_TARGET_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
     }],
     outputs: vec![],
     parameters: vec![
-        NodeParameterDefinition {
-            name: "target".to_owned(),
-            display_name: title_case_name("target"),
-            default_value: ParameterDefaultValue::String("".to_owned()),
-            ui_hint: ParameterUiHint::WledInstanceOrHost,
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "led_count".to_owned(),
-            display_name: title_case_name("led_count"),
-            default_value: ParameterDefaultValue::Integer(60),
-            ui_hint: ParameterUiHint::IntegerDrag {
+        NodeParameterDefinition::new(
+            "target",
+            title_case_name("target"),
+            ParameterDefaultValue::String("".to_owned()),
+            ParameterUiHint::WledInstanceOrHost,
+        ),
+        NodeParameterDefinition::new(
+            "led_count",
+            title_case_name("led_count"),
+            ParameterDefaultValue::Integer(60),
+            ParameterUiHint::IntegerDrag {
                 speed: 1.0,
                 min: 1,
                 max: 8192,
             },
-            visible_when: None,
-        },
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -284,11 +279,11 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
         accepted_kinds: vec![],
     }],
     parameters: vec![
-        NodeParameterDefinition {
-            name: "protocol".to_owned(),
-            display_name: title_case_name("protocol"),
-            default_value: ParameterDefaultValue::String("ddp".to_owned()),
-            ui_hint: ParameterUiHint::EnumSelect {
+        NodeParameterDefinition::new(
+            "protocol",
+            title_case_name("protocol"),
+            ParameterDefaultValue::String("ddp".to_owned()),
+            ParameterUiHint::EnumSelect {
                 options: vec![
                     EnumOption {
                         value: "ddp".to_owned(),
@@ -300,19 +295,17 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
                     },
                 ],
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "port".to_owned(),
-            display_name: title_case_name("port"),
-            default_value: ParameterDefaultValue::Integer(4048),
-            ui_hint: ParameterUiHint::IntegerDrag {
+        ),
+        NodeParameterDefinition::new(
+            "port",
+            title_case_name("port"),
+            ParameterDefaultValue::Integer(4048),
+            ParameterUiHint::IntegerDrag {
                 speed: 1.0,
                 min: 1,
                 max: 65535,
             },
-            visible_when: None,
-        },
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -347,46 +340,42 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
         },
     ],
     parameters: vec![
-        NodeParameterDefinition {
-            name: "group".to_owned(),
-            display_name: title_case_name("group"),
-            default_value: ParameterDefaultValue::String("239.0.0.1".to_owned()),
-            ui_hint: ParameterUiHint::TextSingleLine,
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "port".to_owned(),
-            display_name: title_case_name("port"),
-            default_value: ParameterDefaultValue::Integer(11988),
-            ui_hint: ParameterUiHint::IntegerDrag {
+        NodeParameterDefinition::new(
+            "group",
+            title_case_name("group"),
+            ParameterDefaultValue::String("239.0.0.1".to_owned()),
+            ParameterUiHint::TextSingleLine,
+        ),
+        NodeParameterDefinition::new(
+            "port",
+            title_case_name("port"),
+            ParameterDefaultValue::Integer(11988),
+            ParameterUiHint::IntegerDrag {
                 speed: 1.0,
                 min: 1,
                 max: 65535,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "sample_rate_hz".to_owned(),
-            display_name: title_case_name("sample_rate_hz"),
-            default_value: ParameterDefaultValue::Integer(16_000),
-            ui_hint: ParameterUiHint::IntegerDrag {
+        ),
+        NodeParameterDefinition::new(
+            "sample_rate_hz",
+            title_case_name("sample_rate_hz"),
+            ParameterDefaultValue::Integer(16_000),
+            ParameterUiHint::IntegerDrag {
                 speed: 1.0,
                 min: 1,
                 max: 384_000,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "fft_size".to_owned(),
-            display_name: title_case_name("fft_size"),
-            default_value: ParameterDefaultValue::Integer(512),
-            ui_hint: ParameterUiHint::IntegerDrag {
+        ),
+        NodeParameterDefinition::new(
+            "fft_size",
+            title_case_name("fft_size"),
+            ParameterDefaultValue::Integer(512),
+            ParameterUiHint::IntegerDrag {
                 speed: 1.0,
                 min: 1,
                 max: 65_536,
             },
-            visible_when: None,
-        },
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -407,78 +396,70 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
         accepted_kinds: vec![],
     }],
     parameters: vec![
-        NodeParameterDefinition {
-            name: "broker_id".to_owned(),
-            display_name: title_case_name("broker_id"),
-            default_value: ParameterDefaultValue::String(String::new()),
-            ui_hint: ParameterUiHint::MqttBrokerSelect,
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "entity_id".to_owned(),
-            display_name: title_case_name("entity_id"),
-            default_value: ParameterDefaultValue::String("animation_builder_number".to_owned()),
-            ui_hint: ParameterUiHint::TextSingleLine,
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "display_name".to_owned(),
-            display_name: title_case_name("display_name"),
-            default_value: ParameterDefaultValue::String("Luma Weaver Number".to_owned()),
-            ui_hint: ParameterUiHint::TextSingleLine,
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "default_value".to_owned(),
-            display_name: title_case_name("default_value"),
-            default_value: ParameterDefaultValue::Float(0.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        NodeParameterDefinition::new(
+            "broker_id",
+            title_case_name("broker_id"),
+            ParameterDefaultValue::String(String::new()),
+            ParameterUiHint::MqttBrokerSelect,
+        ),
+        NodeParameterDefinition::new(
+            "entity_id",
+            title_case_name("entity_id"),
+            ParameterDefaultValue::String("animation_builder_number".to_owned()),
+            ParameterUiHint::TextSingleLine,
+        ),
+        NodeParameterDefinition::new(
+            "display_name",
+            title_case_name("display_name"),
+            ParameterDefaultValue::String("Luma Weaver Number".to_owned()),
+            ParameterUiHint::TextSingleLine,
+        ),
+        NodeParameterDefinition::new(
+            "default_value",
+            title_case_name("default_value"),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: -10_000.0,
                 max: 10_000.0,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "min".to_owned(),
-            display_name: title_case_name("min"),
-            default_value: ParameterDefaultValue::Float(0.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        ),
+        NodeParameterDefinition::new(
+            "min",
+            title_case_name("min"),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: -10_000.0,
                 max: 10_000.0,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "max".to_owned(),
-            display_name: title_case_name("max"),
-            default_value: ParameterDefaultValue::Float(100.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        ),
+        NodeParameterDefinition::new(
+            "max",
+            title_case_name("max"),
+            ParameterDefaultValue::Float(100.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: -10_000.0,
                 max: 10_000.0,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "step".to_owned(),
-            display_name: title_case_name("step"),
-            default_value: ParameterDefaultValue::Float(1.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        ),
+        NodeParameterDefinition::new(
+            "step",
+            title_case_name("step"),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: 0.0001,
                 max: 10_000.0,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "retain".to_owned(),
-            display_name: title_case_name("retain"),
-            default_value: ParameterDefaultValue::Bool(true),
-            ui_hint: ParameterUiHint::Checkbox,
-            visible_when: None,
-        },
+        ),
+        NodeParameterDefinition::new(
+            "retain",
+            title_case_name("retain"),
+            ParameterDefaultValue::Bool(true),
+            ParameterUiHint::Checkbox,
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -533,48 +514,44 @@ static SIGNAL_GENERATOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
         accepted_kinds: vec![],
     }],
     parameters: vec![
-        NodeParameterDefinition {
-            name: "waveform".to_owned(),
-            display_name: title_case_name("waveform"),
-            default_value: ParameterDefaultValue::String("sinus".to_owned()),
-            ui_hint: ParameterUiHint::EnumSelect {
+        NodeParameterDefinition::new(
+            "waveform",
+            title_case_name("waveform"),
+            ParameterDefaultValue::String("sinus".to_owned()),
+            ParameterUiHint::EnumSelect {
                 options: SIGNAL_GENERATOR_WAVEFORMS.clone(),
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "frequency".to_owned(),
-            display_name: title_case_name("frequency"),
-            default_value: ParameterDefaultValue::Float(1.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        ),
+        NodeParameterDefinition::new(
+            "frequency",
+            title_case_name("frequency"),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: -10_000.0,
                 max: 10_000.0,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "amplitude".to_owned(),
-            display_name: title_case_name("amplitude"),
-            default_value: ParameterDefaultValue::Float(1.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        ),
+        NodeParameterDefinition::new(
+            "amplitude",
+            title_case_name("amplitude"),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: -10_000.0,
                 max: 10_000.0,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "phase".to_owned(),
-            display_name: title_case_name("phase"),
-            default_value: ParameterDefaultValue::Float(0.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        ),
+        NodeParameterDefinition::new(
+            "phase",
+            title_case_name("phase"),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: -10_000.0,
                 max: 10_000.0,
             },
-            visible_when: None,
-        },
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1063,47 +1040,43 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
         accepted_kinds: vec![],
     }],
     parameters: vec![
-        NodeParameterDefinition {
-            name: "gradient".to_owned(),
-            display_name: title_case_name("gradient"),
-            default_value: ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
-            ui_hint: ParameterUiHint::ColorGradient,
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "background".to_owned(),
-            display_name: title_case_name("background"),
-            default_value: ParameterDefaultValue::Color(RgbaColor {
+        NodeParameterDefinition::new(
+            "gradient",
+            title_case_name("gradient"),
+            ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
+            ParameterUiHint::ColorGradient,
+        ),
+        NodeParameterDefinition::new(
+            "background",
+            title_case_name("background"),
+            ParameterDefaultValue::Color(RgbaColor {
                 r: 0.02,
                 g: 0.02,
                 b: 0.03,
                 a: 1.0,
             }),
-            ui_hint: ParameterUiHint::ColorPicker,
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "gain".to_owned(),
-            display_name: title_case_name("gain"),
-            default_value: ParameterDefaultValue::Float(1.0),
-            ui_hint: ParameterUiHint::DragFloat {
+            ParameterUiHint::ColorPicker,
+        ),
+        NodeParameterDefinition::new(
+            "gain",
+            title_case_name("gain"),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: 0.0,
                 max: 8.0,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "bar_gap".to_owned(),
-            display_name: title_case_name("bar_gap"),
-            default_value: ParameterDefaultValue::Float(0.15),
-            ui_hint: ParameterUiHint::DragFloat {
+        ),
+        NodeParameterDefinition::new(
+            "bar_gap",
+            title_case_name("bar_gap"),
+            ParameterDefaultValue::Float(0.15),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: 0.0,
                 max: 0.95,
             },
-            visible_when: None,
-        },
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1170,13 +1143,12 @@ static RAINBOW_SWEEP_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "gradient".to_owned(),
-        display_name: title_case_name("gradient"),
-        default_value: ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
-        ui_hint: ParameterUiHint::ColorGradient,
-        visible_when: None,
-    }],
+    parameters: vec![NodeParameterDefinition::new(
+        "gradient",
+        title_case_name("gradient"),
+        ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
+        ParameterUiHint::ColorGradient,
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -1217,13 +1189,12 @@ static CIRCLE_SWEEP_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeD
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "gradient".to_owned(),
-        display_name: title_case_name("gradient"),
-        default_value: ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
-        ui_hint: ParameterUiHint::ColorGradient,
-        visible_when: None,
-    }],
+    parameters: vec![NodeParameterDefinition::new(
+        "gradient",
+        title_case_name("gradient"),
+        ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
+        ParameterUiHint::ColorGradient,
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -1248,13 +1219,12 @@ static LEVEL_BAR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "gradient".to_owned(),
-        display_name: title_case_name("gradient"),
-        default_value: ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
-        ui_hint: ParameterUiHint::ColorGradient,
-        visible_when: None,
-    }],
+    parameters: vec![NodeParameterDefinition::new(
+        "gradient",
+        title_case_name("gradient"),
+        ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
+        ParameterUiHint::ColorGradient,
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -1302,13 +1272,12 @@ static TWINKLE_STARS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "gradient".to_owned(),
-        display_name: title_case_name("gradient"),
-        default_value: ParameterDefaultValue::Gradient(DEFAULT_TWINKLE_GRADIENT_STOPS.to_vec()),
-        ui_hint: ParameterUiHint::ColorGradient,
-        visible_when: None,
-    }],
+    parameters: vec![NodeParameterDefinition::new(
+        "gradient",
+        title_case_name("gradient"),
+        ParameterDefaultValue::Gradient(DEFAULT_TWINKLE_GRADIENT_STOPS.to_vec()),
+        ParameterUiHint::ColorGradient,
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -1363,13 +1332,12 @@ static PLASMA_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinit
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "gradient".to_owned(),
-        display_name: title_case_name("gradient"),
-        default_value: ParameterDefaultValue::Gradient(DEFAULT_PLASMA_GRADIENT_STOPS.to_vec()),
-        ui_hint: ParameterUiHint::ColorGradient,
-        visible_when: None,
-    }],
+    parameters: vec![NodeParameterDefinition::new(
+        "gradient",
+        title_case_name("gradient"),
+        ParameterDefaultValue::Gradient(DEFAULT_PLASMA_GRADIENT_STOPS.to_vec()),
+        ParameterUiHint::ColorGradient,
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -1404,37 +1372,32 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
         accepted_kinds: vec![],
     }],
     parameters: vec![
-        NodeParameterDefinition {
-            name: "circle_count".to_owned(),
-            display_name: title_case_name("circle_count"),
-            default_value: ParameterDefaultValue::Integer(6),
-            ui_hint: ParameterUiHint::IntegerDrag {
+        NodeParameterDefinition::new(
+            "circle_count",
+            title_case_name("circle_count"),
+            ParameterDefaultValue::Integer(6),
+            ParameterUiHint::IntegerDrag {
                 speed: 1.0,
                 min: 1,
                 max: 64,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "radius_variance".to_owned(),
-            display_name: title_case_name("radius_variance"),
-            default_value: ParameterDefaultValue::Float(0.35),
-            ui_hint: ParameterUiHint::DragFloat {
+        ),
+        NodeParameterDefinition::new(
+            "radius_variance",
+            title_case_name("radius_variance"),
+            ParameterDefaultValue::Float(0.35),
+            ParameterUiHint::DragFloat {
                 speed: 0.01,
                 min: 0.0,
                 max: 1.0,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "gradient".to_owned(),
-            display_name: title_case_name("gradient"),
-            default_value: ParameterDefaultValue::Gradient(
-                DEFAULT_BOUNCING_BALLS_GRADIENT_STOPS.to_vec(),
-            ),
-            ui_hint: ParameterUiHint::ColorGradient,
-            visible_when: None,
-        },
+        ),
+        NodeParameterDefinition::new(
+            "gradient",
+            title_case_name("gradient"),
+            ParameterDefaultValue::Gradient(DEFAULT_BOUNCING_BALLS_GRADIENT_STOPS.to_vec()),
+            ParameterUiHint::ColorGradient,
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1456,28 +1419,26 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
     }],
     outputs: vec![],
     parameters: vec![
-        NodeParameterDefinition {
-            name: "width".to_owned(),
-            display_name: title_case_name("width"),
-            default_value: ParameterDefaultValue::Integer(8),
-            ui_hint: ParameterUiHint::IntegerDrag {
+        NodeParameterDefinition::new(
+            "width",
+            title_case_name("width"),
+            ParameterDefaultValue::Integer(8),
+            ParameterUiHint::IntegerDrag {
                 speed: 1.0,
                 min: 1,
                 max: 256,
             },
-            visible_when: None,
-        },
-        NodeParameterDefinition {
-            name: "height".to_owned(),
-            display_name: title_case_name("height"),
-            default_value: ParameterDefaultValue::Integer(8),
-            ui_hint: ParameterUiHint::IntegerDrag {
+        ),
+        NodeParameterDefinition::new(
+            "height",
+            title_case_name("height"),
+            ParameterDefaultValue::Integer(8),
+            ParameterUiHint::IntegerDrag {
                 speed: 1.0,
                 min: 1,
                 max: 256,
             },
-            visible_when: None,
-        },
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,

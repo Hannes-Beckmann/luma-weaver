@@ -482,27 +482,26 @@ mod tests {
             inputs: vec![],
             outputs: vec![],
             parameters: vec![
-                NodeParameterDefinition {
-                    name: "mode".to_owned(),
-                    display_name: "Mode".to_owned(),
-                    default_value: ParameterDefaultValue::String("basic".to_owned()),
-                    ui_hint: ParameterUiHint::TextSingleLine,
-                    visible_when: None,
-                },
-                NodeParameterDefinition {
-                    name: "advanced_value".to_owned(),
-                    display_name: "Advanced Value".to_owned(),
-                    default_value: ParameterDefaultValue::Float(1.5),
-                    ui_hint: ParameterUiHint::DragFloat {
+                NodeParameterDefinition::new(
+                    "mode",
+                    "Mode",
+                    ParameterDefaultValue::String("basic".to_owned()),
+                    ParameterUiHint::TextSingleLine,
+                ),
+                NodeParameterDefinition::new(
+                    "advanced_value",
+                    "Advanced Value",
+                    ParameterDefaultValue::Float(1.5),
+                    ParameterUiHint::DragFloat {
                         speed: 0.1,
                         min: 0.0,
                         max: 10.0,
                     },
-                    visible_when: Some(ParameterVisibilityCondition {
-                        parameter: "mode".to_owned(),
-                        equals: json!("advanced"),
-                    }),
-                },
+                )
+                .visible_when(ParameterVisibilityCondition {
+                    parameter: "mode".to_owned(),
+                    equals: json!("advanced"),
+                }),
             ],
             connection: NodeConnectionDefinition {
                 max_input_connections: 1,

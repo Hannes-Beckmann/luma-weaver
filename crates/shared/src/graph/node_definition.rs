@@ -296,6 +296,26 @@ pub struct ParameterVisibilityCondition {
 }
 
 impl NodeParameterDefinition {
+    pub fn new(
+        name: impl Into<String>,
+        display_name: impl Into<String>,
+        default_value: ParameterDefaultValue,
+        ui_hint: ParameterUiHint,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            display_name: display_name.into(),
+            default_value,
+            ui_hint,
+            visible_when: None,
+        }
+    }
+
+    pub fn visible_when(mut self, condition: ParameterVisibilityCondition) -> Self {
+        self.visible_when = Some(condition);
+        self
+    }
+
     /// Returns whether the parameter should be shown for the current parameter values.
     pub fn is_visible(&self, parameters: &[NodeParameter]) -> bool {
         match &self.visible_when {
@@ -364,37 +384,36 @@ mod tests {
 
     #[test]
     fn parameters_are_visible_without_an_explicit_condition() {
-        let definition = NodeParameterDefinition {
-            name: "custom_value".to_owned(),
-            display_name: String::new(),
-            default_value: ParameterDefaultValue::Float(1.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        let definition = NodeParameterDefinition::new(
+            "custom_value",
+            String::new(),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.1,
                 min: 0.0,
                 max: 10.0,
             },
-            visible_when: None,
-        };
+        );
 
         assert!(definition.is_visible(&[]));
     }
 
     #[test]
     fn parameters_follow_boolean_visibility_conditions() {
-        let definition = NodeParameterDefinition {
-            name: "custom_value".to_owned(),
-            display_name: String::new(),
-            default_value: ParameterDefaultValue::Float(1.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        let definition = NodeParameterDefinition::new(
+            "custom_value",
+            String::new(),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.1,
                 min: 0.0,
                 max: 10.0,
             },
-            visible_when: Some(ParameterVisibilityCondition {
-                parameter: "use_custom_value".to_owned(),
-                equals: JsonValue::from(true),
-            }),
-        };
+        )
+        .visible_when(ParameterVisibilityCondition {
+            parameter: "use_custom_value".to_owned(),
+            equals: JsonValue::from(true),
+        });
         let enabled_parameters = vec![NodeParameter {
             name: "use_custom_value".to_owned(),
             value: JsonValue::from(true),
@@ -411,20 +430,20 @@ mod tests {
 
     #[test]
     fn parameters_follow_string_visibility_conditions() {
-        let definition = NodeParameterDefinition {
-            name: "advanced_value".to_owned(),
-            display_name: String::new(),
-            default_value: ParameterDefaultValue::Float(1.0),
-            ui_hint: ParameterUiHint::DragFloat {
+        let definition = NodeParameterDefinition::new(
+            "advanced_value",
+            String::new(),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
                 speed: 0.1,
                 min: 0.0,
                 max: 10.0,
             },
-            visible_when: Some(ParameterVisibilityCondition {
-                parameter: "mode".to_owned(),
-                equals: json!("advanced"),
-            }),
-        };
+        )
+        .visible_when(ParameterVisibilityCondition {
+            parameter: "mode".to_owned(),
+            equals: json!("advanced"),
+        });
         let parameters = vec![NodeParameter {
             name: "mode".to_owned(),
             value: json!("advanced"),
