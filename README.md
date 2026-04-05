@@ -58,9 +58,20 @@ Important backend endpoints:
 - `crates/frontend`: WebAssembly app and editor UI
 - `crates/backend`: backend server, storage, runtime, MQTT, and WLED services
 - `crates/shared`: graph model, protocol types, validation, and node catalog
+- `docs`: audience-based documentation for users and contributors
 - `Dockerfile`: multi-stage build for standalone Docker and Home Assistant add-on builds
 - `docker-compose.yml`: simple standalone deployment example
 - `config.yaml`, `build.yaml`, `repository.yaml`: Home Assistant add-on metadata
+
+## Documentation
+
+Longer-form documentation lives under `docs/`.
+
+- `docs/index.md`: documentation landing page
+- `docs/user/README.md`: user docs entry point
+- `docs/developer/architecture.md`: workspace and runtime architecture
+- `docs/developer/node-authoring.md`: how built-in nodes are added and changed
+- `docs/developer/contributing.md`: contributor workflow
 
 ## Running Standalone
 

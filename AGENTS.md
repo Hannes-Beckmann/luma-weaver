@@ -32,6 +32,7 @@ Runtime shape:
 - `crates/backend/src/services/mqtt*`: MQTT broker storage and Home Assistant integration
 - `crates/frontend/src/app`: app-level state, history, graph actions, messaging
 - `crates/frontend/src/editor_view`: graph editor UI and widgets
+- `docs`: audience-based project documentation for users and developers
 - `.github/workflows`: CI, release preflight, publish workflows
 - `config.yaml`, `build.yaml`, `repository.yaml`: Home Assistant add-on metadata
 
