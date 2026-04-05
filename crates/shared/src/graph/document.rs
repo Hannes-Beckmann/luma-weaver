@@ -1,6 +1,6 @@
+use super::{InputValue, NodeTypeId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use super::{InputValue, NodeTypeId};
 
 /// Stores the stable identity and top-level metadata of a graph document.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]

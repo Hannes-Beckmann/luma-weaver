@@ -1,10 +1,10 @@
-use std::sync::LazyLock;
 use super::{
-    ColorGradientStop, EnumOption, FloatTensor, InputValue, NodeCategory,
-    NodeConnectionDefinition, NodeDefinition, NodeInputDefinition, NodeOutputDefinition,
-    NodeParameterDefinition, NodeRuntimeUpdateDefinition, NodeRuntimeValueDefinition,
-    NodeTypeId, ParameterDefaultValue, ParameterUiHint, RgbaColor, ValueKind,
+    ColorGradientStop, EnumOption, FloatTensor, InputValue, NodeCategory, NodeConnectionDefinition,
+    NodeDefinition, NodeInputDefinition, NodeOutputDefinition, NodeParameterDefinition,
+    NodeRuntimeUpdateDefinition, NodeRuntimeValueDefinition, NodeTypeId, ParameterDefaultValue,
+    ParameterUiHint, RgbaColor, ValueKind,
 };
+use std::sync::LazyLock;
 
 /// Returns the canonical opaque-white default input value used by the built-in catalog.
 fn white_input() -> InputValue {
@@ -278,32 +278,35 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition {
-        name: "protocol".to_owned(),
-        display_name: title_case_name("protocol"),
-        default_value: ParameterDefaultValue::String("ddp".to_owned()),
-        ui_hint: ParameterUiHint::EnumSelect {
-            options: vec![
-                EnumOption {
-                    value: "ddp".to_owned(),
-                    label: "DDP".to_owned(),
-                },
-                EnumOption {
-                    value: "udp_raw".to_owned(),
-                    label: "UDP Raw".to_owned(),
-                },
-            ],
+    parameters: vec![
+        NodeParameterDefinition {
+            name: "protocol".to_owned(),
+            display_name: title_case_name("protocol"),
+            default_value: ParameterDefaultValue::String("ddp".to_owned()),
+            ui_hint: ParameterUiHint::EnumSelect {
+                options: vec![
+                    EnumOption {
+                        value: "ddp".to_owned(),
+                        label: "DDP".to_owned(),
+                    },
+                    EnumOption {
+                        value: "udp_raw".to_owned(),
+                        label: "UDP Raw".to_owned(),
+                    },
+                ],
+            },
         },
-    }, NodeParameterDefinition {
-        name: "port".to_owned(),
-        display_name: title_case_name("port"),
-        default_value: ParameterDefaultValue::Integer(4048),
-        ui_hint: ParameterUiHint::IntegerDrag {
-            speed: 1.0,
-            min: 1,
-            max: 65535,
+        NodeParameterDefinition {
+            name: "port".to_owned(),
+            display_name: title_case_name("port"),
+            default_value: ParameterDefaultValue::Integer(4048),
+            ui_hint: ParameterUiHint::IntegerDrag {
+                speed: 1.0,
+                min: 1,
+                max: 65535,
+            },
         },
-    }],
+    ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -1074,6 +1077,16 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
                 max: 0.95,
             },
         },
+        NodeParameterDefinition {
+            name: "decay".to_owned(),
+            display_name: title_case_name("decay"),
+            default_value: ParameterDefaultValue::Float(8.0),
+            ui_hint: ParameterUiHint::DragFloat {
+                speed: 0.01,
+                min: 0.0,
+                max: 32.0,
+            },
+        },
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1352,14 +1365,14 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
             display_name: title_case_name("speed"),
             value_kind: ValueKind::Float,
             accepted_kinds: vec![],
-            default_value: Some(InputValue::Float(0.3)),
+            default_value: Some(InputValue::Float(1.0)),
         },
         NodeInputDefinition {
             name: "radius".to_owned(),
             display_name: title_case_name("radius"),
             value_kind: ValueKind::Float,
             accepted_kinds: vec![],
-            default_value: Some(InputValue::Float(0.5)),
+            default_value: Some(InputValue::Float(1.0)),
         },
     ],
     outputs: vec![NodeOutputDefinition {
@@ -1471,7 +1484,7 @@ static FRAME_BRIGHTNESS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
             display_name: title_case_name("factor"),
             value_kind: ValueKind::Float,
             accepted_kinds: vec![],
-            default_value: Some(InputValue::Float(0.0)),
+            default_value: Some(InputValue::Float(1.0)),
         },
     ],
     outputs: vec![NodeOutputDefinition {

@@ -204,7 +204,10 @@ fn topological_order(adjacency: &[Vec<usize>], in_degree: &[usize]) -> anyhow::R
 mod tests {
     use crate::node_runtime::{NodeEvaluationContext, build_builtin_node_registry};
     use crate::services::runtime::compiler::compile_graph_document;
-    use shared::{GraphDocument, GraphMetadata, GraphNode, LedLayout, NodeMetadata};
+    use shared::{
+        GraphDocument, GraphMetadata, GraphNode, LedLayout, NodeMetadata, NodeTypeId,
+        ParameterDefaultValue, builtin_node_definition,
+    };
 
     /// Tests that parameter-normalization diagnostics are preserved on compiled nodes.
     #[test]
@@ -362,5 +365,27 @@ mod tests {
             "built-in defaults emitted clamp diagnostics:\n{}",
             clamp_findings.join("\n")
         );
+    }
+
+    #[test]
+    fn frame_brightness_default_factor_is_neutral() {
+        let definition = builtin_node_definition(NodeTypeId::FRAME_BRIGHTNESS)
+            .expect("frame brightness node definition must exist");
+        let factor = definition
+            .input_port("factor")
+            .and_then(|input| input.default_value.as_ref());
+
+        assert_eq!(factor, Some(&shared::InputValue::Float(1.0)));
+    }
+
+    #[test]
+    fn spectrum_analyzer_schema_exposes_decay_parameter() {
+        let definition = builtin_node_definition(NodeTypeId::SPECTRUM_ANALYZER)
+            .expect("spectrum analyzer node definition must exist");
+        let decay = definition
+            .parameter("decay")
+            .map(|parameter| &parameter.default_value);
+
+        assert_eq!(decay, Some(&ParameterDefaultValue::Float(8.0)));
     }
 }

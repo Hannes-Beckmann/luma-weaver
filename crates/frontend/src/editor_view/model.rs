@@ -423,7 +423,7 @@ fn graph_node_input_value_or_default(
                 kind,
                 available_node_definitions,
             )
-    });
+        });
     coerce_input_value_kind(value, kind)
 }
 
