@@ -58,6 +58,18 @@ Review all of these before finishing:
 
 If the node is renamed, removed, or materially reworked, also review unknown-node and graph migration implications.
 
+Built-in node IDs should use the same category prefix as the add-menu taxonomy and backend module
+layout, for example:
+
+- `inputs.*`
+- `generators.*`
+- `math.*`
+- `frame_operations.*`
+- `temporal_filters.*`
+- `spatial_filters.*`
+- `outputs.*`
+- `debug.*`
+
 ## Defaults And Diagnostics
 
 Defaults should represent a clean first-use state.

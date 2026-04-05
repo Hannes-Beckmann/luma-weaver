@@ -326,7 +326,7 @@ mod tests {
                 {
                     "id": "signal_1",
                     "metadata": { "name": "signal_1" },
-                    "node_type": "math.signal_generator",
+                    "node_type": "inputs.signal_generator",
                     "parameters": [
                         { "name": "waveform", "value": "sinus" },
                         { "name": "frequency", "value": 0.5 },
@@ -343,7 +343,7 @@ mod tests {
                 {
                     "id": "solid_1",
                     "metadata": { "name": "solid_1" },
-                    "node_type": "anim.solid_frame",
+                    "node_type": "generators.solid_frame",
                     "parameters": [
                         { "name": "layout", "value": { "id": "strip-16", "pixel_count": 16, "width": 16, "height": 1 } },
                         { "name": "color", "value": { "r": 1.0, "g": 0.55, "b": 0.18, "a": 1.0 } }
@@ -352,7 +352,7 @@ mod tests {
                 {
                     "id": "brightness_1",
                     "metadata": { "name": "brightness_1" },
-                    "node_type": "color.frame_brightness"
+                    "node_type": "frame_operations.frame_brightness"
                 },
                 {
                     "id": "display_1",
@@ -613,7 +613,7 @@ mod tests {
                 {
                     "id": "constant_1",
                     "metadata": { "name": "constant_1" },
-                    "node_type": "core.float_constant",
+                    "node_type": "inputs.float_constant",
                     "parameters": [{ "name": "value", "value": 1.0 }]
                 },
                 {
@@ -624,7 +624,7 @@ mod tests {
                 {
                     "id": "delay_1",
                     "metadata": { "name": "delay_1" },
-                    "node_type": "core.delay",
+                    "node_type": "temporal_filters.delay",
                     "parameters": [{ "name": "ticks", "value": 1 }]
                 }
             ],
@@ -700,13 +700,13 @@ mod tests {
                 {
                     "id": "delay_1",
                     "metadata": { "name": "delay_1" },
-                    "node_type": "core.delay",
+                    "node_type": "temporal_filters.delay",
                     "parameters": [{ "name": "ticks", "value": 1 }]
                 },
                 {
                     "id": "wled_1",
                     "metadata": { "name": "wled_1" },
-                    "node_type": "net.wled_target",
+                    "node_type": "outputs.wled_target",
                     "parameters": [
                         { "name": "target", "value": "dummy" },
                         { "name": "led_count", "value": 4 }
