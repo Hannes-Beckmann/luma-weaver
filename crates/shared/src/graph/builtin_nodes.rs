@@ -1077,6 +1077,16 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
                 max: 0.95,
             },
         ),
+        NodeParameterDefinition::new(
+            "decay",
+            title_case_name("decay"),
+            ParameterDefaultValue::Float(8.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.01,
+                min: 0.0,
+                max: 32.0,
+            },
+        ),
     ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
@@ -1362,7 +1372,7 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
             display_name: title_case_name("radius"),
             value_kind: ValueKind::Float,
             accepted_kinds: vec![],
-            default_value: Some(InputValue::Float(0.12)),
+            default_value: Some(InputValue::Float(0.5)),
         },
     ],
     outputs: vec![NodeOutputDefinition {
@@ -1472,7 +1482,7 @@ static FRAME_BRIGHTNESS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
             display_name: title_case_name("factor"),
             value_kind: ValueKind::Float,
             accepted_kinds: vec![],
-            default_value: Some(InputValue::Float(0.0)),
+            default_value: Some(InputValue::Float(1.0)),
         },
     ],
     outputs: vec![NodeOutputDefinition {

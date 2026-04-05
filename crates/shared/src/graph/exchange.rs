@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use super::GraphDocument;
+use serde::{Deserialize, Serialize};
 
 /// Stable file-format identifier for exported graph documents.
 pub const GRAPH_EXCHANGE_FORMAT: &str = "animation_builder_graph";

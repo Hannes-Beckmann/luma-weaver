@@ -33,7 +33,11 @@ impl WledSinkProtocol {
     }
 
     fn waiting_message(self, port: u16) -> String {
-        format!("Waiting for WLED {} packets on port {}.", self.label(), port)
+        format!(
+            "Waiting for WLED {} packets on port {}.",
+            self.label(),
+            port
+        )
     }
 
     fn ignored_packet_code(self) -> Option<&'static str> {
@@ -45,12 +49,22 @@ impl WledSinkProtocol {
 
     fn invalid_payload_message(self, port: u16) -> String {
         match self {
-            Self::Ddp => format!("Ignored a DDP packet with an invalid RGB payload on port {}.", port),
-            Self::UdpRaw => format!("Ignored a UDP Raw packet with an invalid RGB payload on port {}.", port),
+            Self::Ddp => format!(
+                "Ignored a DDP packet with an invalid RGB payload on port {}.",
+                port
+            ),
+            Self::UdpRaw => format!(
+                "Ignored a UDP Raw packet with an invalid RGB payload on port {}.",
+                port
+            ),
         }
     }
 
-    fn process_packet(self, assembler: &mut DdpFrameAssembler, packet: &[u8]) -> PacketProcessResult {
+    fn process_packet(
+        self,
+        assembler: &mut DdpFrameAssembler,
+        packet: &[u8],
+    ) -> PacketProcessResult {
         match self {
             Self::Ddp => assembler.process_packet(packet),
             Self::UdpRaw => process_udp_raw_packet(packet),
@@ -430,9 +444,7 @@ mod tests {
     use crate::services::wled::ddp;
     use shared::LedLayout;
 
-    use super::{
-        DdpFrameAssembler, normalize_frame, process_udp_raw_packet, rgb_to_pixels,
-    };
+    use super::{DdpFrameAssembler, normalize_frame, process_udp_raw_packet, rgb_to_pixels};
 
     /// Builds a minimal DDP packet for sink-assembler tests.
     fn ddp_packet(offset_pixels: u32, rgb: &[u8], push: bool) -> Vec<u8> {

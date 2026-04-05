@@ -18,7 +18,7 @@ pub(crate) struct FrameBrightnessInputs {
 
 crate::node_runtime::impl_runtime_inputs!(FrameBrightnessInputs {
     frame = None,
-    factor = 0.0,
+    factor = 1.0,
 });
 
 pub(crate) struct FrameBrightnessOutputs {
@@ -75,5 +75,54 @@ impl RuntimeNode for FrameBrightnessNode {
             frontend_updates: Vec::new(),
             diagnostics,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{FrameBrightnessInputs, FrameBrightnessNode};
+    use crate::node_runtime::{NodeEvaluationContext, RuntimeNode};
+    use shared::{ColorFrame, LedLayout, RgbaColor};
+
+    #[test]
+    fn default_factor_preserves_pixel_values() {
+        let mut node = FrameBrightnessNode;
+        let input_frame = ColorFrame {
+            layout: LedLayout {
+                id: "frame-brightness-default".to_owned(),
+                pixel_count: 1,
+                width: Some(1),
+                height: Some(1),
+            },
+            pixels: vec![RgbaColor {
+                r: 0.25,
+                g: 0.5,
+                b: 0.75,
+                a: 1.0,
+            }],
+        };
+
+        let evaluation = node
+            .evaluate(
+                &NodeEvaluationContext {
+                    elapsed_seconds: 0.0,
+                    render_layout: None,
+                },
+                FrameBrightnessInputs {
+                    frame: Some(input_frame.clone()),
+                    factor: 1.0,
+                },
+            )
+            .expect("frame brightness evaluation should succeed");
+
+        assert_eq!(
+            evaluation.outputs.frame.as_ref(),
+            Some(&input_frame),
+            "default frame brightness factor should be neutral"
+        );
+        assert!(
+            evaluation.diagnostics.is_empty(),
+            "neutral default should not emit diagnostics"
+        );
     }
 }

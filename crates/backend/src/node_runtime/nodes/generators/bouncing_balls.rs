@@ -51,7 +51,7 @@ pub(crate) struct BouncingBallsInputs {
 
 crate::node_runtime::impl_runtime_inputs!(BouncingBallsInputs {
     speed = 0.3,
-    radius = 0.12,
+    radius = 0.5,
 });
 
 pub(crate) struct BouncingBallsOutputs {
@@ -1005,10 +1005,16 @@ fn lerp(a: f32, b: f32, t: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::{
-        BallState, SimulationState, Vec2, boundary_collision_time, circle_collision_time,
-        process_collisions, set_speed_preserving_direction,
+        BallState, BouncingBallsInputs, BouncingBallsNode, SimulationState, Vec2,
+        boundary_collision_time, circle_collision_time, process_collisions,
+        set_speed_preserving_direction,
     };
-    use shared::RgbaColor;
+    use std::collections::HashMap;
+
+    use crate::node_runtime::{NodeEvaluationContext, RuntimeInputs, RuntimeNode};
+    use shared::{
+        LedLayout, NodeDiagnosticSeverity, NodeTypeId, RgbaColor, builtin_node_definition,
+    };
 
     #[test]
     fn boundary_collision_time_hits_exact_contact() {
@@ -1092,5 +1098,46 @@ mod tests {
         let velocity = set_speed_preserving_direction(Vec2::new(-0.2, 0.9), 0.75, true);
         assert!((velocity.x + 0.75).abs() < 1.0e-5);
         assert!(velocity.y.abs() < 1.0e-5);
+    }
+
+    #[test]
+    fn default_inputs_do_not_trigger_radius_clamp_diagnostics() {
+        let definition = builtin_node_definition(NodeTypeId::BOUNCING_BALLS)
+            .expect("bouncing balls node definition must exist");
+        let radius_default = definition
+            .input_port("radius")
+            .and_then(|input| input.default_value.as_ref())
+            .and_then(|value| match value {
+                shared::InputValue::Float(value) => Some(*value),
+                _ => None,
+            })
+            .expect("bouncing balls radius default must be a float");
+        assert!((radius_default - 0.5).abs() < f32::EPSILON);
+
+        let inputs = BouncingBallsInputs::from_runtime_inputs(&HashMap::new())
+            .expect("runtime inputs must build from defaults");
+        let mut node = BouncingBallsNode::default();
+        let evaluation = node
+            .evaluate(
+                &NodeEvaluationContext {
+                    elapsed_seconds: 0.0,
+                    render_layout: Some(LedLayout {
+                        id: "test-layout".to_owned(),
+                        pixel_count: 8,
+                        width: Some(8),
+                        height: Some(1),
+                    }),
+                },
+                inputs,
+            )
+            .expect("default evaluation must succeed");
+
+        assert!(
+            evaluation.diagnostics.iter().all(|diagnostic| {
+                diagnostic.severity != NodeDiagnosticSeverity::Warning
+                    || diagnostic.code.as_deref() != Some("bouncing_balls_radius_clamped")
+            }),
+            "default inputs should not emit a radius clamp warning"
+        );
     }
 }
