@@ -48,6 +48,7 @@ pub(crate) struct HaMqttNumberSnapshot {
 }
 
 pub(crate) struct HomeAssistantMqttService {
+    configs: RwLock<HashMap<String, MqttBrokerConfig>>,
     brokers: RwLock<HashMap<String, BrokerHandle>>,
 }
 
@@ -55,6 +56,7 @@ impl HomeAssistantMqttService {
     /// Creates a new shared Home Assistant MQTT service.
     pub(crate) fn new() -> Arc<Self> {
         Arc::new(Self {
+            configs: RwLock::new(HashMap::new()),
             brokers: RwLock::new(HashMap::new()),
         })
     }
@@ -62,13 +64,9 @@ impl HomeAssistantMqttService {
     /// Reconciles the active broker tasks with the latest configured broker list.
     ///
     /// Removed brokers are stopped, unchanged brokers are kept, and changed broker definitions are
-    /// recreated with fresh runtime state.
+    /// recreated with fresh runtime state. Only brokers marked as Home Assistant brokers are
+    /// activated for the runtime service.
     pub(crate) fn sync_brokers(&self, configs: Vec<MqttBrokerConfig>) -> anyhow::Result<()> {
-        let mut brokers = self
-            .brokers
-            .write()
-            .map_err(|_| anyhow::anyhow!("mqtt broker registry lock poisoned"))?;
-
         let mut configs_by_id = HashMap::new();
         for config in configs {
             anyhow::ensure!(
@@ -83,16 +81,35 @@ impl HomeAssistantMqttService {
             configs_by_id.insert(config.id.clone(), config);
         }
 
+        let active_configs = configs_by_id
+            .iter()
+            .filter(|(_, config)| config.is_home_assistant)
+            .map(|(broker_id, config)| (broker_id.clone(), config.clone()))
+            .collect::<HashMap<_, _>>();
+
+        {
+            let mut stored_configs = self
+                .configs
+                .write()
+                .map_err(|_| anyhow::anyhow!("mqtt broker config registry lock poisoned"))?;
+            *stored_configs = configs_by_id;
+        }
+
+        let mut brokers = self
+            .brokers
+            .write()
+            .map_err(|_| anyhow::anyhow!("mqtt broker registry lock poisoned"))?;
+
         let existing_ids = brokers.keys().cloned().collect::<Vec<_>>();
         for broker_id in existing_ids {
-            if !configs_by_id.contains_key(broker_id.as_str()) {
+            if !active_configs.contains_key(broker_id.as_str()) {
                 if let Some(handle) = brokers.remove(&broker_id) {
                     let _ = handle.command_tx.send(BrokerCommand::Stop);
                 }
             }
         }
 
-        for (broker_id, config) in configs_by_id {
+        for (broker_id, config) in active_configs {
             let recreate = brokers
                 .get(&broker_id)
                 .is_none_or(|handle| handle.config != config);
@@ -130,13 +147,28 @@ impl HomeAssistantMqttService {
         broker_id: &str,
         registration: HaMqttNumberRegistration,
     ) -> anyhow::Result<HaMqttNumberSnapshot> {
+        {
+            let configs = self
+                .configs
+                .read()
+                .map_err(|_| anyhow::anyhow!("mqtt broker config registry lock poisoned"))?;
+            let config = configs
+                .get(broker_id)
+                .ok_or_else(|| anyhow::anyhow!("Unknown MQTT broker {}", broker_id))?;
+            anyhow::ensure!(
+                config.is_home_assistant,
+                "MQTT broker {} is not marked as a Home Assistant broker",
+                broker_id
+            );
+        }
+
         let brokers = self
             .brokers
             .read()
             .map_err(|_| anyhow::anyhow!("mqtt broker registry lock poisoned"))?;
-        let handle = brokers
-            .get(broker_id)
-            .ok_or_else(|| anyhow::anyhow!("Unknown MQTT broker {}", broker_id))?;
+        let handle = brokers.get(broker_id).ok_or_else(|| {
+            anyhow::anyhow!("Home Assistant MQTT broker {} is not active", broker_id)
+        })?;
 
         let mut should_upsert = false;
         let mut should_publish_default = false;
@@ -207,6 +239,72 @@ struct BrokerHandle {
     config: MqttBrokerConfig,
     state: Arc<RwLock<BrokerRuntimeState>>,
     command_tx: Sender<BrokerCommand>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{HaMqttNumberRegistration, HomeAssistantMqttService};
+    use shared::MqttBrokerConfig;
+
+    fn broker_config(id: &str, is_home_assistant: bool) -> MqttBrokerConfig {
+        MqttBrokerConfig {
+            id: id.to_owned(),
+            display_name: id.to_owned(),
+            host: "127.0.0.1".to_owned(),
+            port: 1883,
+            username: String::new(),
+            password: String::new(),
+            discovery_prefix: "homeassistant".to_owned(),
+            is_home_assistant,
+        }
+    }
+
+    fn registration() -> HaMqttNumberRegistration {
+        HaMqttNumberRegistration {
+            entity_id: "number_one".to_owned(),
+            display_name: "Number One".to_owned(),
+            default_value: 42.0,
+            min: 0.0,
+            max: 100.0,
+            step: 1.0,
+            retain: true,
+        }
+    }
+
+    #[tokio::test]
+    async fn sync_brokers_keeps_generic_brokers_in_storage_but_not_active() {
+        let service = HomeAssistantMqttService::new();
+
+        service
+            .sync_brokers(vec![broker_config("generic", false)])
+            .expect("sync brokers");
+
+        let configs = service.configs.read().expect("read configs");
+        assert!(configs.contains_key("generic"));
+        drop(configs);
+
+        let brokers = service.brokers.read().expect("read brokers");
+        assert!(!brokers.contains_key("generic"));
+    }
+
+    #[tokio::test]
+    async fn ensure_number_entity_rejects_generic_brokers() {
+        let service = HomeAssistantMqttService::new();
+
+        service
+            .sync_brokers(vec![broker_config("generic", false)])
+            .expect("sync brokers");
+
+        let error = match service.ensure_number_entity("generic", registration()) {
+            Ok(_) => panic!("generic broker should be rejected"),
+            Err(error) => error,
+        };
+        assert!(
+            error
+                .to_string()
+                .contains("not marked as a Home Assistant broker")
+        );
+    }
 }
 
 #[derive(Default)]
