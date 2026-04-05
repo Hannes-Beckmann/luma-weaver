@@ -433,23 +433,37 @@ pub(super) fn edit_parameter_value(
         }
         ParameterUiHint::MqttBrokerSelect => {
             let mut selected = value.as_str().unwrap_or("").to_owned();
+            let selected_broker = mqtt_broker_configs
+                .iter()
+                .find(|broker| broker.id == selected);
 
             egui::ComboBox::from_id_salt(ui.id().with(("mqtt_broker", name)))
-                .selected_text(
-                    mqtt_broker_configs
-                        .iter()
-                        .find(|broker| broker.id == selected)
-                        .map(|broker| broker.display_name.clone())
-                        .unwrap_or_else(|| {
-                            if selected.is_empty() {
-                                "Select broker".to_owned()
-                            } else {
-                                selected.clone()
-                            }
-                        }),
-                )
+                .selected_text(selected_broker.map_or_else(
+                    || {
+                        if selected.is_empty() {
+                            "Select broker".to_owned()
+                        } else {
+                            selected.clone()
+                        }
+                    },
+                    |broker| {
+                        let label = if broker.display_name.trim().is_empty() {
+                            broker.id.clone()
+                        } else {
+                            format!("{} ({})", broker.display_name, broker.id)
+                        };
+                        if broker.is_home_assistant {
+                            label
+                        } else {
+                            format!("{label} (not Home Assistant)")
+                        }
+                    },
+                ))
                 .show_ui(ui, |ui| {
-                    for broker in mqtt_broker_configs {
+                    for broker in mqtt_broker_configs
+                        .iter()
+                        .filter(|broker| broker.is_home_assistant)
+                    {
                         let label = if broker.display_name.trim().is_empty() {
                             broker.id.clone()
                         } else {

@@ -16,7 +16,8 @@ use crate::{
 /// Describes a reusable MQTT broker configuration referenced by Home Assistant MQTT nodes.
 ///
 /// These values are stored separately from graph documents so multiple nodes can share the same
-/// broker connection details.
+/// broker connection details. Brokers can be marked as Home Assistant brokers so the frontend
+/// and runtime can hide or ignore generic MQTT brokers where appropriate.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MqttBrokerConfig {
     pub id: String,
@@ -27,11 +28,18 @@ pub struct MqttBrokerConfig {
     pub password: String,
     #[serde(default = "default_mqtt_discovery_prefix")]
     pub discovery_prefix: String,
+    #[serde(default = "default_home_assistant_broker")]
+    pub is_home_assistant: bool,
 }
 
 /// Returns the default MQTT discovery prefix used for Home Assistant integration.
 fn default_mqtt_discovery_prefix() -> String {
     "homeassistant".to_owned()
+}
+
+/// Returns the default broker intent for existing persisted broker configs.
+fn default_home_assistant_broker() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -509,5 +517,44 @@ mod tests {
             }
             other => panic!("expected node runtime update, got {other:?}"),
         }
+    }
+
+    /// Tests that persisted broker configs without the new broker-intent field still default to
+    /// Home Assistant-compatible behavior.
+    #[test]
+    fn mqtt_broker_config_defaults_to_home_assistant() {
+        let json = r#"{
+            "id": "broker",
+            "display_name": "Broker",
+            "host": "127.0.0.1",
+            "port": 1883,
+            "username": "",
+            "password": "",
+            "discovery_prefix": "homeassistant"
+        }"#;
+
+        let config: super::MqttBrokerConfig =
+            serde_json::from_str(json).expect("deserialize broker config");
+        assert!(config.is_home_assistant);
+    }
+
+    /// Tests that the broker-intent flag round-trips through serde without changing values.
+    #[test]
+    fn mqtt_broker_config_roundtrips_home_assistant_flag() {
+        let config = super::MqttBrokerConfig {
+            id: "broker".to_owned(),
+            display_name: "Broker".to_owned(),
+            host: "127.0.0.1".to_owned(),
+            port: 1883,
+            username: String::new(),
+            password: String::new(),
+            discovery_prefix: "homeassistant".to_owned(),
+            is_home_assistant: false,
+        };
+
+        let encoded = serde_json::to_string(&config).expect("serialize broker config");
+        let decoded: super::MqttBrokerConfig =
+            serde_json::from_str(&encoded).expect("deserialize broker config");
+        assert_eq!(decoded, config);
     }
 }
