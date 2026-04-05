@@ -680,3 +680,66 @@ fn push_node_menu_category(
     definitions.sort_by(|left, right| left.display_name.cmp(&right.display_name));
     categories.push(NodeMenuCategory { label, definitions });
 }
+
+#[cfg(test)]
+mod tests {
+    use super::node_menu_categories;
+    use shared::{
+        NodeCategory, NodeConnectionDefinition, NodeDefinition, NodeInputDefinition,
+        NodeOutputDefinition, NodeTypeId, ValueKind,
+    };
+
+    fn test_node(id: &str, category: NodeCategory, display_name: &str) -> NodeDefinition {
+        NodeDefinition {
+            id: id.to_owned(),
+            display_name: display_name.to_owned(),
+            category,
+            inputs: vec![NodeInputDefinition {
+                name: "value".to_owned(),
+                display_name: "Value".to_owned(),
+                value_kind: ValueKind::Float,
+                accepted_kinds: vec![],
+                default_value: None,
+            }],
+            outputs: vec![NodeOutputDefinition {
+                name: "value".to_owned(),
+                display_name: "Value".to_owned(),
+                value_kind: ValueKind::Float,
+                accepted_kinds: vec![],
+            }],
+            parameters: vec![],
+            connection: NodeConnectionDefinition {
+                max_input_connections: 1,
+                require_value_kind_match: true,
+            },
+            runtime_updates: None,
+        }
+    }
+
+    #[test]
+    fn node_menu_categories_group_nodes_by_category() {
+        let definitions = vec![
+            test_node(
+                "inputs.float_constant",
+                NodeCategory::Inputs,
+                "Float Constant",
+            ),
+            test_node(
+                "inputs.audio_fft_receiver",
+                NodeCategory::Inputs,
+                "Audio FFT Receiver",
+            ),
+            test_node("generators.plasma", NodeCategory::Generators, "Plasma"),
+        ];
+
+        let categories = node_menu_categories(&definitions, "");
+        assert_eq!(categories.len(), 2);
+        assert_eq!(categories[0].label, "Inputs");
+        assert_eq!(categories[0].definitions.len(), 2);
+        assert_eq!(categories[0].definitions[0].id, NodeTypeId::AUDIO_FFT_RECEIVER);
+        assert_eq!(categories[0].definitions[1].id, NodeTypeId::FLOAT_CONSTANT);
+        assert_eq!(categories[1].label, "Generators");
+        assert_eq!(categories[1].definitions.len(), 1);
+        assert_eq!(categories[1].definitions[0].id, "generators.plasma");
+    }
+}

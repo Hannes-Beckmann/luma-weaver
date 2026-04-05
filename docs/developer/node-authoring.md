@@ -58,6 +58,18 @@ Review all of these before finishing:
 
 If the node is renamed, removed, or materially reworked, also review unknown-node and graph migration implications.
 
+Built-in node IDs should use the same category prefix as the add-menu taxonomy and backend module
+layout, for example:
+
+- `inputs.*`
+- `generators.*`
+- `math.*`
+- `frame_operations.*`
+- `temporal_filters.*`
+- `spatial_filters.*`
+- `outputs.*`
+- `debug.*`
+
 ## Defaults And Diagnostics
 
 Defaults should represent a clean first-use state.
@@ -89,6 +101,14 @@ When adding a node:
 - verify it is discoverable in the editor menu
 - verify the category choice remains coherent with the current node menu structure
 - note that menu organization and implementation organization are related but not always identical
+- keep the stable node type prefix aligned with the implementation family used in the codebase
+
+The current add menu uses the user-facing category as the top-level grouping and then sub-groups
+nodes by the implementation prefix in the stable node type ID, such as `core.`, `math.`,
+`color.`, `anim.`, `net.`, or `debug.`.
+
+That means a node can still live in a user-friendly category like `Inputs` or `Outputs` while the
+menu also shows contributors which code area it comes from.
 
 ## Compatibility And Unknown Nodes
 

@@ -212,7 +212,7 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
         NodeTypeId::ALPHA_OVER,
         nodes::frame_operations::alpha_over::AlphaOverNode
     );
-    register_builtin!(NodeTypeId::FADE, nodes::frame_operations::fade::FadeNode);
+    register_builtin!(NodeTypeId::FADE, nodes::temporal_filters::fade::FadeNode);
     register_builtin!(
         NodeTypeId::MOVING_AVERAGE,
         nodes::temporal_filters::moving_average::MovingAverageNode
@@ -269,7 +269,7 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
 
     anyhow::ensure!(
         registry.definition(NodeTypeId::FLOAT_CONSTANT).is_some(),
-        "builtin node registry must contain core.float_constant"
+        "builtin node registry must contain inputs.float_constant"
     );
 
     Ok(Arc::new(registry))

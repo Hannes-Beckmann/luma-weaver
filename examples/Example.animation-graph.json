@@ -16,11 +16,11 @@
     },
     "nodes": [
       {
-        "id": "anim_bouncing_balls_1",
+        "id": "generators_bouncing_balls_1",
         "metadata": {
           "name": "Bouncing Balls"
         },
-        "node_type": "anim.bouncing_balls",
+        "node_type": "generators.bouncing_balls",
         "viewport": {
           "position": {
             "x": -320.04593,
@@ -81,11 +81,11 @@
         ]
       },
       {
-        "id": "color_mask_frame_1",
+        "id": "frame_operations_mask_frame_1",
         "metadata": {
           "name": "Mask Frame"
         },
-        "node_type": "color.mask_frame",
+        "node_type": "frame_operations.mask_frame",
         "viewport": {
           "position": {
             "x": 935.4874,
@@ -169,11 +169,11 @@
         ]
       },
       {
-        "id": "anim_rainbow_sweep_1",
+        "id": "generators_rainbow_sweep_1",
         "metadata": {
           "name": "Linear Sweep"
         },
-        "node_type": "anim.rainbow_sweep",
+        "node_type": "generators.rainbow_sweep",
         "viewport": {
           "position": {
             "x": 505.75366,
@@ -260,11 +260,11 @@
         ]
       },
       {
-        "id": "color_gaussian_blur_1",
+        "id": "spatial_filters_gaussian_blur_1",
         "metadata": {
           "name": "Gaussian Blur"
         },
-        "node_type": "color.gaussian_blur",
+        "node_type": "spatial_filters.gaussian_blur",
         "viewport": {
           "position": {
             "x": 87.02021,
@@ -299,11 +299,11 @@
         "parameters": []
       },
       {
-        "id": "math_signal_generator_1",
+        "id": "inputs_signal_generator_1",
         "metadata": {
           "name": "Signal Generator"
         },
-        "node_type": "math.signal_generator",
+        "node_type": "inputs.signal_generator",
         "viewport": {
           "position": {
             "x": -932.31836,
@@ -425,11 +425,11 @@
         "parameters": []
       },
       {
-        "id": "core_delay_1",
+        "id": "temporal_filters_delay_1",
         "metadata": {
           "name": "Delay"
         },
-        "node_type": "core.delay",
+        "node_type": "temporal_filters.delay",
         "viewport": {
           "position": {
             "x": 854.7792,
@@ -454,11 +454,11 @@
         ]
       },
       {
-        "id": "color_alpha_over_1",
+        "id": "frame_operations_alpha_over_1",
         "metadata": {
           "name": "Alpha Over"
         },
-        "node_type": "color.alpha_over",
+        "node_type": "frame_operations.alpha_over",
         "viewport": {
           "position": {
             "x": 869.36365,
@@ -495,11 +495,11 @@
         "parameters": []
       },
       {
-        "id": "color_fade_1",
+        "id": "temporal_filters_fade_1",
         "metadata": {
           "name": "Fade"
         },
-        "node_type": "color.fade",
+        "node_type": "temporal_filters.fade",
         "viewport": {
           "position": {
             "x": 1246.2765,
@@ -531,11 +531,11 @@
         "parameters": []
       },
       {
-        "id": "core_plot_1",
+        "id": "outputs_plot_1",
         "metadata": {
           "name": "Plot"
         },
-        "node_type": "core.plot",
+        "node_type": "outputs.plot",
         "viewport": {
           "position": {
             "x": -27.454676,
@@ -555,11 +555,11 @@
         "parameters": []
       },
       {
-        "id": "color_moving_average_1",
+        "id": "temporal_filters_moving_average_1",
         "metadata": {
           "name": "Moving Average"
         },
-        "node_type": "color.moving_average",
+        "node_type": "temporal_filters.moving_average",
         "viewport": {
           "position": {
             "x": -510.52988,
@@ -586,11 +586,11 @@
         "parameters": []
       },
       {
-        "id": "core_display_1",
+        "id": "outputs_display_1",
         "metadata": {
           "name": "Display"
         },
-        "node_type": "core.display",
+        "node_type": "outputs.display",
         "viewport": {
           "position": {
             "x": 437.48456,
@@ -612,87 +612,87 @@
     ],
     "edges": [
       {
-        "from_node_id": "anim_bouncing_balls_1",
+        "from_node_id": "generators_bouncing_balls_1",
         "from_output_name": "frame",
-        "to_node_id": "color_gaussian_blur_1",
+        "to_node_id": "spatial_filters_gaussian_blur_1",
         "to_input_name": "frame"
       },
       {
-        "from_node_id": "anim_rainbow_sweep_1",
+        "from_node_id": "generators_rainbow_sweep_1",
         "from_output_name": "frame",
-        "to_node_id": "color_mask_frame_1",
+        "to_node_id": "frame_operations_mask_frame_1",
         "to_input_name": "frame"
       },
       {
-        "from_node_id": "color_alpha_over_1",
+        "from_node_id": "frame_operations_alpha_over_1",
         "from_output_name": "color",
-        "to_node_id": "core_delay_1",
+        "to_node_id": "temporal_filters_delay_1",
         "to_input_name": "value"
       },
       {
-        "from_node_id": "color_fade_1",
+        "from_node_id": "temporal_filters_fade_1",
         "from_output_name": "value",
-        "to_node_id": "color_alpha_over_1",
+        "to_node_id": "frame_operations_alpha_over_1",
         "to_input_name": "background"
       },
       {
-        "from_node_id": "color_gaussian_blur_1",
+        "from_node_id": "spatial_filters_gaussian_blur_1",
         "from_output_name": "frame",
-        "to_node_id": "color_alpha_over_1",
+        "to_node_id": "frame_operations_alpha_over_1",
         "to_input_name": "foreground"
       },
       {
-        "from_node_id": "color_gaussian_blur_1",
+        "from_node_id": "spatial_filters_gaussian_blur_1",
         "from_output_name": "frame",
-        "to_node_id": "core_display_1",
+        "to_node_id": "outputs_display_1",
         "to_input_name": "value"
       },
       {
-        "from_node_id": "color_mask_frame_1",
+        "from_node_id": "frame_operations_mask_frame_1",
         "from_output_name": "frame",
         "to_node_id": "debug_wled_dummy_display_1",
         "to_input_name": "value"
       },
       {
-        "from_node_id": "color_moving_average_1",
+        "from_node_id": "temporal_filters_moving_average_1",
         "from_output_name": "value",
-        "to_node_id": "core_plot_1",
+        "to_node_id": "outputs_plot_1",
         "to_input_name": "value"
       },
       {
-        "from_node_id": "color_moving_average_1",
+        "from_node_id": "temporal_filters_moving_average_1",
         "from_output_name": "value",
         "to_node_id": "math_add_float_2",
         "to_input_name": "a"
       },
       {
-        "from_node_id": "color_moving_average_1",
+        "from_node_id": "temporal_filters_moving_average_1",
         "from_output_name": "value",
         "to_node_id": "math_multiply_float_1",
         "to_input_name": "a"
       },
       {
-        "from_node_id": "core_delay_1",
+        "from_node_id": "temporal_filters_delay_1",
         "from_output_name": "value",
-        "to_node_id": "color_fade_1",
+        "to_node_id": "temporal_filters_fade_1",
         "to_input_name": "value"
       },
       {
-        "from_node_id": "core_delay_1",
+        "from_node_id": "temporal_filters_delay_1",
         "from_output_name": "value",
-        "to_node_id": "color_mask_frame_1",
+        "to_node_id": "frame_operations_mask_frame_1",
         "to_input_name": "mask"
       },
       {
         "from_node_id": "math_add_float_1",
         "from_output_name": "sum",
-        "to_node_id": "color_gaussian_blur_1",
+        "to_node_id": "spatial_filters_gaussian_blur_1",
         "to_input_name": "radius"
       },
       {
         "from_node_id": "math_add_float_2",
         "from_output_name": "sum",
-        "to_node_id": "anim_bouncing_balls_1",
+        "to_node_id": "generators_bouncing_balls_1",
         "to_input_name": "radius"
       },
       {
@@ -702,9 +702,9 @@
         "to_input_name": "a"
       },
       {
-        "from_node_id": "math_signal_generator_1",
+        "from_node_id": "inputs_signal_generator_1",
         "from_output_name": "value",
-        "to_node_id": "color_moving_average_1",
+        "to_node_id": "temporal_filters_moving_average_1",
         "to_input_name": "value"
       }
     ]
