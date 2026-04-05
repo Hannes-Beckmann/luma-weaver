@@ -202,8 +202,12 @@ fn topological_order(adjacency: &[Vec<usize>], in_degree: &[usize]) -> anyhow::R
 
 #[cfg(test)]
 mod tests {
-    use crate::node_runtime::build_builtin_node_registry;
+    use crate::node_runtime::{NodeEvaluationContext, build_builtin_node_registry};
     use crate::services::runtime::compiler::compile_graph_document;
+    use shared::{
+        GraphDocument, GraphMetadata, GraphNode, LedLayout, NodeMetadata, NodeTypeId,
+        ParameterDefaultValue, builtin_node_definition,
+    };
 
     /// Tests that parameter-normalization diagnostics are preserved on compiled nodes.
     #[test]
@@ -277,5 +281,111 @@ mod tests {
             Err(error) => error,
         };
         assert!(error.to_string().contains("Unknown node type"));
+    }
+
+    /// Audits every built-in node using schema defaults and fails if any default configuration
+    /// immediately triggers clamp diagnostics.
+    #[test]
+    fn builtin_defaults_do_not_emit_clamp_diagnostics() {
+        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let context = NodeEvaluationContext {
+            elapsed_seconds: 1.0 / 60.0,
+            render_layout: Some(LedLayout {
+                id: "default-audit-layout".to_owned(),
+                pixel_count: 64,
+                width: Some(8),
+                height: Some(8),
+            }),
+        };
+        let mut clamp_findings = Vec::new();
+
+        for definition in node_registry.definitions() {
+            let document = GraphDocument {
+                metadata: GraphMetadata {
+                    id: format!("audit-{}", definition.id),
+                    name: definition.display_name.clone(),
+                    execution_frequency_hz: 60,
+                },
+                viewport: shared::GraphViewport::default(),
+                nodes: vec![GraphNode {
+                    id: "node_1".to_owned(),
+                    metadata: NodeMetadata {
+                        name: definition.display_name.clone(),
+                    },
+                    node_type: shared::NodeTypeId::new(definition.id.clone()),
+                    viewport: shared::NodeViewport::default(),
+                    input_values: vec![],
+                    parameters: vec![],
+                }],
+                edges: vec![],
+            };
+
+            let compiled =
+                compile_graph_document(document, node_registry.clone()).expect("compile graph");
+            let compiled_node = &compiled.nodes[0];
+
+            for diagnostic in &compiled_node.construction_diagnostics {
+                if diagnostic
+                    .code
+                    .as_deref()
+                    .is_some_and(|code| code.contains("clamped"))
+                {
+                    clamp_findings.push(format!(
+                        "{} construction diagnostic: {}",
+                        definition.id,
+                        diagnostic.code.as_deref().unwrap_or("unknown")
+                    ));
+                }
+            }
+
+            let mut evaluator = node_registry
+                .evaluator_for(definition.id.as_str(), &compiled_node.parameters)
+                .expect("build runtime evaluator");
+            let evaluation = evaluator
+                .evaluate(&context, &compiled_node.input_defaults)
+                .expect("evaluate with defaults");
+
+            for diagnostic in evaluation.diagnostics {
+                if diagnostic
+                    .code
+                    .as_deref()
+                    .is_some_and(|code| code.contains("clamped"))
+                {
+                    clamp_findings.push(format!(
+                        "{} evaluation diagnostic: {}",
+                        definition.id,
+                        diagnostic.code.as_deref().unwrap_or("unknown")
+                    ));
+                }
+            }
+        }
+
+        assert!(
+            clamp_findings.is_empty(),
+            "built-in defaults emitted clamp diagnostics:\n{}",
+            clamp_findings.join("\n")
+        );
+    }
+
+    #[test]
+    fn frame_brightness_default_factor_is_neutral() {
+        let definition = builtin_node_definition(NodeTypeId::FRAME_BRIGHTNESS)
+            .expect("frame brightness node definition must exist");
+        let factor = definition
+            .input_port("factor")
+            .and_then(|input| input.default_value.as_ref());
+
+        assert_eq!(factor, Some(&shared::InputValue::Float(1.0)));
+    }
+
+    #[test]
+    fn spectrum_analyzer_schema_exposes_decay_parameter() {
+        let definition = builtin_node_definition(NodeTypeId::SPECTRUM_ANALYZER)
+            .expect("spectrum analyzer node definition must exist");
+        let decay = definition
+            .parameter("decay")
+            .map(|parameter| &parameter.default_value);
+
+        assert_eq!(decay, Some(&ParameterDefaultValue::Float(8.0)));
     }
 }

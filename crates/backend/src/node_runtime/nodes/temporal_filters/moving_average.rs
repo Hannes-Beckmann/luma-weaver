@@ -107,8 +107,14 @@ impl MovingAverageNode {
 enum RunningSum {
     Float(f32),
     Color([f32; 4]),
-    Tensor { shape: Vec<usize>, values: Vec<f32> },
-    Frame { layout: LedLayout, values: Vec<[f32; 4]> },
+    Tensor {
+        shape: Vec<usize>,
+        values: Vec<f32>,
+    },
+    Frame {
+        layout: LedLayout,
+        values: Vec<[f32; 4]>,
+    },
 }
 
 impl RunningSum {
@@ -152,14 +158,10 @@ impl RunningSum {
         match (self, value) {
             (Self::Float(_), InputValue::Float(_)) => true,
             (Self::Color(_), InputValue::Color(_)) => true,
-            (
-                Self::Tensor { shape, values },
-                InputValue::FloatTensor(tensor),
-            ) => shape == &tensor.shape && values.len() == tensor.values.len(),
-            (
-                Self::Frame { layout, values },
-                InputValue::ColorFrame(frame),
-            ) => {
+            (Self::Tensor { shape, values }, InputValue::FloatTensor(tensor)) => {
+                shape == &tensor.shape && values.len() == tensor.values.len()
+            }
+            (Self::Frame { layout, values }, InputValue::ColorFrame(frame)) => {
                 layout.id == frame.layout.id
                     && layout.pixel_count == frame.layout.pixel_count
                     && layout.width == frame.layout.width
@@ -179,18 +181,12 @@ impl RunningSum {
                 sum[2] += color.b;
                 sum[3] += color.a;
             }
-            (
-                Self::Tensor { values, .. },
-                InputValue::FloatTensor(tensor),
-            ) => {
+            (Self::Tensor { values, .. }, InputValue::FloatTensor(tensor)) => {
                 for (sum, value) in values.iter_mut().zip(tensor.values.iter().copied()) {
                     *sum += value;
                 }
             }
-            (
-                Self::Frame { values, .. },
-                InputValue::ColorFrame(frame),
-            ) => {
+            (Self::Frame { values, .. }, InputValue::ColorFrame(frame)) => {
                 for (sum, pixel) in values.iter_mut().zip(frame.pixels.iter()) {
                     sum[0] += pixel.r;
                     sum[1] += pixel.g;
@@ -211,18 +207,12 @@ impl RunningSum {
                 sum[2] -= color.b;
                 sum[3] -= color.a;
             }
-            (
-                Self::Tensor { values, .. },
-                InputValue::FloatTensor(tensor),
-            ) => {
+            (Self::Tensor { values, .. }, InputValue::FloatTensor(tensor)) => {
                 for (sum, value) in values.iter_mut().zip(tensor.values.iter().copied()) {
                     *sum -= value;
                 }
             }
-            (
-                Self::Frame { values, .. },
-                InputValue::ColorFrame(frame),
-            ) => {
+            (Self::Frame { values, .. }, InputValue::ColorFrame(frame)) => {
                 for (sum, pixel) in values.iter_mut().zip(frame.pixels.iter()) {
                     sum[0] -= pixel.r;
                     sum[1] -= pixel.g;

@@ -163,7 +163,10 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
         NodeTypeId::WLED_TARGET,
         nodes::outputs::wled_target::WledTargetNode
     );
-    register_builtin!(NodeTypeId::WLED_SINK, nodes::inputs::wled_sink::WledSinkNode);
+    register_builtin!(
+        NodeTypeId::WLED_SINK,
+        nodes::inputs::wled_sink::WledSinkNode
+    );
     register_builtin!(
         NodeTypeId::AUDIO_FFT_RECEIVER,
         nodes::inputs::audio_fft_receiver::AudioFftReceiverNode
@@ -201,7 +204,10 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
         NodeTypeId::MASK_FRAME,
         nodes::frame_operations::mask_frame::MaskFrameNode
     );
-    register_builtin!(NodeTypeId::MIX_COLOR, nodes::frame_operations::mix_color::MixColorNode);
+    register_builtin!(
+        NodeTypeId::MIX_COLOR,
+        nodes::frame_operations::mix_color::MixColorNode
+    );
     register_builtin!(
         NodeTypeId::ALPHA_OVER,
         nodes::frame_operations::alpha_over::AlphaOverNode
@@ -211,7 +217,10 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
         NodeTypeId::MOVING_AVERAGE,
         nodes::temporal_filters::moving_average::MovingAverageNode
     );
-    register_builtin!(NodeTypeId::BOX_BLUR, nodes::spatial_filters::box_blur::BoxBlurNode);
+    register_builtin!(
+        NodeTypeId::BOX_BLUR,
+        nodes::spatial_filters::box_blur::BoxBlurNode
+    );
     register_builtin!(
         NodeTypeId::GAUSSIAN_BLUR,
         nodes::spatial_filters::gaussian_blur::GaussianBlurNode
@@ -236,7 +245,10 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
         NodeTypeId::CIRCLE_SWEEP,
         nodes::generators::circle_sweep::CircleSweepNode
     );
-    register_builtin!(NodeTypeId::LEVEL_BAR, nodes::generators::level_bar::LevelBarNode);
+    register_builtin!(
+        NodeTypeId::LEVEL_BAR,
+        nodes::generators::level_bar::LevelBarNode
+    );
     register_builtin!(
         NodeTypeId::BOUNCING_BALLS,
         nodes::generators::bouncing_balls::BouncingBallsNode
