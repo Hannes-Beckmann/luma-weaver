@@ -6,7 +6,9 @@ use std::{
 };
 
 use anyhow::Context;
-use shared::{GraphRuntimeMode, GraphRuntimeStatus};
+use shared::{
+    GraphDocument, GraphRuntimeMode, GraphRuntimeStatus, NodeDiagnostic, NodeDiagnosticSeverity,
+};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio::time::MissedTickBehavior;
 
@@ -74,6 +76,11 @@ impl GraphRuntimeManager {
         let mut boot_started = Vec::new();
         for graph_id in &filtered {
             if let Some(document) = self.graph_store.get_graph_document(graph_id).await? {
+                emit_startup_compile_diagnostics(
+                    &document,
+                    self.node_registry.as_ref(),
+                    self.events.as_ref(),
+                );
                 match compile_graph_document(document, self.node_registry.clone()) {
                     Ok(compiled) => {
                         emit_construction_diagnostics(&graph_id, &compiled, self.events.as_ref());
@@ -228,6 +235,11 @@ impl GraphRuntimeManager {
             .get_graph_document(graph_id)
             .await?
             .ok_or_else(|| anyhow::anyhow!("Graph document {graph_id} does not exist"))?;
+        emit_startup_compile_diagnostics(
+            &document,
+            self.node_registry.as_ref(),
+            self.events.as_ref(),
+        );
         let compiled = compile_graph_document(document, self.node_registry.clone())?;
         emit_construction_diagnostics(graph_id, &compiled, self.events.as_ref());
         self.spawn_execution_task(graph_id.to_owned(), compiled, initial_mode)
@@ -475,6 +487,65 @@ fn emit_construction_diagnostics(
     }
 }
 
+/// Emits startup diagnostics for compile failures that can be traced to specific nodes.
+fn emit_startup_compile_diagnostics(
+    document: &GraphDocument,
+    node_registry: &NodeRegistry,
+    events: &dyn RuntimeEventPublisher,
+) {
+    for node in &document.nodes {
+        let Some(definition) = node_registry.definition(node.node_type.as_str()) else {
+            events.node_diagnostics(
+                document.metadata.id.clone(),
+                node.id.clone(),
+                vec![NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Error,
+                    code: Some("runtime.unknown_node_type".to_owned()),
+                    message: format!(
+                        "Node '{}' uses unknown node type '{}'.",
+                        node.metadata.name,
+                        node.node_type.as_str()
+                    ),
+                }],
+            );
+            continue;
+        };
+
+        let mut parameters = definition
+            .parameters
+            .iter()
+            .map(|parameter| {
+                (
+                    parameter.name.clone(),
+                    parameter.default_value.to_json_value(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        for parameter in &node.parameters {
+            parameters.insert(parameter.name.clone(), parameter.value.clone());
+        }
+
+        if node_registry
+            .evaluator_for(node.node_type.as_str(), &parameters)
+            .is_none()
+        {
+            events.node_diagnostics(
+                document.metadata.id.clone(),
+                node.id.clone(),
+                vec![NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Error,
+                    code: Some("runtime.unsupported_node_runtime".to_owned()),
+                    message: format!(
+                        "Node '{}' could not build a runtime evaluator for type '{}'.",
+                        node.metadata.name,
+                        node.node_type.as_str()
+                    ),
+                }],
+            );
+        }
+    }
+}
+
 /// Returns runtime statuses sorted by graph ID.
 fn sorted_statuses(tasks: &HashMap<String, RuntimeTask>) -> Vec<GraphRuntimeStatus> {
     let mut statuses = tasks
@@ -486,4 +557,78 @@ fn sorted_statuses(tasks: &HashMap<String, RuntimeTask>) -> Vec<GraphRuntimeStat
         .collect::<Vec<_>>();
     statuses.sort_by(|a, b| a.graph_id.cmp(&b.graph_id));
     statuses
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex as StdMutex;
+
+    use shared::{GraphRuntimeStatus, NodeDiagnostic, NodeRuntimeValue};
+
+    use super::emit_startup_compile_diagnostics;
+    use crate::node_runtime::build_builtin_node_registry;
+    use crate::services::runtime::types::RuntimeEventPublisher;
+
+    #[derive(Default)]
+    struct RecordingEvents {
+        diagnostics: StdMutex<Vec<(String, String, Vec<NodeDiagnostic>)>>,
+    }
+
+    impl RuntimeEventPublisher for RecordingEvents {
+        fn runtime_statuses_changed(&self, _statuses: Vec<GraphRuntimeStatus>) {}
+
+        fn node_runtime_update(
+            &self,
+            _graph_id: String,
+            _node_id: String,
+            _values: Vec<NodeRuntimeValue>,
+        ) {
+        }
+
+        fn node_diagnostics(
+            &self,
+            graph_id: String,
+            node_id: String,
+            diagnostics: Vec<NodeDiagnostic>,
+        ) {
+            self.diagnostics.lock().expect("diagnostics lock").push((
+                graph_id,
+                node_id,
+                diagnostics,
+            ));
+        }
+    }
+
+    #[test]
+    fn startup_compile_diagnostics_report_unknown_node_types() {
+        let document: shared::GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "unknown-node-graph",
+                "name": "Unknown Node Graph",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "custom_1",
+                    "metadata": { "name": "custom_1" },
+                    "node_type": "custom.missing"
+                }
+            ],
+            "edges": []
+        }))
+        .expect("parse graph");
+        let node_registry = build_builtin_node_registry().expect("build node registry");
+        let events = RecordingEvents::default();
+
+        emit_startup_compile_diagnostics(&document, node_registry.as_ref(), &events);
+
+        let diagnostics = events.diagnostics.lock().expect("diagnostics lock");
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].0, "unknown-node-graph");
+        assert_eq!(diagnostics[0].1, "custom_1");
+        assert_eq!(
+            diagnostics[0].2[0].code.as_deref(),
+            Some("runtime.unknown_node_type")
+        );
+    }
 }

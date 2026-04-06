@@ -1,5 +1,7 @@
 use eframe::egui;
-use shared::{ClientMessage, GraphRuntimeMode, MqttBrokerConfig};
+use shared::{
+    ClientMessage, GraphRuntimeMode, MqttBrokerConfig, NodeDiagnosticEntry, NodeDiagnosticSummary,
+};
 
 use super::FrontendApp;
 
@@ -111,11 +113,19 @@ impl FrontendApp {
 
     /// Opens the diagnostics window for a specific node in the editor.
     pub(crate) fn open_node_diagnostics(&mut self, node_id: String) {
+        self.ui.diagnostics_window_graph_id = self.ui.selected_graph_id.clone();
+        self.ui.diagnostics_window_node_id = Some(node_id);
+    }
+
+    /// Opens the diagnostics window for a specific graph/node without changing the active view.
+    pub(crate) fn open_graph_diagnostics(&mut self, graph_id: String, node_id: String) {
+        self.ui.diagnostics_window_graph_id = Some(graph_id);
         self.ui.diagnostics_window_node_id = Some(node_id);
     }
 
     /// Closes the currently open node diagnostics window.
     pub(crate) fn close_node_diagnostics(&mut self) {
+        self.ui.diagnostics_window_graph_id = None;
         self.ui.diagnostics_window_node_id = None;
     }
 
@@ -127,6 +137,28 @@ impl FrontendApp {
     /// Returns the last runtime mode reported for the given graph.
     pub(crate) fn graph_runtime_mode(&self, graph_id: &str) -> Option<GraphRuntimeMode> {
         self.graphs.graph_runtime_modes.get(graph_id).copied()
+    }
+
+    /// Returns the cached diagnostic summary map for a graph.
+    pub(crate) fn graph_diagnostic_summaries(
+        &self,
+        graph_id: &str,
+    ) -> Option<&std::collections::HashMap<String, NodeDiagnosticSummary>> {
+        self.graphs.node_diagnostic_summaries_by_graph.get(graph_id)
+    }
+
+    /// Returns the cached detailed diagnostics for one node in a graph.
+    pub(crate) fn node_diagnostic_details(
+        &self,
+        graph_id: &str,
+        node_id: &str,
+    ) -> &[NodeDiagnosticEntry] {
+        self.graphs
+            .node_diagnostic_details_by_graph
+            .get(graph_id)
+            .and_then(|nodes| nodes.get(node_id))
+            .map(Vec::as_slice)
+            .unwrap_or(&[])
     }
 
     /// Returns the selected graph name, if a graph is currently open or selected.

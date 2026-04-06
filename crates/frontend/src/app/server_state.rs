@@ -72,6 +72,12 @@ impl FrontendApp {
         self.graphs
             .graph_runtime_modes
             .retain(|graph_id, _| known_graph_ids.contains(graph_id.as_str()));
+        self.graphs
+            .node_diagnostic_summaries_by_graph
+            .retain(|graph_id, _| known_graph_ids.contains(graph_id.as_str()));
+        self.graphs
+            .node_diagnostic_details_by_graph
+            .retain(|graph_id, _| known_graph_ids.contains(graph_id.as_str()));
         self.ui.status = format!(
             "Loaded {} graph documents",
             self.graphs.graph_documents.len()
@@ -227,13 +233,13 @@ impl FrontendApp {
         graph_id: String,
         nodes: Vec<NodeDiagnosticSummary>,
     ) {
-        if self.ui.selected_graph_id.as_deref() != Some(graph_id.as_str()) {
-            return;
-        }
-        self.graphs.node_diagnostic_summaries = nodes
+        let summaries = nodes
             .into_iter()
             .map(|summary| (summary.node_id.clone(), summary))
             .collect();
+        self.graphs
+            .node_diagnostic_summaries_by_graph
+            .insert(graph_id, summaries);
     }
 
     /// Stores the full diagnostic entries for a single node in the selected graph.
@@ -243,11 +249,10 @@ impl FrontendApp {
         node_id: String,
         diagnostics: Vec<NodeDiagnosticEntry>,
     ) {
-        if self.ui.selected_graph_id.as_deref() != Some(graph_id.as_str()) {
-            return;
-        }
         self.graphs
-            .node_diagnostic_details
+            .node_diagnostic_details_by_graph
+            .entry(graph_id)
+            .or_default()
             .insert(node_id, diagnostics);
     }
 
@@ -264,8 +269,8 @@ impl FrontendApp {
 
     /// Clears all editor state tied to the currently selected graph session.
     ///
-    /// This resets transient UI such as menus, rename dialogs, runtime previews, diagnostics, and
-    /// undo history in addition to dropping the loaded document itself.
+    /// This resets transient UI such as menus, rename dialogs, runtime previews, the open
+    /// diagnostics window, and undo history in addition to dropping the loaded document itself.
     pub(crate) fn clear_selected_graph_session(&mut self) {
         self.ui.selected_graph_id = None;
         self.ui.editor_canvas_hovered = false;
@@ -283,8 +288,7 @@ impl FrontendApp {
         self.graphs.snarl_viewport_initialized_graph_id = None;
         self.graphs.runtime_node_values.clear();
         self.graphs.plot_history.clear();
-        self.graphs.node_diagnostic_summaries.clear();
-        self.graphs.node_diagnostic_details.clear();
+        self.ui.diagnostics_window_graph_id = None;
         self.ui.diagnostics_window_node_id = None;
     }
 
@@ -303,7 +307,7 @@ impl FrontendApp {
         self.subscriptions.node_definitions_requested_once = false;
         self.subscriptions.running_graphs_requested_once = false;
         self.subscriptions.runtime_graph_subscription = None;
-        self.subscriptions.diagnostics_graph_subscription = None;
+        self.subscriptions.diagnostics_graph_subscriptions.clear();
         self.subscriptions.diagnostics_node_subscription = None;
         self.subscriptions.wled_instances_requested_once = false;
         self.subscriptions.mqtt_brokers_requested_once = false;
@@ -315,5 +319,44 @@ impl FrontendApp {
 fn decode_runtime_update_value(value: NodeRuntimeUpdateValue) -> (String, InputValue) {
     match value {
         NodeRuntimeUpdateValue::Inline { name, value } => (name, value),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use shared::{NodeDiagnosticEntry, NodeDiagnosticSeverity, NodeDiagnosticSummary};
+
+    use crate::app::FrontendApp;
+
+    #[test]
+    fn graph_diagnostics_are_cached_by_graph_id() {
+        let mut app = FrontendApp::default();
+
+        app.apply_graph_diagnostics_summary(
+            "graph-a".to_owned(),
+            vec![NodeDiagnosticSummary {
+                node_id: "node-1".to_owned(),
+                highest_severity: NodeDiagnosticSeverity::Error,
+                active_count: 1,
+            }],
+        );
+        app.apply_node_diagnostics_detail(
+            "graph-a".to_owned(),
+            "node-1".to_owned(),
+            vec![NodeDiagnosticEntry {
+                severity: NodeDiagnosticSeverity::Error,
+                code: Some("runtime.unknown_node_type".to_owned()),
+                message: "unknown node".to_owned(),
+                occurrences: 1,
+            }],
+        );
+
+        assert_eq!(
+            app.graph_diagnostic_summaries("graph-a")
+                .and_then(|nodes| nodes.get("node-1"))
+                .map(|summary| summary.active_count),
+            Some(1)
+        );
+        assert_eq!(app.node_diagnostic_details("graph-a", "node-1").len(), 1);
     }
 }
