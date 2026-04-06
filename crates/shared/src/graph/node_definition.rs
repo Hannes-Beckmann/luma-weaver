@@ -49,6 +49,7 @@ impl NodeTypeId {
     pub const BOX_BLUR: &'static str = "spatial_filters.box_blur";
     pub const GAUSSIAN_BLUR: &'static str = "spatial_filters.gaussian_blur";
     pub const MEDIAN_FILTER: &'static str = "spatial_filters.median_filter";
+    pub const LAPLACIAN_FILTER: &'static str = "spatial_filters.laplacian_filter";
     pub const SPECTRUM_ANALYZER: &'static str = "generators.spectrum_analyzer";
     pub const SOLID_FRAME: &'static str = "generators.solid_frame";
     pub const RAINBOW_SWEEP: &'static str = "generators.rainbow_sweep";

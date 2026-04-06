@@ -1438,6 +1438,54 @@ static MEDIAN_FILTER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     runtime_updates: None,
 });
 
+static LAPLACIAN_FILTER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::LAPLACIAN_FILTER.to_owned(),
+    display_name: "Laplacian Filter".to_owned(),
+    category: NodeCategory::SpatialFilters,
+    inputs: vec![NodeInputDefinition {
+        name: "frame".to_owned(),
+        display_name: title_case_name("frame"),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![],
+        default_value: None,
+    }],
+    outputs: vec![NodeOutputDefinition {
+        name: "frame".to_owned(),
+        display_name: title_case_name("frame"),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![],
+    }],
+    parameters: vec![
+        NodeParameterDefinition::new(
+            "strength",
+            title_case_name("strength"),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.01,
+                min: 0.0,
+                max: 8.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "absolute_value",
+            title_case_name("absolute_value"),
+            ParameterDefaultValue::Bool(true),
+            ParameterUiHint::Checkbox,
+        ),
+        NodeParameterDefinition::new(
+            "filter_alpha",
+            title_case_name("filter_alpha"),
+            ParameterDefaultValue::Bool(false),
+            ParameterUiHint::Checkbox,
+        ),
+    ],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
 static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
     id: NodeTypeId::SPECTRUM_ANALYZER.to_owned(),
     display_name: "Spectrum Analyzer".to_owned(),
@@ -1959,6 +2007,7 @@ pub fn builtin_node_definitions() -> Vec<NodeDefinition> {
         (*BOX_BLUR_NODE_TYPE).clone(),
         (*GAUSSIAN_BLUR_NODE_TYPE).clone(),
         (*MEDIAN_FILTER_NODE_TYPE).clone(),
+        (*LAPLACIAN_FILTER_NODE_TYPE).clone(),
         (*SPECTRUM_ANALYZER_NODE_TYPE).clone(),
         (*SOLID_FRAME_NODE_TYPE).clone(),
         (*RAINBOW_SWEEP_NODE_TYPE).clone(),

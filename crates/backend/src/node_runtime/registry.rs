@@ -268,6 +268,10 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
         nodes::spatial_filters::median_filter::MedianFilterNode
     );
     register_builtin!(
+        NodeTypeId::LAPLACIAN_FILTER,
+        nodes::spatial_filters::laplacian_filter::LaplacianFilterNode
+    );
+    register_builtin!(
         NodeTypeId::SPECTRUM_ANALYZER,
         nodes::generators::spectrum_analyzer::SpectrumAnalyzerNode
     );
