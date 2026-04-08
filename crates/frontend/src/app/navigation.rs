@@ -56,8 +56,9 @@ impl FrontendApp {
         let Ok(pathname) = window.location().pathname() else {
             return;
         };
+        let base_path = app_base_path();
 
-        if let Some(graph_id) = graph_id_from_path(&pathname) {
+        if let Some(graph_id) = graph_id_from_path_with_base(&pathname, &base_path) {
             self.ui.selected_graph_id = Some(graph_id);
             self.ui.active_view = AppView::Editor;
         }
@@ -81,8 +82,9 @@ impl FrontendApp {
         let Ok(pathname) = window.location().pathname() else {
             return;
         };
+        let base_path = app_base_path();
 
-        match graph_id_from_path(&pathname) {
+        match graph_id_from_path_with_base(&pathname, &base_path) {
             Some(graph_id) => {
                 let already_selected = self.ui.active_view == AppView::Editor
                     && self.ui.selected_graph_id.as_deref() == Some(graph_id.as_str());
@@ -118,16 +120,7 @@ impl FrontendApp {
         let Ok(history) = window.history() else {
             return;
         };
-
-        let path = match self.ui.active_view {
-            AppView::Dashboard => "/".to_owned(),
-            AppView::Editor => self
-                .ui
-                .selected_graph_id
-                .as_deref()
-                .map(|graph_id| format!("/graphs/{graph_id}"))
-                .unwrap_or_else(|| "/".to_owned()),
-        };
+        let path = route_path_for_view(self);
 
         let _ = history.replace_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&path));
     }
@@ -150,16 +143,7 @@ impl FrontendApp {
         let Ok(history) = window.history() else {
             return;
         };
-
-        let path = match self.ui.active_view {
-            AppView::Dashboard => "/".to_owned(),
-            AppView::Editor => self
-                .ui
-                .selected_graph_id
-                .as_deref()
-                .map(|graph_id| format!("/graphs/{graph_id}"))
-                .unwrap_or_else(|| "/".to_owned()),
-        };
+        let path = route_path_for_view(self);
 
         let _ = history.push_state_with_url(&wasm_bindgen::JsValue::NULL, "", Some(&path));
     }
@@ -282,6 +266,11 @@ impl FrontendApp {
 ///
 /// The current route format is `/graphs/<graph_id>`.
 fn graph_id_from_path(pathname: &str) -> Option<String> {
+    graph_id_from_path_with_base(pathname, "")
+}
+
+fn graph_id_from_path_with_base(pathname: &str, base_path: &str) -> Option<String> {
+    let pathname = strip_base_path(pathname, base_path)?;
     let mut segments = pathname.trim_matches('/').split('/');
     match (segments.next(), segments.next(), segments.next()) {
         (Some("graphs"), Some(graph_id), None) if !graph_id.is_empty() => Some(graph_id.to_owned()),
@@ -289,9 +278,77 @@ fn graph_id_from_path(pathname: &str) -> Option<String> {
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+fn route_path_for_view(app: &FrontendApp) -> String {
+    let relative_path = match app.ui.active_view {
+        AppView::Dashboard => "/".to_owned(),
+        AppView::Editor => app
+            .ui
+            .selected_graph_id
+            .as_deref()
+            .map(|graph_id| format!("/graphs/{graph_id}"))
+            .unwrap_or_else(|| "/".to_owned()),
+    };
+    join_base_path(&app_base_path(), &relative_path)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn app_base_path() -> String {
+    let Some(window) = web_sys::window() else {
+        return String::new();
+    };
+    let Some(document) = window.document() else {
+        return String::new();
+    };
+    let Some(base_uri) = document.base_uri().ok().flatten() else {
+        return String::new();
+    };
+    let Ok(url) = web_sys::Url::new(&base_uri) else {
+        return String::new();
+    };
+    normalize_base_path(&url.pathname())
+}
+
+fn strip_base_path<'a>(pathname: &'a str, base_path: &str) -> Option<&'a str> {
+    if base_path.is_empty() {
+        return Some(pathname);
+    }
+
+    if pathname == base_path {
+        return Some("/");
+    }
+
+    pathname
+        .strip_prefix(base_path)
+        .filter(|suffix| suffix.starts_with('/'))
+}
+
+#[cfg(target_arch = "wasm32")]
+fn join_base_path(base_path: &str, relative_path: &str) -> String {
+    if base_path.is_empty() {
+        return relative_path.to_owned();
+    }
+
+    if relative_path == "/" {
+        format!("{base_path}/")
+    } else {
+        format!("{base_path}{relative_path}")
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn normalize_base_path(pathname: &str) -> String {
+    let trimmed = pathname.trim_end_matches('/');
+    if trimmed.is_empty() || trimmed == "/" {
+        String::new()
+    } else {
+        trimmed.to_owned()
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::graph_id_from_path;
+    use super::{graph_id_from_path, graph_id_from_path_with_base};
 
     #[test]
     fn parses_graph_route() {
@@ -304,5 +361,17 @@ mod tests {
         assert_eq!(graph_id_from_path("/"), None);
         assert_eq!(graph_id_from_path("/graphs"), None);
         assert_eq!(graph_id_from_path("/graphs/demo/extra"), None);
+    }
+
+    #[test]
+    fn parses_graph_route_under_base_path() {
+        assert_eq!(
+            graph_id_from_path_with_base("/luma-weaver/graphs/demo", "/luma-weaver"),
+            Some("demo".to_owned())
+        );
+        assert_eq!(
+            graph_id_from_path_with_base("/luma-weaver/", "/luma-weaver"),
+            None
+        );
     }
 }
