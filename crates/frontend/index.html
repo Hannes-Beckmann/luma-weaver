@@ -9,6 +9,28 @@
     <link data-trunk rel="icon" type="image/svg+xml" href="icon.svg" />
     <link data-trunk rel="copy-file" href="404.html" />
     <title>Luma Weaver</title>
+    <script>
+      (function () {
+        var url = new URL(window.location.href);
+        var redirectedPath = url.searchParams.get("p");
+        if (!redirectedPath) {
+          return;
+        }
+
+        var restoredPath = redirectedPath;
+        var restoredQuery = url.searchParams.get("q");
+        var restoredHash = url.searchParams.get("h");
+
+        if (restoredQuery) {
+          restoredPath += "?" + restoredQuery;
+        }
+        if (restoredHash) {
+          restoredPath += "#" + restoredHash;
+        }
+
+        window.history.replaceState(null, "", restoredPath);
+      })();
+    </script>
     <style>
       html,
       body,
