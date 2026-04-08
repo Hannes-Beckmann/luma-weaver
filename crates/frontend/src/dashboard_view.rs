@@ -1,6 +1,9 @@
 use eframe::egui;
 use eframe::egui::{Color32, RichText};
-use shared::{ClientMessage, GraphImportCollisionPolicy, GraphRuntimeMode, MqttBrokerConfig};
+use shared::{
+    ClientMessage, GraphImportCollisionPolicy, GraphRuntimeMode, MqttBrokerConfig,
+    NodeDiagnosticSummary,
+};
 
 /// Renders a single-line text edit with a fixed width for settings-style forms.
 fn sized_text_edit_singleline(ui: &mut egui::Ui, text: &mut String, width: f32) -> egui::Response {
@@ -179,6 +182,13 @@ pub(crate) fn render(ctx: &egui::Context, ui: &mut egui::Ui, app: &mut FrontendA
                     ui.add_space(6.0);
                     ui.horizontal_wrapped(|ui| {
                         runtime_badge(ui, mode);
+                        if let Some(summary) = highest_priority_diagnostic_summary(
+                            app.graph_diagnostic_summaries(&graph.id),
+                        ) {
+                            if ui.add(diagnostics_action_button(&summary)).clicked() {
+                                app.open_graph_diagnostics(graph_id.clone(), summary.node_id);
+                            }
+                        }
                         ui.label(RichText::new("Tick rate").color(Color32::from_gray(150)));
                         let response = ui.add(
                             egui::DragValue::new(&mut execution_frequency_hz)
@@ -420,6 +430,8 @@ pub(crate) fn render(ctx: &egui::Context, ui: &mut egui::Ui, app: &mut FrontendA
             app.ui.pending_import_graph_file = None;
         }
     }
+
+    crate::diagnostics_view::render_node_diagnostics_window(ctx, app);
 }
 
 /// Renders a colored summary badge used in the dashboard overview row.
@@ -450,6 +462,42 @@ fn runtime_badge(ui: &mut egui::Ui, mode: Option<GraphRuntimeMode>) {
         .show(ui, |ui| {
             ui.label(RichText::new(label).color(color).strong());
         });
+}
+
+/// Returns the most severe diagnostic summary for a graph, breaking ties by active count.
+fn highest_priority_diagnostic_summary(
+    summaries: Option<&std::collections::HashMap<String, NodeDiagnosticSummary>>,
+) -> Option<NodeDiagnosticSummary> {
+    summaries?.values().cloned().max_by(|left, right| {
+        left.highest_severity
+            .cmp(&right.highest_severity)
+            .then_with(|| left.active_count.cmp(&right.active_count))
+            .then_with(|| right.node_id.cmp(&left.node_id))
+    })
+}
+
+/// Builds the clickable dashboard chip that jumps into the shared diagnostics detail flow.
+fn diagnostics_action_button(summary: &NodeDiagnosticSummary) -> egui::Button<'static> {
+    let color = crate::diagnostics_view::severity_color(summary.highest_severity);
+    let severity = match summary.highest_severity {
+        shared::NodeDiagnosticSeverity::Info => "info",
+        shared::NodeDiagnosticSeverity::Warning => "warning",
+        shared::NodeDiagnosticSeverity::Error => "error",
+    };
+    let noun = if summary.active_count == 1 {
+        severity.to_owned()
+    } else {
+        format!("{severity}s")
+    };
+
+    egui::Button::new(
+        RichText::new(format!("{} {}", summary.active_count, noun))
+            .color(color)
+            .strong(),
+    )
+    .fill(color.gamma_multiply(0.14))
+    .stroke(egui::Stroke::new(1.0, color))
+    .min_size(egui::vec2(104.0, 24.0))
 }
 
 /// Renders one of the colored runtime control buttons used on dashboard graph cards.

@@ -1,6 +1,6 @@
 use eframe::egui;
 use eframe::egui::{Color32, RichText};
-use shared::{GraphRuntimeMode, InputValue, NodeDiagnosticSeverity, NodeParameter, ValueKind};
+use shared::{GraphRuntimeMode, InputValue, NodeParameter, ValueKind};
 
 use crate::app::FrontendApp;
 
@@ -176,7 +176,10 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
             let plot_history = app.graphs.plot_history.clone();
             let wled_instances = app.graphs.wled_instances.clone();
             let mqtt_broker_configs = app.graphs.mqtt_broker_configs.clone();
-            let diagnostic_summaries = app.graphs.node_diagnostic_summaries.clone();
+            let diagnostic_summaries = app
+                .graph_diagnostic_summaries(&graph.id)
+                .cloned()
+                .unwrap_or_default();
             let available_node_definitions = app.graphs.available_node_definitions.clone();
             let node_menu_search = app.ui.node_menu_search.clone();
             let node_menu_graph_position = app
@@ -237,73 +240,7 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 app.graphs.snarl_viewport_initialized_graph_id = Some(graph.id.clone());
             }
 
-            if let Some(node_id) = app.ui.diagnostics_window_node_id.clone() {
-                let mut open = true;
-                let graph_id = graph.id.clone();
-                let diagnostics = app
-                    .graphs
-                    .node_diagnostic_details
-                    .get(&node_id)
-                    .cloned()
-                    .unwrap_or_default();
-                let node_name = app
-                    .graphs
-                    .loaded_graph_document
-                    .as_ref()
-                    .and_then(|document| {
-                        document
-                            .nodes
-                            .iter()
-                            .find(|node| node.id == node_id)
-                            .map(|node| node.metadata.name.clone())
-                    })
-                    .unwrap_or_else(|| node_id.clone());
-                egui::Window::new(format!("Diagnostics: {node_name}"))
-                    .open(&mut open)
-                    .resizable(true)
-                    .show(ui.ctx(), |ui| {
-                        ui.horizontal(|ui| {
-                            if ui.button("Clear").clicked() {
-                                app.clear_node_diagnostics(graph_id.clone(), node_id.clone());
-                            }
-                        });
-                        ui.separator();
-                        if diagnostics.is_empty() {
-                            ui.label("No diagnostics reported.");
-                        } else {
-                            for diagnostic in diagnostics {
-                                let color = match diagnostic.severity {
-                                    NodeDiagnosticSeverity::Info => Color32::from_rgb(90, 150, 220),
-                                    NodeDiagnosticSeverity::Warning => {
-                                        Color32::from_rgb(210, 160, 60)
-                                    }
-                                    NodeDiagnosticSeverity::Error => Color32::from_rgb(190, 80, 80),
-                                };
-                                ui.group(|ui| {
-                                    ui.horizontal_wrapped(|ui| {
-                                        ui.label(
-                                            RichText::new(format!("{:?}", diagnostic.severity))
-                                                .color(color)
-                                                .strong(),
-                                        );
-                                        if let Some(code) = &diagnostic.code {
-                                            ui.label(
-                                                RichText::new(code)
-                                                    .monospace()
-                                                    .color(Color32::from_gray(170)),
-                                            );
-                                        }
-                                        ui.label(format!("x{}", diagnostic.occurrences));
-                                    });
-                                    ui.label(diagnostic.message);
-                                });
-                            }
-                        }
-                    });
-                if !open {
-                    app.close_node_diagnostics();
-                }
-            }
+            crate::diagnostics_view::render_node_diagnostics_window(ui.ctx(), app);
 
             if app.ui.rename_graph_dialog_open {
                 let mut open = app.ui.rename_graph_dialog_open;

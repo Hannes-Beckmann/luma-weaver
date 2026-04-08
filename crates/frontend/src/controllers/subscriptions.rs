@@ -76,10 +76,10 @@ impl FrontendApp {
         }
     }
 
-    /// Reconciles graph-scoped runtime and diagnostics subscriptions for the active editor session.
+    /// Reconciles graph-scoped runtime and diagnostics subscriptions for the current UI state.
     ///
-    /// Switching graphs or closing diagnostics tears down the obsolete subscriptions and clears the
-    /// corresponding cached runtime and diagnostics state.
+    /// The editor keeps a single runtime stream for the selected graph, while diagnostics summaries
+    /// stay subscribed for every known graph so the dashboard can surface start-time failures.
     pub(crate) fn ensure_runtime_updates_subscription(&mut self) {
         if self.connection.sender.is_none() {
             return;
@@ -105,32 +105,52 @@ impl FrontendApp {
             }
         }
 
-        let desired_diagnostics_graph = if self.ui.active_view == AppView::Editor {
-            self.ui.selected_graph_id.clone()
-        } else {
-            None
-        };
-        if self.subscriptions.diagnostics_graph_subscription != desired_diagnostics_graph {
-            if let Some(previous) = self.subscriptions.diagnostics_graph_subscription.take() {
-                self.send(ClientMessage::UnsubscribeGraphDiagnostics { graph_id: previous });
-                self.graphs.node_diagnostic_summaries.clear();
+        let desired_diagnostics_graphs = self
+            .graphs
+            .graph_documents
+            .iter()
+            .map(|graph| graph.id.clone())
+            .collect::<HashSet<_>>();
+        if self.subscriptions.diagnostics_graph_subscriptions != desired_diagnostics_graphs {
+            let removed = self
+                .subscriptions
+                .diagnostics_graph_subscriptions
+                .difference(&desired_diagnostics_graphs)
+                .cloned()
+                .collect::<Vec<_>>();
+            let added = desired_diagnostics_graphs
+                .difference(&self.subscriptions.diagnostics_graph_subscriptions)
+                .cloned()
+                .collect::<Vec<_>>();
+
+            for graph_id in removed {
+                self.send(ClientMessage::UnsubscribeGraphDiagnostics { graph_id });
             }
-            if let Some(graph_id) = desired_diagnostics_graph.clone() {
+            for graph_id in &added {
                 self.send(ClientMessage::SubscribeGraphDiagnostics {
                     graph_id: graph_id.clone(),
                 });
-                self.subscriptions.diagnostics_graph_subscription = Some(graph_id);
             }
+
+            self.subscriptions.diagnostics_graph_subscriptions = desired_diagnostics_graphs;
         }
 
         let desired_node_diagnostics = if self.ui.active_view == AppView::Editor {
             match (
-                self.ui.selected_graph_id.clone(),
+                self.ui
+                    .diagnostics_window_graph_id
+                    .clone()
+                    .or_else(|| self.ui.selected_graph_id.clone()),
                 self.ui.diagnostics_window_node_id.clone(),
             ) {
                 (Some(graph_id), Some(node_id)) => Some((graph_id, node_id)),
                 _ => None,
             }
+        } else if let (Some(graph_id), Some(node_id)) = (
+            self.ui.diagnostics_window_graph_id.clone(),
+            self.ui.diagnostics_window_node_id.clone(),
+        ) {
+            Some((graph_id, node_id))
         } else {
             None
         };
