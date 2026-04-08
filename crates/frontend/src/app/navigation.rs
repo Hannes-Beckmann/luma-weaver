@@ -241,6 +241,8 @@ impl FrontendApp {
         self.clear_pending_graph_update_tracking();
         self.graphs.snarl_viewport_initialized_graph_id = None;
         self.graphs.runtime_node_values.clear();
+        self.ui.diagnostics_window_graph_id = None;
+        self.ui.diagnostics_window_node_id = None;
         self.ui.active_view = AppView::Editor;
         if update_history {
             self.push_browser_path_for_current_view();

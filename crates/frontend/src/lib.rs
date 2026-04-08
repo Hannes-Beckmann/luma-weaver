@@ -9,6 +9,8 @@ mod browser_file;
 mod controllers;
 /// Dashboard screen rendering.
 mod dashboard_view;
+/// Shared graph diagnostics rendering used by dashboard and editor flows.
+mod diagnostics_view;
 /// Graph editor screen rendering and node-canvas integration.
 mod editor_view;
 /// Shared top application header rendering.
