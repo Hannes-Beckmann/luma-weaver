@@ -297,16 +297,10 @@ fn app_base_path() -> String {
     let Some(window) = web_sys::window() else {
         return String::new();
     };
-    let Some(document) = window.document() else {
+    let Ok(pathname) = window.location().pathname() else {
         return String::new();
     };
-    let Some(base_uri) = document.base_uri().ok().flatten() else {
-        return String::new();
-    };
-    let Ok(url) = web_sys::Url::new(&base_uri) else {
-        return String::new();
-    };
-    normalize_base_path(&url.pathname())
+    infer_base_path_from_location(&pathname)
 }
 
 fn strip_base_path<'a>(pathname: &'a str, base_path: &str) -> Option<&'a str> {
@@ -336,7 +330,6 @@ fn join_base_path(base_path: &str, relative_path: &str) -> String {
     }
 }
 
-#[cfg(target_arch = "wasm32")]
 fn normalize_base_path(pathname: &str) -> String {
     let trimmed = pathname.trim_end_matches('/');
     if trimmed.is_empty() || trimmed == "/" {
@@ -346,9 +339,22 @@ fn normalize_base_path(pathname: &str) -> String {
     }
 }
 
+fn infer_base_path_from_location(pathname: &str) -> String {
+    let trimmed = pathname.trim_end_matches('/');
+    if trimmed.is_empty() || trimmed == "/" {
+        return String::new();
+    }
+
+    if let Some((base_path, _)) = trimmed.split_once("/graphs/") {
+        normalize_base_path(base_path)
+    } else {
+        normalize_base_path(trimmed)
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{graph_id_from_path, graph_id_from_path_with_base};
+    use super::{graph_id_from_path, graph_id_from_path_with_base, infer_base_path_from_location};
 
     #[test]
     fn parses_graph_route() {
@@ -372,6 +378,19 @@ mod tests {
         assert_eq!(
             graph_id_from_path_with_base("/luma-weaver/", "/luma-weaver"),
             None
+        );
+    }
+
+    #[test]
+    fn infers_pages_base_path_from_dashboard_and_graph_routes() {
+        assert_eq!(infer_base_path_from_location("/"), String::new());
+        assert_eq!(
+            infer_base_path_from_location("/luma-weaver/"),
+            "/luma-weaver".to_owned()
+        );
+        assert_eq!(
+            infer_base_path_from_location("/luma-weaver/graphs/demo"),
+            "/luma-weaver".to_owned()
         );
     }
 }
