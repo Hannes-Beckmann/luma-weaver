@@ -64,8 +64,16 @@ jobs:
         run: cargo test -p shared -p backend --locked
 
   frontend-build:
-    name: Frontend trunk build
+    name: Frontend trunk build (${{ matrix.mode.name }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mode:
+          - name: standard
+            command: trunk build --release
+          - name: demo
+            command: trunk build --release --features demo-mode --public-url /luma-weaver/
 
     steps:
       - name: Check out repository
@@ -83,7 +91,7 @@ jobs:
         uses: taiki-e/install-action@trunk
 
       - name: Build frontend
-        run: trunk build --release
+        run: ${{ matrix.mode.command }}
         working-directory: crates/frontend
 
   docker-smoke-build:
