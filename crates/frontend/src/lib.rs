@@ -1,4 +1,7 @@
 /// Frontend application state and app-level actions.
+#[cfg(all(feature = "demo-mode", not(target_arch = "wasm32")))]
+compile_error!("The `demo-mode` feature is only supported for wasm32 frontend builds.");
+
 mod app;
 /// Browser-only helpers for graph import and export file flows.
 mod browser_file;
@@ -12,9 +15,8 @@ mod editor_view;
 mod header_view;
 /// Frontend state containers.
 mod state;
-#[cfg(target_arch = "wasm32")]
-/// Browser WebSocket transport for the wasm frontend build.
-mod websocket_client;
+/// Frontend transport abstraction over websocket and demo modes.
+mod transport;
 
 #[cfg(target_arch = "wasm32")]
 use tracing::{error, info};
@@ -26,7 +28,9 @@ use wasm_bindgen::JsCast;
 /// Starts the wasm frontend and mounts the egui application into the browser canvas.
 pub async fn start() -> Result<(), wasm_bindgen::JsValue> {
     console_error_panic_hook::set_once();
-    tracing_wasm::set_as_global_default();
+    let mut tracing_config = tracing_wasm::WASMLayerConfigBuilder::new();
+    tracing_config.set_max_level(tracing::Level::INFO);
+    tracing_wasm::set_as_global_default_with_config(tracing_config.build());
     info!("frontend wasm entrypoint started");
 
     let options = eframe::WebOptions::default();

@@ -2,6 +2,7 @@ use eframe::egui;
 use shared::{ClientMessage, GraphRuntimeMode, MqttBrokerConfig};
 
 use super::FrontendApp;
+use crate::transport::TransportKind;
 
 impl FrontendApp {
     /// Requests that the backend start or resume execution for the given graph.
@@ -151,13 +152,42 @@ impl FrontendApp {
 
     /// Returns the short connection-state label shown in the header.
     pub(crate) fn websocket_status_label(&self) -> &'static str {
-        if self.connection.sender.is_some() && self.connection.has_confirmed_connection {
+        if self
+            .connection
+            .transport
+            .as_ref()
+            .map(|transport| transport.kind() == TransportKind::Demo)
+            .unwrap_or(false)
+        {
+            return "Demo";
+        }
+
+        if self.connection.is_connected() && self.connection.has_confirmed_connection {
             "Connected"
-        } else if self.connection.sender.is_some() {
+        } else if self.connection.is_connected() {
             "Connecting"
         } else {
             "Offline"
         }
+    }
+
+    /// Returns whether the current build is using the in-process demo transport.
+    pub(crate) fn is_demo_mode(&self) -> bool {
+        self.connection
+            .transport
+            .as_ref()
+            .map(|transport| transport.kind() == TransportKind::Demo)
+            .unwrap_or(false)
+    }
+
+    /// Returns whether the in-process demo runtime should keep scheduling frames.
+    pub(crate) fn demo_runtime_needs_repaint(&self) -> bool {
+        self.is_demo_mode()
+            && self
+                .graphs
+                .graph_runtime_modes
+                .values()
+                .any(|mode| *mode == GraphRuntimeMode::Running)
     }
 
     /// Returns the current egui time in seconds for debounce and reconnection timers.

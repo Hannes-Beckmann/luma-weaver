@@ -1,6 +1,9 @@
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod audio_fft_receiver;
 pub(crate) mod color_constant;
 pub(crate) mod float_constant;
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod ha_mqtt_number;
 pub(crate) mod signal_generator;
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod wled_sink;

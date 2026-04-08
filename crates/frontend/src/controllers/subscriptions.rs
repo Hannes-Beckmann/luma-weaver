@@ -11,7 +11,7 @@ impl FrontendApp {
     /// This is called repeatedly from the main app loop, but only sends messages when the desired
     /// subscription set or one-time initialization flags have changed.
     pub(crate) fn sync_event_subscriptions_and_request_initial_data(&mut self) {
-        if self.connection.sender.is_none() {
+        if !self.connection.is_connected() {
             return;
         }
 
@@ -81,7 +81,7 @@ impl FrontendApp {
     /// Switching graphs or closing diagnostics tears down the obsolete subscriptions and clears the
     /// corresponding cached runtime and diagnostics state.
     pub(crate) fn ensure_runtime_updates_subscription(&mut self) {
-        if self.connection.sender.is_none() {
+        if !self.connection.is_connected() {
             return;
         }
 

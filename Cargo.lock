@@ -181,6 +181,7 @@ dependencies = [
  "anyhow",
  "axum",
  "flume",
+ "futures-channel",
  "futures-util",
  "http",
  "libblur",
@@ -888,6 +889,7 @@ dependencies = [
 name = "frontend"
 version = "0.1.0"
 dependencies = [
+ "backend",
  "console_error_panic_hook",
  "eframe",
  "egui",

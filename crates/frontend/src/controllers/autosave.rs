@@ -74,7 +74,7 @@ impl FrontendApp {
         if debounced || max_delay_reached {
             self.commit_graph_history_snapshot(document.clone());
 
-            if self.connection.sender.is_some()
+            if self.connection.is_connected()
                 && self.graphs.save_in_flight_document.as_ref() != Some(&canonical_document)
             {
                 debug!(graph_id = %document.metadata.id, "frontend sending graph save request");

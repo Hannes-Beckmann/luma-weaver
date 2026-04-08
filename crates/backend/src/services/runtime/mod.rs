@@ -3,6 +3,7 @@ pub(crate) mod compiler;
 /// Per-tick node execution and runtime-update emission.
 pub(crate) mod executor;
 /// Long-lived runtime task management and persisted running-state handling.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod manager;
 /// Render-context planning for compiled graphs.
 pub(crate) mod planner;

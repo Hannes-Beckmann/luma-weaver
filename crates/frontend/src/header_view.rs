@@ -20,11 +20,16 @@ pub(crate) fn render(ctx: &egui::Context, app: &FrontendApp) {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 let (connection_fill, connection_label) = match app.websocket_status_label() {
                     "Connected" => (Color32::from_rgb(62, 140, 96), "Connected"),
+                    "Demo" => (Color32::from_rgb(66, 120, 185), "Demo"),
                     "Connecting" => (Color32::from_rgb(196, 147, 60), "Connecting"),
                     _ => (Color32::from_rgb(148, 78, 63), "Offline"),
                 };
                 status_badge(ui, connection_label, connection_fill);
                 ui.add_space(6.0);
+                if app.is_demo_mode() {
+                    status_badge(ui, "Local Runtime", Color32::from_rgb(66, 120, 185));
+                    ui.add_space(6.0);
+                }
                 status_badge(
                     ui,
                     app.graph_save_status_label(),

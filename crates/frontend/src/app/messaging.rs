@@ -9,7 +9,12 @@ impl FrontendApp {
     /// When no connection exists, or the send queue rejects the message, the user-visible status
     /// text is updated so the failed action is not silent.
     pub(crate) fn send(&mut self, message: ClientMessage) {
-        match &self.connection.sender {
+        match self
+            .connection
+            .transport
+            .as_ref()
+            .map(|transport| &transport.sender)
+        {
             Some(sender) => {
                 trace!(
                     kind = client_message_kind(&message),

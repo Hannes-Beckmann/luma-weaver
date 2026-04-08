@@ -50,7 +50,9 @@ impl RuntimeNode for MovingMedianNode {
         let window_size = inputs.window_size.round().clamp(1.0, 240.0) as usize;
 
         let Some(sample) = MedianSample::from_input_value(&value) else {
-            return Ok(TypedNodeEvaluation::from_outputs(MovingMedianOutputs { value }));
+            return Ok(TypedNodeEvaluation::from_outputs(MovingMedianOutputs {
+                value,
+            }));
         };
 
         if self

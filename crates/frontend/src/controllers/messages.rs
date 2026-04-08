@@ -13,19 +13,26 @@ impl FrontendApp {
     /// If the receive channel closes, the frontend treats that as a transport disconnect and
     /// schedules reconnection.
     pub(crate) fn drain_server_messages(&mut self, ctx: &egui::Context) {
-        let Some(receiver) = &mut self.connection.incoming else {
-            return;
-        };
-
         let mut pending = Vec::new();
         let mut receiver_disconnected = false;
-        loop {
-            match receiver.try_recv() {
-                Ok(message) => pending.push(message),
-                Err(TryRecvError::Empty) => break,
-                Err(TryRecvError::Closed) => {
-                    receiver_disconnected = true;
-                    break;
+        {
+            let Some(receiver) = self
+                .connection
+                .transport
+                .as_mut()
+                .map(|transport| &mut transport.incoming)
+            else {
+                return;
+            };
+
+            loop {
+                match receiver.try_recv() {
+                    Ok(message) => pending.push(message),
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Closed) => {
+                        receiver_disconnected = true;
+                        break;
+                    }
                 }
             }
         }
