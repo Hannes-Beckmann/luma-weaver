@@ -186,6 +186,12 @@ http://localhost:38123/
 
 By default, the backend reads and writes runtime data from `crates/backend/data` when `APP_DATA_DIR` is not set.
 
+## Frontend Demo Pages
+
+The repository also includes a manual GitHub Pages workflow at `.github/workflows/publish-frontend-demo.yml`.
+
+Running that workflow builds `crates/frontend` with the `demo-mode` feature enabled and publishes the static bundle to GitHub Pages. The published demo runs entirely in the browser without a backend, so backend-dependent features are not available there.
+
 ## Persistence Model
 
 Luma Weaver stores runtime data on disk. This includes:

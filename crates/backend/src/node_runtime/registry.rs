@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde_json::Value as JsonValue;
 use shared::NodeDiagnostic;
-use shared::{NodeDefinition, NodeTypeId, builtin_node_definitions};
+use shared::{NodeDefinition, NodeExecutionTarget, NodeTypeId, builtin_node_definitions};
 
 use crate::node_runtime::nodes;
 use crate::node_runtime::{
@@ -130,10 +130,20 @@ impl NodeRegistry {
 ///
 /// This function pairs the shared built-in node definitions with their backend runtime
 /// implementations and returns the result as a shared `Arc`.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>> {
+    build_registry(NodeExecutionTarget::Backend)
+}
+
+pub(crate) fn build_portable_node_registry() -> anyhow::Result<Arc<NodeRegistry>> {
+    build_registry(NodeExecutionTarget::FrontendDemo)
+}
+
+fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistry>> {
     let mut registry = NodeRegistry::new();
     let definitions_by_id = builtin_node_definitions()
         .into_iter()
+        .filter(|definition| definition.supports_execution_target(target))
         .map(|definition| (definition.id.clone(), definition))
         .collect::<HashMap<_, _>>();
 
@@ -159,22 +169,25 @@ pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>>
     register_builtin!(NodeTypeId::DELAY, nodes::temporal_filters::delay::DelayNode);
     register_builtin!(NodeTypeId::DISPLAY, nodes::outputs::display::DisplayNode);
     register_builtin!(NodeTypeId::PLOT, nodes::outputs::plot::PlotNode);
-    register_builtin!(
-        NodeTypeId::WLED_TARGET,
-        nodes::outputs::wled_target::WledTargetNode
-    );
-    register_builtin!(
-        NodeTypeId::WLED_SINK,
-        nodes::inputs::wled_sink::WledSinkNode
-    );
-    register_builtin!(
-        NodeTypeId::AUDIO_FFT_RECEIVER,
-        nodes::inputs::audio_fft_receiver::AudioFftReceiverNode
-    );
-    register_builtin!(
-        NodeTypeId::HA_MQTT_NUMBER,
-        nodes::inputs::ha_mqtt_number::HomeAssistantMqttNumberNode
-    );
+    #[cfg(not(target_arch = "wasm32"))]
+    if matches!(target, NodeExecutionTarget::Backend) {
+        register_builtin!(
+            NodeTypeId::WLED_TARGET,
+            nodes::outputs::wled_target::WledTargetNode
+        );
+        register_builtin!(
+            NodeTypeId::WLED_SINK,
+            nodes::inputs::wled_sink::WledSinkNode
+        );
+        register_builtin!(
+            NodeTypeId::AUDIO_FFT_RECEIVER,
+            nodes::inputs::audio_fft_receiver::AudioFftReceiverNode
+        );
+        register_builtin!(
+            NodeTypeId::HA_MQTT_NUMBER,
+            nodes::inputs::ha_mqtt_number::HomeAssistantMqttNumberNode
+        );
+    }
     register_builtin!(
         NodeTypeId::SIGNAL_GENERATOR,
         nodes::inputs::signal_generator::SignalGeneratorNode
@@ -328,7 +341,9 @@ mod tests {
     use serde_json::Value as JsonValue;
     use shared::{NodeCategory, NodeDefinition, builtin_node_definition};
 
-    use super::{NodeRegistry, RegisteredNodeType, build_builtin_node_registry};
+    use super::{
+        NodeRegistry, RegisteredNodeType, build_builtin_node_registry, build_portable_node_registry,
+    };
     use crate::node_runtime::{
         NodeEvaluationContext, RuntimeNode, RuntimeNodeEvaluator, RuntimeNodeFromParameters,
         TypedNodeEvaluation,
@@ -415,6 +430,7 @@ mod tests {
                 id: "custom.test".to_owned(),
                 display_name: "Custom Test".to_owned(),
                 category: NodeCategory::Debug,
+                needs_io: false,
                 inputs: Vec::new(),
                 outputs: vec![shared::NodeOutputDefinition {
                     name: "value".to_owned(),
@@ -436,6 +452,28 @@ mod tests {
             registry
                 .evaluator_for("custom.test", &HashMap::new())
                 .is_some()
+        );
+    }
+
+    #[test]
+    fn portable_registry_excludes_backend_only_nodes() {
+        let registry = build_portable_node_registry().expect("build portable registry");
+
+        assert!(registry.definition(shared::NodeTypeId::PLOT).is_some());
+        assert!(
+            registry
+                .definition(shared::NodeTypeId::WLED_DUMMY_DISPLAY)
+                .is_some()
+        );
+        assert!(
+            registry
+                .definition(shared::NodeTypeId::WLED_TARGET)
+                .is_none()
+        );
+        assert!(
+            registry
+                .definition(shared::NodeTypeId::AUDIO_FFT_RECEIVER)
+                .is_none()
         );
     }
 }

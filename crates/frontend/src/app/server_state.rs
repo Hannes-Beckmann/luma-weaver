@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
 use shared::{
-    ClientMessage, GraphDocument, GraphMetadata, GraphRuntimeStatus, InputValue, MqttBrokerConfig,
-    NodeDefinition, NodeDiagnosticEntry, NodeDiagnosticSummary, NodeRuntimeUpdateValue,
-    ServerState, WledInstance,
+    GraphDocument, GraphMetadata, GraphRuntimeStatus, InputValue, MqttBrokerConfig, NodeDefinition,
+    NodeDiagnosticEntry, NodeDiagnosticSummary, NodeRuntimeUpdateValue, ServerState, WledInstance,
 };
 use tracing::{debug, info, trace, warn};
 
@@ -18,20 +17,13 @@ impl FrontendApp {
     pub(crate) fn handle_connected(
         &mut self,
         ws_status: String,
-        sender: futures_channel::mpsc::UnboundedSender<ClientMessage>,
-        incoming: futures_channel::mpsc::UnboundedReceiver<shared::ServerMessage>,
-        #[cfg(target_arch = "wasm32")] events: futures_channel::mpsc::UnboundedReceiver<
-            crate::websocket_client::WebSocketEvent,
-        >,
+        transport: crate::transport::FrontendTransport,
+        repaint_ctx: eframe::egui::Context,
     ) {
         self.connection.ws_status = ws_status;
         self.connection.has_confirmed_connection = false;
-        self.connection.sender = Some(sender);
-        self.connection.incoming = Some(incoming);
-        #[cfg(target_arch = "wasm32")]
-        {
-            self.connection.events = Some(events);
-        }
+        self.connection.transport = Some(transport);
+        self.connection.repaint_ctx = Some(repaint_ctx);
         self.connection.reconnect_attempt = 0;
         self.reset_subscription_sync_state();
         info!("frontend connection established");

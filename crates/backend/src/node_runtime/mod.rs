@@ -43,7 +43,9 @@ pub(crate) use macros::{
 /// Typed parameter decoding helpers.
 pub(crate) use parameters::{ParameterStatus, parameter_status};
 /// Built-in registry construction and lookup.
-pub(crate) use registry::{NodeRegistry, build_builtin_node_registry};
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) use registry::build_builtin_node_registry;
+pub(crate) use registry::{NodeRegistry, build_portable_node_registry};
 /// Generic serde-based runtime input and output conversion helpers.
 pub(crate) use shared::{AnyInputValue, deserialize_inputs, serialize_outputs};
 /// Core runtime traits used throughout the execution engine.

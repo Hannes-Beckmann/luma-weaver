@@ -1,11 +1,14 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use eframe::egui;
 use futures_channel::mpsc;
 use shared::{
-    ClientMessage, EventSubscription, GraphDocument, GraphExchangeFile, GraphMetadata,
-    GraphRuntimeMode, InputValue, MqttBrokerConfig, NodeDefinition, NodeDiagnosticEntry,
-    NodeDiagnosticSummary, ServerMessage, ServerState, WledInstance,
+    EventSubscription, GraphDocument, GraphExchangeFile, GraphMetadata, GraphRuntimeMode,
+    InputValue, MqttBrokerConfig, NodeDefinition, NodeDiagnosticEntry, NodeDiagnosticSummary,
+    ServerState, WledInstance,
 };
+
+use crate::transport::FrontendTransport;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 /// Identifies which top-level screen the frontend is currently rendering.
@@ -165,15 +168,13 @@ impl Default for SubscriptionState {
     }
 }
 
-/// Holds the current WebSocket transport state and reconnect bookkeeping.
+/// Holds the current frontend transport state and reconnect bookkeeping.
 pub(crate) struct ConnectionState {
     pub(crate) server_state: ServerState,
     pub(crate) ws_status: String,
     pub(crate) has_confirmed_connection: bool,
-    pub(crate) sender: Option<mpsc::UnboundedSender<ClientMessage>>,
-    pub(crate) incoming: Option<mpsc::UnboundedReceiver<ServerMessage>>,
-    #[cfg(target_arch = "wasm32")]
-    pub(crate) events: Option<mpsc::UnboundedReceiver<crate::websocket_client::WebSocketEvent>>,
+    pub(crate) transport: Option<FrontendTransport>,
+    pub(crate) repaint_ctx: Option<egui::Context>,
     pub(crate) reconnect_attempt: u32,
     pub(crate) next_reconnect_at_secs: f64,
 }
@@ -185,10 +186,8 @@ impl Default for ConnectionState {
             server_state: ServerState::default(),
             ws_status: "Disconnected".to_owned(),
             has_confirmed_connection: false,
-            sender: None,
-            incoming: None,
-            #[cfg(target_arch = "wasm32")]
-            events: None,
+            transport: None,
+            repaint_ctx: None,
             reconnect_attempt: 0,
             next_reconnect_at_secs: 0.0,
         }
@@ -198,13 +197,14 @@ impl Default for ConnectionState {
 impl ConnectionState {
     /// Clears all live WebSocket channels and resets the confirmed-connection flag.
     pub(crate) fn clear_channels(&mut self) {
-        self.sender = None;
-        self.incoming = None;
+        self.transport = None;
+        self.repaint_ctx = None;
         self.has_confirmed_connection = false;
-        #[cfg(target_arch = "wasm32")]
-        {
-            self.events = None;
-        }
+    }
+
+    /// Returns whether a transport is currently connected or in the process of connecting.
+    pub(crate) fn is_connected(&self) -> bool {
+        self.transport.is_some()
     }
 
     /// Schedules the next reconnect attempt using exponential backoff capped by attempt count.

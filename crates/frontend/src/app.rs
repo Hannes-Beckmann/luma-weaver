@@ -5,6 +5,8 @@ mod messaging;
 mod navigation;
 mod server_state;
 
+use std::time::Duration;
+
 use eframe::egui;
 use shared::GraphDocument;
 
@@ -39,7 +41,7 @@ impl eframe::App for FrontendApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.sync_state_from_browser_path();
         self.maintain_connection(ctx);
-        self.drain_websocket_events(ctx);
+        self.pump_connection(ctx);
         self.sync_event_subscriptions_and_request_initial_data();
         self.ensure_runtime_updates_subscription();
         self.drain_server_messages(ctx);
@@ -53,6 +55,10 @@ impl eframe::App for FrontendApp {
 
         self.handle_history_shortcuts(ctx);
         self.schedule_graph_document_update(ctx);
+
+        if self.demo_runtime_needs_repaint() {
+            ctx.request_repaint_after(Duration::from_millis(16));
+        }
     }
 }
 

@@ -4,26 +4,35 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[lib]
+path = "src/lib.rs"
+
 [[bin]]
 name = "backend"
 path = "src/main.rs"
 
 [dependencies]
 anyhow.workspace = true
-axum.workspace = true
-futures-util.workspace = true
-http.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 shared = { path = "../shared" }
-tokio.workspace = true
-tower-http.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
-uuid.workspace = true
-mdns-sd = "0.13"
-flume = "0.11"
 palette.workspace = true
 libblur = "0.23"
-socket2 = "0.5"
+futures-channel.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { workspace = true, features = ["js"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+axum.workspace = true
+flume = "0.11"
+futures-util.workspace = true
+http.workspace = true
+mdns-sd = "0.13"
 rumqttc = "0.24"
+socket2 = "0.5"
+tokio.workspace = true
+tower-http.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true

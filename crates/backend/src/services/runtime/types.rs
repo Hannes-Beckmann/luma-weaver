@@ -3,10 +3,8 @@ use std::sync::Arc;
 
 use serde_json::Value as JsonValue;
 use shared::{
-    GraphRuntimeMode, GraphRuntimeStatus, InputValue, LedLayout, NodeDiagnostic, NodeRuntimeValue,
-    NodeTypeId,
+    GraphRuntimeStatus, InputValue, LedLayout, NodeDiagnostic, NodeRuntimeValue, NodeTypeId,
 };
-use tokio::sync::oneshot;
 
 use crate::node_runtime::NodeRegistry;
 use crate::node_runtime::RuntimeNodeEvaluator;
@@ -19,18 +17,6 @@ pub(crate) trait RuntimeEventPublisher: Send + Sync {
     fn node_runtime_update(&self, graph_id: String, node_id: String, values: Vec<NodeRuntimeValue>);
     /// Publishes the current diagnostics for a single node.
     fn node_diagnostics(&self, graph_id: String, node_id: String, diagnostics: Vec<NodeDiagnostic>);
-}
-
-/// Wraps the latest runtime status snapshot returned by manager control operations.
-pub(crate) struct RuntimeStatusesUpdate {
-    pub(crate) statuses: Vec<GraphRuntimeStatus>,
-}
-
-/// Holds the channels and current mode for a running graph task.
-pub(crate) struct RuntimeTask {
-    pub(crate) mode: GraphRuntimeMode,
-    pub(crate) stop_tx: oneshot::Sender<()>,
-    pub(crate) command_tx: tokio::sync::mpsc::UnboundedSender<GraphRuntimeCommand>,
 }
 
 /// Represents a compiled graph ready for runtime execution.
@@ -77,14 +63,4 @@ pub(crate) struct CompiledIncomingEdge {
 pub(crate) struct RenderContext {
     pub(crate) id: String,
     pub(crate) layout: LedLayout,
-}
-
-/// Command messages sent from the runtime manager into a graph execution task.
-pub(crate) enum GraphRuntimeCommand {
-    Start,
-    Pause,
-    Step {
-        ticks: usize,
-        done_tx: oneshot::Sender<()>,
-    },
 }

@@ -694,6 +694,7 @@ mod tests {
             id: id.to_owned(),
             display_name: display_name.to_owned(),
             category,
+            needs_io: false,
             inputs: vec![NodeInputDefinition {
                 name: "value".to_owned(),
                 display_name: "Value".to_owned(),

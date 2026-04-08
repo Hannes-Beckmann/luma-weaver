@@ -479,6 +479,7 @@ mod tests {
             id: "test.visibility".to_owned(),
             display_name: "Test Visibility".to_owned(),
             category: NodeCategory::Debug,
+            needs_io: false,
             inputs: vec![],
             outputs: vec![],
             parameters: vec![

@@ -2,6 +2,7 @@ use shared::ClientMessage;
 use tracing::{error, trace, warn};
 
 use super::FrontendApp;
+use crate::transport::TransportKind;
 
 impl FrontendApp {
     /// Queues a client message for the WebSocket task if a connection is currently available.
@@ -9,7 +10,12 @@ impl FrontendApp {
     /// When no connection exists, or the send queue rejects the message, the user-visible status
     /// text is updated so the failed action is not silent.
     pub(crate) fn send(&mut self, message: ClientMessage) {
-        match &self.connection.sender {
+        match self
+            .connection
+            .transport
+            .as_ref()
+            .map(|transport| &transport.sender)
+        {
             Some(sender) => {
                 trace!(
                     kind = client_message_kind(&message),
@@ -18,6 +24,19 @@ impl FrontendApp {
                 if let Err(error) = sender.unbounded_send(message) {
                     error!(%error, "frontend failed to queue client message");
                     self.ui.status = "Failed to queue message for WebSocket".to_owned();
+                } else if self
+                    .connection
+                    .transport
+                    .as_ref()
+                    .map(|transport| transport.kind() == TransportKind::Demo)
+                    .unwrap_or(false)
+                {
+                    // Demo mode runs the transport pump inside the egui frame loop, so a queued
+                    // request needs an extra repaint to be processed without waiting for user
+                    // input. The websocket transport wakes itself through browser async tasks.
+                    if let Some(ctx) = &self.connection.repaint_ctx {
+                        ctx.request_repaint();
+                    }
                 }
             }
             None => {

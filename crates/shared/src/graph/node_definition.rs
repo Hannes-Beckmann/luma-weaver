@@ -3,9 +3,7 @@
 //! These types describe what a node looks like to persistence, validation, the frontend editor,
 //! and the backend runtime registry.
 
-use super::{
-    ColorGradient, ColorGradientStop, FloatTensor, InputValue, NodeParameter, RgbaColor, ValueKind,
-};
+use super::{ColorGradient, ColorGradientStop, InputValue, NodeParameter, RgbaColor, ValueKind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -109,6 +107,14 @@ pub enum NodeCategory {
     Debug,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+/// Declares where a node can be executed.
+pub enum NodeExecutionTarget {
+    Backend,
+    FrontendDemo,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes the shared schema for a single node type.
 ///
@@ -118,6 +124,8 @@ pub struct NodeDefinition {
     pub id: String,
     pub display_name: String,
     pub category: NodeCategory,
+    #[serde(default)]
+    pub needs_io: bool,
     pub inputs: Vec<NodeInputDefinition>,
     pub outputs: Vec<NodeOutputDefinition>,
     pub parameters: Vec<NodeParameterDefinition>,
@@ -126,6 +134,14 @@ pub struct NodeDefinition {
 }
 
 impl NodeDefinition {
+    /// Returns whether this node definition supports the requested execution target.
+    pub fn supports_execution_target(&self, target: NodeExecutionTarget) -> bool {
+        match target {
+            NodeExecutionTarget::Backend => true,
+            NodeExecutionTarget::FrontendDemo => !self.needs_io,
+        }
+    }
+
     /// Returns the named input port definition, if present.
     pub fn input_port(&self, name: &str) -> Option<&NodeInputDefinition> {
         self.inputs.iter().find(|input| input.name == name)
@@ -163,53 +179,6 @@ impl NodeDefinition {
             .iter()
             .find(|value| value.name == name)
     }
-}
-
-/// Returns the canonical opaque-white default color used by schema helpers.
-fn white_input() -> InputValue {
-    InputValue::Color(RgbaColor {
-        r: 1.0,
-        g: 1.0,
-        b: 1.0,
-        a: 1.0,
-    })
-}
-
-/// Returns the canonical fully transparent default color used by schema helpers.
-fn transparent_input() -> InputValue {
-    InputValue::Color(RgbaColor {
-        r: 0.0,
-        g: 0.0,
-        b: 0.0,
-        a: 0.0,
-    })
-}
-
-/// Returns the canonical single-sample zero tensor used by schema helpers.
-fn default_tensor_input() -> InputValue {
-    InputValue::FloatTensor(FloatTensor {
-        shape: vec![1],
-        values: vec![0.0],
-    })
-}
-
-/// Converts a snake_case internal field name into a simple title-cased display label.
-fn title_case_name(name: &str) -> String {
-    name.split('_')
-        .filter(|part| !part.is_empty())
-        .map(|part| {
-            let mut chars = part.chars();
-            match chars.next() {
-                Some(first) => {
-                    let mut word = first.to_uppercase().collect::<String>();
-                    word.push_str(chars.as_str());
-                    word
-                }
-                None => String::new(),
-            }
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -421,6 +390,7 @@ pub enum ParameterUiHint {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::builtin_node_definition;
     use serde_json::json;
 
     #[test]
@@ -526,6 +496,70 @@ mod tests {
             name: "mode".to_owned(),
             value: json!("udp_unicast"),
         }]));
+    }
+
+    #[test]
+    fn builtin_needs_io_marks_backend_only_nodes() {
+        assert!(
+            builtin_node_definition(NodeTypeId::AUDIO_FFT_RECEIVER)
+                .expect("audio fft receiver definition")
+                .needs_io
+        );
+        assert!(
+            builtin_node_definition(NodeTypeId::WLED_TARGET)
+                .expect("wled target definition")
+                .needs_io
+        );
+    }
+
+    #[test]
+    fn builtin_needs_io_marks_portable_nodes() {
+        assert!(
+            !builtin_node_definition(NodeTypeId::PLOT)
+                .expect("plot definition")
+                .needs_io
+        );
+        assert!(
+            !builtin_node_definition(NodeTypeId::WLED_DUMMY_DISPLAY)
+                .expect("wled dummy display definition")
+                .needs_io
+        );
+    }
+
+    #[test]
+    fn supports_execution_target_uses_needs_io() {
+        let backend_only = NodeDefinition {
+            id: "test.io".to_owned(),
+            display_name: "Test IO".to_owned(),
+            category: NodeCategory::Inputs,
+            needs_io: true,
+            inputs: vec![],
+            outputs: vec![],
+            parameters: vec![],
+            connection: NodeConnectionDefinition {
+                max_input_connections: 1,
+                require_value_kind_match: true,
+            },
+            runtime_updates: None,
+        };
+        let portable = NodeDefinition {
+            id: "test.portable".to_owned(),
+            display_name: "Test Portable".to_owned(),
+            category: NodeCategory::Inputs,
+            needs_io: false,
+            inputs: vec![],
+            outputs: vec![],
+            parameters: vec![],
+            connection: NodeConnectionDefinition {
+                max_input_connections: 1,
+                require_value_kind_match: true,
+            },
+            runtime_updates: None,
+        };
+
+        assert!(backend_only.supports_execution_target(NodeExecutionTarget::Backend));
+        assert!(!backend_only.supports_execution_target(NodeExecutionTarget::FrontendDemo));
+        assert!(portable.supports_execution_target(NodeExecutionTarget::FrontendDemo));
     }
 }
 

@@ -4,11 +4,15 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+demo-mode = ["dep:backend"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
 
 [dependencies]
+backend = { path = "../backend", optional = true }
 eframe.workspace = true
 egui.workspace = true
 egui-snarl = "0.9"

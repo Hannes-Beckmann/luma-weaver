@@ -128,6 +128,7 @@ static FLOAT_CONSTANT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     id: NodeTypeId::FLOAT_CONSTANT.to_owned(),
     display_name: "Float Constant".to_owned(),
     category: NodeCategory::Inputs,
+    needs_io: false,
     inputs: vec![],
     outputs: vec![NodeOutputDefinition {
         name: "value".to_owned(),
@@ -156,6 +157,7 @@ static COLOR_CONSTANT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     id: NodeTypeId::COLOR_CONSTANT.to_owned(),
     display_name: "Color Constant".to_owned(),
     category: NodeCategory::Inputs,
+    needs_io: false,
     inputs: vec![],
     outputs: vec![NodeOutputDefinition {
         name: "color".to_owned(),
@@ -185,6 +187,7 @@ static DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefini
     id: NodeTypeId::DISPLAY.to_owned(),
     display_name: "Display".to_owned(),
     category: NodeCategory::Outputs,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
@@ -221,6 +224,7 @@ static PLOT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinitio
     id: NodeTypeId::PLOT.to_owned(),
     display_name: "Plot".to_owned(),
     category: NodeCategory::Outputs,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
@@ -249,6 +253,7 @@ static DELAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefiniti
     id: NodeTypeId::DELAY.to_owned(),
     display_name: "Delay".to_owned(),
     category: NodeCategory::TemporalFilters,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
@@ -283,6 +288,7 @@ static WLED_TARGET_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
     id: NodeTypeId::WLED_TARGET.to_owned(),
     display_name: "Wled Target".to_owned(),
     category: NodeCategory::Outputs,
+    needs_io: true,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
@@ -320,6 +326,7 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
     id: NodeTypeId::WLED_SINK.to_owned(),
     display_name: "Wled Sink".to_owned(),
     category: NodeCategory::Inputs,
+    needs_io: true,
     inputs: vec![],
     outputs: vec![NodeOutputDefinition {
         name: "frame".to_owned(),
@@ -367,6 +374,7 @@ static AUDIO_FFT_RECEIVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
     id: NodeTypeId::AUDIO_FFT_RECEIVER.to_owned(),
     display_name: "Audio FFT Receiver".to_owned(),
     category: NodeCategory::Inputs,
+    needs_io: true,
     inputs: vec![],
     outputs: vec![
         NodeOutputDefinition {
@@ -447,6 +455,7 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     id: NodeTypeId::HA_MQTT_NUMBER.to_owned(),
     display_name: "Home Assistant MQTT Number".to_owned(),
     category: NodeCategory::Inputs,
+    needs_io: true,
     inputs: vec![],
     outputs: vec![NodeOutputDefinition {
         name: "value".to_owned(),
@@ -531,6 +540,7 @@ static ADD_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
     id: NodeTypeId::ADD_FLOAT.to_owned(),
     display_name: "Add Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
@@ -565,6 +575,7 @@ static SUBTRACT_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     id: NodeTypeId::SUBTRACT_FLOAT.to_owned(),
     display_name: "Subtract Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
@@ -599,6 +610,7 @@ static SIGNAL_GENERATOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
     id: NodeTypeId::SIGNAL_GENERATOR.to_owned(),
     display_name: "Signal Generator".to_owned(),
     category: NodeCategory::Inputs,
+    needs_io: false,
     inputs: vec![],
     outputs: vec![NodeOutputDefinition {
         name: "value".to_owned(),
@@ -657,6 +669,7 @@ static DIVIDE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeD
     id: NodeTypeId::DIVIDE_FLOAT.to_owned(),
     display_name: "Divide Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
@@ -691,6 +704,7 @@ static MIN_MAX_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     id: NodeTypeId::MIN_MAX_FLOAT.to_owned(),
     display_name: "Min/Max Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
@@ -732,6 +746,7 @@ static MULTIPLY_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     id: NodeTypeId::MULTIPLY_FLOAT.to_owned(),
     display_name: "Multiply Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
@@ -766,6 +781,7 @@ static ABS_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
     id: NodeTypeId::ABS_FLOAT.to_owned(),
     display_name: "Abs Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
@@ -791,6 +807,7 @@ static CLAMP_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
     id: NodeTypeId::CLAMP_FLOAT.to_owned(),
     display_name: "Clamp Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "value".to_owned(),
@@ -832,6 +849,7 @@ static POWER_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
     id: NodeTypeId::POWER_FLOAT.to_owned(),
     display_name: "Power Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "base".to_owned(),
@@ -866,6 +884,7 @@ static ROOT_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
     id: NodeTypeId::ROOT_FLOAT.to_owned(),
     display_name: "Root Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "value".to_owned(),
@@ -900,6 +919,7 @@ static EXPONENTIAL_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
     id: NodeTypeId::EXPONENTIAL_FLOAT.to_owned(),
     display_name: "Exponential Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
@@ -925,6 +945,7 @@ static LOG_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
     id: NodeTypeId::LOG_FLOAT.to_owned(),
     display_name: "Log Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "value".to_owned(),
@@ -959,6 +980,7 @@ static MAP_RANGE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| No
     id: NodeTypeId::MAP_RANGE_FLOAT.to_owned(),
     display_name: "Map Range Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "value".to_owned(),
@@ -1014,6 +1036,7 @@ static ROUND_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
     id: NodeTypeId::ROUND_FLOAT.to_owned(),
     display_name: "Round Float".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
@@ -1046,6 +1069,7 @@ static SCALE_TENSOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeD
     id: NodeTypeId::SCALE_TENSOR.to_owned(),
     display_name: "Scale Tensor".to_owned(),
     category: NodeCategory::Math,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "tensor".to_owned(),
@@ -1080,6 +1104,7 @@ static SCALE_COLOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
     id: NodeTypeId::SCALE_COLOR.to_owned(),
     display_name: "Scale Color".to_owned(),
     category: NodeCategory::FrameOperations,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "color".to_owned(),
@@ -1114,6 +1139,7 @@ static MULTIPLY_COLOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     id: NodeTypeId::MULTIPLY_COLOR.to_owned(),
     display_name: "Multiply Color".to_owned(),
     category: NodeCategory::FrameOperations,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
@@ -1148,6 +1174,7 @@ static TINT_FRAME_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
     id: NodeTypeId::TINT_FRAME.to_owned(),
     display_name: "Tint Frame".to_owned(),
     category: NodeCategory::FrameOperations,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
@@ -1182,6 +1209,7 @@ static MASK_FRAME_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
     id: NodeTypeId::MASK_FRAME.to_owned(),
     display_name: "Mask Frame".to_owned(),
     category: NodeCategory::FrameOperations,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
@@ -1216,6 +1244,7 @@ static MIX_COLOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
     id: NodeTypeId::MIX_COLOR.to_owned(),
     display_name: "Mix Color".to_owned(),
     category: NodeCategory::FrameOperations,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "foreground".to_owned(),
@@ -1257,6 +1286,7 @@ static ALPHA_OVER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
     id: NodeTypeId::ALPHA_OVER.to_owned(),
     display_name: "Alpha Over".to_owned(),
     category: NodeCategory::FrameOperations,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "foreground".to_owned(),
@@ -1291,6 +1321,7 @@ static FADE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinitio
     id: NodeTypeId::FADE.to_owned(),
     display_name: "Fade".to_owned(),
     category: NodeCategory::TemporalFilters,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "value".to_owned(),
@@ -1325,6 +1356,7 @@ static MOVING_AVERAGE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     id: NodeTypeId::MOVING_AVERAGE.to_owned(),
     display_name: "Moving Average".to_owned(),
     category: NodeCategory::TemporalFilters,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "value".to_owned(),
@@ -1369,6 +1401,7 @@ static MOVING_MEDIAN_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     id: NodeTypeId::MOVING_MEDIAN.to_owned(),
     display_name: "Moving Median".to_owned(),
     category: NodeCategory::TemporalFilters,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "value".to_owned(),
@@ -1403,6 +1436,7 @@ static BOX_BLUR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefin
     id: NodeTypeId::BOX_BLUR.to_owned(),
     display_name: "Box Blur".to_owned(),
     category: NodeCategory::SpatialFilters,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
@@ -1437,6 +1471,7 @@ static GAUSSIAN_BLUR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     id: NodeTypeId::GAUSSIAN_BLUR.to_owned(),
     display_name: "Gaussian Blur".to_owned(),
     category: NodeCategory::SpatialFilters,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
@@ -1471,6 +1506,7 @@ static MEDIAN_FILTER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     id: NodeTypeId::MEDIAN_FILTER.to_owned(),
     display_name: "Median Filter".to_owned(),
     category: NodeCategory::SpatialFilters,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
@@ -1505,6 +1541,7 @@ static LAPLACIAN_FILTER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
     id: NodeTypeId::LAPLACIAN_FILTER.to_owned(),
     display_name: "Laplacian Filter".to_owned(),
     category: NodeCategory::SpatialFilters,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "frame".to_owned(),
         display_name: title_case_name("frame"),
@@ -1553,6 +1590,7 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
     id: NodeTypeId::SPECTRUM_ANALYZER.to_owned(),
     display_name: "Spectrum Analyzer".to_owned(),
     category: NodeCategory::Generators,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "spectrum".to_owned(),
         display_name: title_case_name("spectrum"),
@@ -1629,6 +1667,7 @@ static SOLID_FRAME_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
     id: NodeTypeId::SOLID_FRAME.to_owned(),
     display_name: "Solid Frame".to_owned(),
     category: NodeCategory::Generators,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "color".to_owned(),
         display_name: title_case_name("color"),
@@ -1654,6 +1693,7 @@ static RAINBOW_SWEEP_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     id: NodeTypeId::RAINBOW_SWEEP.to_owned(),
     display_name: "Linear Sweep".to_owned(),
     category: NodeCategory::Generators,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),
@@ -1700,6 +1740,7 @@ static CIRCLE_SWEEP_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeD
     id: NodeTypeId::CIRCLE_SWEEP.to_owned(),
     display_name: "Circle Sweep".to_owned(),
     category: NodeCategory::Generators,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),
@@ -1746,6 +1787,7 @@ static LEVEL_BAR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
     id: NodeTypeId::LEVEL_BAR.to_owned(),
     display_name: "Level Bar".to_owned(),
     category: NodeCategory::Generators,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "loudness".to_owned(),
         display_name: title_case_name("loudness"),
@@ -1776,6 +1818,7 @@ static TWINKLE_STARS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     id: NodeTypeId::TWINKLE_STARS.to_owned(),
     display_name: "Twinkle Stars".to_owned(),
     category: NodeCategory::Generators,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),
@@ -1829,6 +1872,7 @@ static PLASMA_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinit
     id: NodeTypeId::PLASMA.to_owned(),
     display_name: "Plasma".to_owned(),
     category: NodeCategory::Generators,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),
@@ -1889,6 +1933,7 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     id: NodeTypeId::BOUNCING_BALLS.to_owned(),
     display_name: "Bouncing Balls".to_owned(),
     category: NodeCategory::Generators,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),
@@ -1950,6 +1995,7 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
     id: NodeTypeId::WLED_DUMMY_DISPLAY.to_owned(),
     display_name: "Wled Dummy Display".to_owned(),
     category: NodeCategory::Debug,
+    needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
@@ -1999,6 +2045,7 @@ static FRAME_BRIGHTNESS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
     id: NodeTypeId::FRAME_BRIGHTNESS.to_owned(),
     display_name: "Frame Brightness".to_owned(),
     category: NodeCategory::FrameOperations,
+    needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
