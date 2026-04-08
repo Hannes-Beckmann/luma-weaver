@@ -15,10 +15,29 @@ use tokio::time::MissedTickBehavior;
 use crate::node_runtime::NodeRegistry;
 use crate::services::graph_store::GraphStore;
 use crate::services::runtime::compiler::compile_graph_document;
-use crate::services::runtime::types::{
-    CompiledGraph, GraphExecutionState, GraphRuntimeCommand, RuntimeEventPublisher,
-    RuntimeStatusesUpdate, RuntimeTask,
-};
+use crate::services::runtime::types::{CompiledGraph, GraphExecutionState, RuntimeEventPublisher};
+
+/// Wraps the latest runtime status snapshot returned by manager control operations.
+pub(crate) struct RuntimeStatusesUpdate {
+    pub(crate) statuses: Vec<GraphRuntimeStatus>,
+}
+
+/// Holds the channels and current mode for a running graph task.
+struct RuntimeTask {
+    mode: GraphRuntimeMode,
+    stop_tx: oneshot::Sender<()>,
+    command_tx: tokio::sync::mpsc::UnboundedSender<GraphRuntimeCommand>,
+}
+
+/// Command messages sent from the runtime manager into a graph execution task.
+enum GraphRuntimeCommand {
+    Start,
+    Pause,
+    Step {
+        ticks: usize,
+        done_tx: oneshot::Sender<()>,
+    },
+}
 
 pub(crate) struct GraphRuntimeManager {
     node_registry: Arc<NodeRegistry>,

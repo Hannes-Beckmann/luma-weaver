@@ -16,9 +16,10 @@ pub(crate) enum TransportKind {
     Demo,
 }
 
+#[cfg(target_arch = "wasm32")]
 impl FrontendTransport {
     pub(crate) fn connect(ctx: &egui::Context) -> Result<(Self, String), String> {
-        #[cfg(all(target_arch = "wasm32", feature = "demo-mode"))]
+        #[cfg(feature = "demo-mode")]
         {
             let _ = ctx;
             let (sender, incoming, demo_service) = backend::demo::connect_demo()
@@ -28,22 +29,15 @@ impl FrontendTransport {
                     kind: TransportKind::Demo,
                     sender,
                     incoming,
-                    #[cfg(target_arch = "wasm32")]
                     implementation: TransportImplementation::Demo { demo_service },
                 },
                 "Demo".to_owned(),
             ));
         }
 
-        #[cfg(all(target_arch = "wasm32", not(feature = "demo-mode")))]
+        #[cfg(not(feature = "demo-mode"))]
         {
             return websocket::connect(ctx);
-        }
-
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = ctx;
-            Err("Frontend transport is only available in wasm builds".to_owned())
         }
     }
 
@@ -52,16 +46,24 @@ impl FrontendTransport {
     }
 
     pub(crate) fn poll(&mut self, now_secs: f64) -> Option<String> {
-        #[cfg(target_arch = "wasm32")]
-        {
-            return self.implementation.poll(now_secs);
-        }
+        self.implementation.poll(now_secs)
+    }
+}
 
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = now_secs;
-            None
-        }
+#[cfg(not(target_arch = "wasm32"))]
+impl FrontendTransport {
+    pub(crate) fn connect(ctx: &egui::Context) -> Result<(Self, String), String> {
+        let _ = ctx;
+        Err("Frontend transport is only available in wasm builds".to_owned())
+    }
+
+    pub(crate) fn kind(&self) -> TransportKind {
+        self.kind
+    }
+
+    pub(crate) fn poll(&mut self, now_secs: f64) -> Option<String> {
+        let _ = now_secs;
+        None
     }
 }
 
