@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
+use eframe::egui;
 use futures_channel::mpsc;
 use shared::{
     EventSubscription, GraphDocument, GraphExchangeFile, GraphMetadata, GraphRuntimeMode,
@@ -173,6 +174,7 @@ pub(crate) struct ConnectionState {
     pub(crate) ws_status: String,
     pub(crate) has_confirmed_connection: bool,
     pub(crate) transport: Option<FrontendTransport>,
+    pub(crate) repaint_ctx: Option<egui::Context>,
     pub(crate) reconnect_attempt: u32,
     pub(crate) next_reconnect_at_secs: f64,
 }
@@ -185,6 +187,7 @@ impl Default for ConnectionState {
             ws_status: "Disconnected".to_owned(),
             has_confirmed_connection: false,
             transport: None,
+            repaint_ctx: None,
             reconnect_attempt: 0,
             next_reconnect_at_secs: 0.0,
         }
@@ -195,6 +198,7 @@ impl ConnectionState {
     /// Clears all live WebSocket channels and resets the confirmed-connection flag.
     pub(crate) fn clear_channels(&mut self) {
         self.transport = None;
+        self.repaint_ctx = None;
         self.has_confirmed_connection = false;
     }
 

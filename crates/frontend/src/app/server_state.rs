@@ -18,10 +18,12 @@ impl FrontendApp {
         &mut self,
         ws_status: String,
         transport: crate::transport::FrontendTransport,
+        repaint_ctx: eframe::egui::Context,
     ) {
         self.connection.ws_status = ws_status;
         self.connection.has_confirmed_connection = false;
         self.connection.transport = Some(transport);
+        self.connection.repaint_ctx = Some(repaint_ctx);
         self.connection.reconnect_attempt = 0;
         self.reset_subscription_sync_state();
         info!("frontend connection established");

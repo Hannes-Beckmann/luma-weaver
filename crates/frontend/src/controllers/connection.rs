@@ -15,7 +15,7 @@ impl FrontendApp {
         }
 
         match crate::transport::FrontendTransport::connect(ctx) {
-            Ok((transport, ws_status)) => self.handle_connected(ws_status, transport),
+            Ok((transport, ws_status)) => self.handle_connected(ws_status, transport, ctx.clone()),
             Err(ws_status) => {
                 self.handle_disconnected(now_secs, ws_status);
                 self.ui.status = "WebSocket disconnected, retrying".to_owned();
