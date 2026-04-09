@@ -2,6 +2,12 @@
 
 This page describes the current high-level structure of `luma-weaver`.
 
+Use this page for crate boundaries, module responsibilities, and deployment-level structure.
+
+- For long-lived backend service instances, see [backend-objects.md](backend-objects.md).
+- For protocol flow and WebSocket behavior, see [protocol-runtime.md](protocol-runtime.md).
+- For graph compilation and runtime execution internals, see [runtime-execution.md](runtime-execution.md).
+
 ## Workspace Layout
 
 The Rust workspace is split into three crates:
@@ -49,7 +55,9 @@ Important frontend areas:
 - `crates/frontend/src/controllers/...`: subscription and message synchronization with the backend
 - `crates/frontend/src/editor_view/...`: graph editor model, viewer, widgets, and UI behavior
 - `crates/frontend/src/dashboard_view.rs`: dashboard-level graph management and monitoring UX
-- `crates/frontend/src/websocket_client.rs`: browser WebSocket transport
+- `crates/frontend/src/transport.rs`: frontend transport abstraction used by the frontend
+- `crates/frontend/index.html`: frontend entry page used for normal startup and Pages route restoration
+- `crates/frontend/404.html`: GitHub Pages fallback used to redirect deep links back through the app entrypoint
 
 ## Shared Responsibilities
 
@@ -74,6 +82,20 @@ This separation is intentional:
 - `shared` defines what the node is
 - `backend` defines how the node behaves at runtime
 - `frontend` renders and edits it using the shared definition
+
+The GitHub Pages demo reuses a portable subset of runtime behavior that can be compiled into the frontend's wasm build. That is why some backend code is now structured to compile on `wasm32` while backend-only services remain gated to native targets.
+
+## Pages Preview Path
+
+The repository also has a static GitHub Pages preview path for the frontend.
+
+Architecturally, that path relies on:
+
+- `index.html` restoring redirected deep links before the wasm app boots
+- `404.html` redirecting unknown static routes back through the app entrypoint
+- navigation code under `crates/frontend/src/app/navigation.rs` keeping the project base path stable
+
+For the publishing workflow itself, see [workflows.md](workflows.md).
 
 ## Diagnostics
 

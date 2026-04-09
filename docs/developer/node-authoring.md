@@ -2,6 +2,11 @@
 
 This page describes the normal workflow for adding or changing built-in nodes in `luma-weaver`.
 
+Keep this page focused on node lifecycle work.
+
+- For general contribution rules, see [contributing.md](contributing.md).
+- For repo-wide maintenance checklists, see [AGENTS.md](https://github.com/Hannes-Beckmann/luma-weaver/blob/main/AGENTS.md).
+
 ## Mental Model
 
 A built-in node is not implemented in just one place.
@@ -103,9 +108,10 @@ When adding a node:
 - note that menu organization and implementation organization are related but not always identical
 - keep the stable node type prefix aligned with the implementation family used in the codebase
 
-The current add menu uses the user-facing category as the top-level grouping and then sub-groups
-nodes by the implementation prefix in the stable node type ID, such as `core.`, `math.`,
-`color.`, `anim.`, `net.`, or `debug.`.
+The current add menu uses the user-facing category as the top-level grouping and then keeps nodes
+aligned with the stable node type families already used in the codebase, such as `inputs.`,
+`generators.`, `math.`, `frame_operations.`, `temporal_filters.`, `spatial_filters.`,
+`outputs.`, or `debug.`.
 
 That means a node can still live in a user-friendly category like `Inputs` or `Outputs` while the
 menu also shows contributors which code area it comes from.
@@ -122,19 +128,11 @@ That means node work should consider:
 
 Do not assume schema changes are harmless just because the runtime compiles.
 
-## Verification
-
-Use the smallest meaningful check set for the node you touched:
-
-- `cargo test -p shared -p backend --locked`
-- `cargo test -p backend --locked`
-- `cargo test -p frontend --locked` when UI behavior changed
-- `trunk build --release` from `crates/frontend` when frontend/editor rendering changed
-
 ## Docs And Examples
 
-Update these when relevant:
+When node behavior changes in a user-visible way, also update:
 
-- [../../README.md](../../README.md)
-- [../../AGENTS.md](../../AGENTS.md) if contributor guidance changed
+- [README.md](https://github.com/Hannes-Beckmann/luma-weaver/blob/main/README.md)
 - `examples/Example.animation-graph.json` when the sample graph should demonstrate the new behavior or no longer matches the catalog
+
+For general verification expectations and contributor process, use [contributing.md](contributing.md) together with [AGENTS.md](https://github.com/Hannes-Beckmann/luma-weaver/blob/main/AGENTS.md).

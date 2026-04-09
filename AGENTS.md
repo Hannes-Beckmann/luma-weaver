@@ -102,7 +102,7 @@ Use this section as a maintenance checklist. When one of these events happens, e
 - Update the frontend handling in:
   - `crates/frontend/src/controllers/messages.rs`
   - `crates/frontend/src/controllers/subscriptions.rs`
-  - `crates/frontend/src/websocket_client.rs`
+  - `crates/frontend/src/transport.rs`
   - `crates/frontend/src/app/messaging.rs`
 - Add or update protocol tests where practical.
 - Update [README.md](README.md) if externally visible endpoints, message semantics, or runtime behavior changed.

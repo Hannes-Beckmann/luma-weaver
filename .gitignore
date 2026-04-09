@@ -1,4 +1,5 @@
 /target
+/book
 dist
 node_modules
 .DS_Store
