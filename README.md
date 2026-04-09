@@ -158,6 +158,8 @@ Running that workflow builds:
 
 The published frontend preview runs entirely in the browser without a backend, so backend-dependent features are intentionally unavailable there.
 
+For local docs work, the `mdBook` project lives under `docs-book/` and reads its content from `docs/`.
+
 Current live URL:
 
 - https://hannes-beckmann.github.io/luma-weaver/

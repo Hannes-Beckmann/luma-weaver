@@ -1,7 +1,7 @@
 [book]
 authors = ["Hannes Beckmann"]
 language = "en"
-src = "docs"
+src = "../docs"
 title = "Luma Weaver Docs"
 
 [build]

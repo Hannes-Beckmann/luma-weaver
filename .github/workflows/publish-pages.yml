@@ -65,6 +65,7 @@ jobs:
 
       - name: Build mdBook docs
         shell: bash
+        working-directory: docs-book
         run: mdbook build
         env:
           MDBOOK_OUTPUT__HTML__SITE_URL: ${{ steps.pages-paths.outputs.docs_site_url }}
@@ -79,7 +80,7 @@ jobs:
           rm -rf site
           mkdir -p site/docs site/reference
           cp -R crates/frontend/dist/. site/
-          cp -R book/. site/docs/
+          cp -R docs-book/book/. site/docs/
           cp -R target/doc/. site/reference/
           touch site/.nojekyll
 

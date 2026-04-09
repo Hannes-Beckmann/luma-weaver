@@ -86,7 +86,7 @@ Common commands:
 - `cargo build --locked --release -p backend`
 - `trunk build --release`
 - `trunk build --release --features demo-mode --public-url /luma-weaver/`
-- `mdbook build`
+- `mdbook build docs-book`
 - `cargo doc --workspace --no-deps`
 
 ## Branch And PR Conventions
