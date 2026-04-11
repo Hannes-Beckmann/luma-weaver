@@ -1,0 +1,17 @@
+[book]
+authors = ["Hannes Beckmann"]
+language = "en"
+src = "../docs"
+title = "Luma Weaver Docs"
+
+[build]
+build-dir = "book"
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
+
+[output.html]
+default-theme = "navy"
+git-repository-url = "https://github.com/Hannes-Beckmann/luma-weaver"
+site-url = "/luma-weaver/docs/"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]

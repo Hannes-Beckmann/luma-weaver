@@ -2,14 +2,35 @@
 
 This page describes the working conventions for contributors and coding agents in `luma-weaver`.
 
+Use this page as the developer entry point.
+
+- If you want to understand the codebase shape, start with [architecture.md](architecture.md).
+- If you want to understand backend service ownership, read [backend-objects.md](backend-objects.md).
+- If you want to change protocol, subscriptions, or WebSocket behavior, read [protocol-runtime.md](protocol-runtime.md).
+- If you want to change graph compilation or runtime execution, read [runtime-execution.md](runtime-execution.md).
+- If you want to add or change built-in nodes, read [node-authoring.md](node-authoring.md).
+- If you want to understand CI, releases, or publishing, read [workflows.md](workflows.md).
+
 ## Source Of Truth
 
 Use these files together:
 
-- [../../README.md](../../README.md): project overview, development commands, and deployment notes
-- [../../AGENTS.md](../../AGENTS.md): repo-specific execution guidance and maintenance checklists
+- [README.md](https://github.com/Hannes-Beckmann/luma-weaver/blob/main/README.md): project overview, development commands, and deployment notes
+- [AGENTS.md](https://github.com/Hannes-Beckmann/luma-weaver/blob/main/AGENTS.md): repo-specific execution guidance and maintenance checklists
 - [architecture.md](architecture.md): workspace and runtime architecture
+- [backend-objects.md](backend-objects.md): long-lived backend objects and their relationships
+- [protocol-runtime.md](protocol-runtime.md): protocol and WebSocket internals
+- [runtime-execution.md](runtime-execution.md): compilation, render contexts, and tick execution
 - [node-authoring.md](node-authoring.md): node implementation workflow
+
+## When To Read Which Page
+
+- `architecture.md`: crate boundaries, module responsibilities, deployment-level structure
+- `backend-objects.md`: long-lived backend service instances, ownership, and process-wide relationships
+- `protocol-runtime.md`: frontend/backend messaging, subscriptions, and transport routing
+- `runtime-execution.md`: graph compilation, render contexts, tick execution, runtime manager behavior
+- `node-authoring.md`: built-in node lifecycle across shared schema, backend runtime, registry, and editor
+- `workflows.md`: CI, Docker/release validation, add-on publishing, and Pages publishing
 
 ## Git Workflow
 
@@ -48,10 +69,19 @@ Update docs when the user-facing or contributor-facing behavior changes.
 
 Common docs touchpoints:
 
-- [../../README.md](../../README.md)
-- [../../DOCS.md](../../DOCS.md)
+- [README.md](https://github.com/Hannes-Beckmann/luma-weaver/blob/main/README.md)
+- [DOCS.md](https://github.com/Hannes-Beckmann/luma-weaver/blob/main/DOCS.md)
 - [architecture.md](architecture.md)
 - [node-authoring.md](node-authoring.md)
+
+Choose the deeper developer page by topic:
+
+- system/module shape: [architecture.md](architecture.md)
+- service ownership: [backend-objects.md](backend-objects.md)
+- message flow: [protocol-runtime.md](protocol-runtime.md)
+- runtime behavior: [runtime-execution.md](runtime-execution.md)
+- node lifecycle: [node-authoring.md](node-authoring.md)
+- repo automation and publishing: [workflows.md](workflows.md)
 
 ## Dependency And Compatibility Risk
 
