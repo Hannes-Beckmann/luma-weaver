@@ -70,9 +70,13 @@ jobs:
         env:
           MDBOOK_OUTPUT__HTML__SITE_URL: ${{ steps.pages-paths.outputs.docs_site_url }}
 
-      - name: Build Rust reference docs
+      - name: Build Rust reference docs for backend and shared
         shell: bash
-        run: cargo doc --workspace --no-deps
+        run: cargo doc -p backend -p shared --no-deps --locked
+
+      - name: Build Rust reference docs for frontend wasm target
+        shell: bash
+        run: cargo doc -p frontend --no-deps --locked --target wasm32-unknown-unknown
 
       - name: Assemble GitHub Pages artifact
         shell: bash
@@ -82,6 +86,8 @@ jobs:
           cp -R crates/frontend/dist/. site/
           cp -R docs-book/book/. site/docs/
           cp -R target/doc/. site/reference/
+          cp -R target/wasm32-unknown-unknown/doc/frontend site/reference/frontend
+          cp -R target/wasm32-unknown-unknown/doc/src site/reference/src
           touch site/.nojekyll
 
       - name: Upload GitHub Pages artifact

@@ -66,7 +66,8 @@ This workflow:
 - runs manually with `workflow_dispatch`
 - builds `crates/frontend` with `--features demo-mode`
 - builds the docs site with `mdbook`
-- builds generated Rust reference docs with `cargo doc --workspace --no-deps`
+- builds generated Rust reference docs for `backend` and `shared` natively
+- builds generated Rust reference docs for `frontend` on `wasm32-unknown-unknown`
 - assembles one GitHub Pages artifact containing the preview app, docs, and reference
 
 Published paths:
@@ -87,7 +88,8 @@ Common commands:
 - `trunk build --release`
 - `trunk build --release --features demo-mode --public-url /luma-weaver/`
 - `mdbook build docs-book`
-- `cargo doc --workspace --no-deps`
+- `cargo doc -p backend -p shared --no-deps --locked`
+- `cargo doc -p frontend --no-deps --locked --target wasm32-unknown-unknown`
 
 ## Branch And PR Conventions
 
