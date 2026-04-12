@@ -12,7 +12,7 @@ use super::{EditorInputPort, EditorOutputPort, EditorSnarlNode};
 ///
 /// Node positions, collapsed state, wires, schema-driven defaults, and live runtime values are
 /// all projected into the editor model used by `egui_snarl`.
-pub(super) fn build_snarl_from_document(
+pub(crate) fn build_snarl_from_document(
     document: &GraphDocument,
     available_node_definitions: &[NodeDefinition],
     runtime_node_values: &HashMap<String, HashMap<String, InputValue>>,
@@ -75,7 +75,7 @@ pub(super) fn build_snarl_from_document(
 ///
 /// This updates node positions, collapsed state, titles, input values, parameters, and edges so
 /// the document can be autosaved or sent back to the backend.
-pub(super) fn sync_document_from_snarl(
+pub(crate) fn sync_document_from_snarl(
     document: &mut GraphDocument,
     snarl: &Snarl<EditorSnarlNode>,
 ) {
@@ -463,6 +463,154 @@ pub(super) fn find_node_definition<'a>(
     available_node_definitions
         .iter()
         .find(|definition| definition.id == node_type_id)
+}
+
+/// Refreshes live runtime values on an existing editor snarl without rebuilding node identities.
+pub(crate) fn refresh_snarl_runtime_values(
+    snarl: &mut Snarl<EditorSnarlNode>,
+    available_node_definitions: &[NodeDefinition],
+    runtime_node_values: &HashMap<String, HashMap<String, InputValue>>,
+) {
+    for (_node_id, editor_node) in snarl.nodes_ids_mut() {
+        let runtime_values = runtime_node_values.get(editor_node.graph_node_id.as_str());
+
+        if find_node_definition(available_node_definitions, &editor_node.node_type_id).is_some() {
+            for output in &mut editor_node.outputs {
+                output.runtime_value = runtime_values
+                    .and_then(|values| values.get(&output.name))
+                    .cloned();
+            }
+        } else {
+            for output in &mut editor_node.outputs {
+                output.runtime_value = None;
+            }
+        }
+
+        editor_node.runtime_values = runtime_values
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|(name, value)| (name.clone(), value.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+    }
+}
+
+/// Patches an existing editor snarl to match the persisted graph document while preserving
+/// surviving node identities and their cached egui layout state.
+pub(crate) fn patch_snarl_from_document(
+    snarl: &mut Snarl<EditorSnarlNode>,
+    document: &GraphDocument,
+    available_node_definitions: &[NodeDefinition],
+    runtime_node_values: &HashMap<String, HashMap<String, InputValue>>,
+) {
+    let mut existing_node_ids = HashMap::<String, NodeId>::new();
+    for (node_id, editor_node) in snarl.nodes_ids_mut() {
+        existing_node_ids.insert(editor_node.graph_node_id.clone(), node_id);
+    }
+
+    let document_node_ids = document
+        .nodes
+        .iter()
+        .map(|node| node.id.as_str())
+        .collect::<std::collections::HashSet<_>>();
+
+    let removed_node_ids = existing_node_ids
+        .iter()
+        .filter_map(|(graph_node_id, node_id)| {
+            (!document_node_ids.contains(graph_node_id.as_str())).then_some(*node_id)
+        })
+        .collect::<Vec<_>>();
+    for node_id in removed_node_ids {
+        snarl.remove_node(node_id);
+    }
+
+    existing_node_ids.clear();
+    for (node_id, editor_node) in snarl.nodes_ids_mut() {
+        existing_node_ids.insert(editor_node.graph_node_id.clone(), node_id);
+    }
+
+    for node in &document.nodes {
+        let runtime_values = runtime_node_values.get(&node.id);
+        let refreshed_editor_node =
+            editor_node_from_graph_node(node, available_node_definitions, runtime_values);
+
+        if let Some(existing_node_id) = existing_node_ids.get(node.id.as_str()).copied() {
+            if let Some(editor_node) = snarl.get_node_mut(existing_node_id) {
+                *editor_node = refreshed_editor_node;
+            }
+            if let Some(node_info) = snarl.get_node_info_mut(existing_node_id) {
+                node_info.pos = egui::pos2(node.viewport.position.x, node.viewport.position.y);
+            }
+            snarl.open_node(existing_node_id, !node.viewport.collapsed);
+            continue;
+        }
+
+        let inserted_node_id = if node.viewport.collapsed {
+            snarl.insert_node_collapsed(
+                egui::pos2(node.viewport.position.x, node.viewport.position.y),
+                refreshed_editor_node,
+            )
+        } else {
+            snarl.insert_node(
+                egui::pos2(node.viewport.position.x, node.viewport.position.y),
+                refreshed_editor_node,
+            )
+        };
+        existing_node_ids.insert(node.id.clone(), inserted_node_id);
+    }
+
+    let input_pins = snarl
+        .nodes_ids_mut()
+        .map(|(node_id, editor_node)| {
+            (0..editor_node.inputs.len())
+                .map(|input_index| egui_snarl::InPinId {
+                    node: node_id,
+                    input: input_index,
+                })
+                .collect::<Vec<_>>()
+        })
+        .flatten()
+        .collect::<Vec<_>>();
+    for input_pin in input_pins {
+        snarl.drop_inputs(input_pin);
+    }
+
+    for edge in &document.edges {
+        let Some(from_node_id) = existing_node_ids.get(&edge.from_node_id).copied() else {
+            continue;
+        };
+        let Some(to_node_id) = existing_node_ids.get(&edge.to_node_id).copied() else {
+            continue;
+        };
+
+        let Some(from_node) = snarl.get_node(from_node_id) else {
+            continue;
+        };
+        let Some(to_node) = snarl.get_node(to_node_id) else {
+            continue;
+        };
+
+        let Some(from_output_index) = output_port_index(&from_node.outputs, &edge.from_output_name)
+        else {
+            continue;
+        };
+        let Some(to_input_index) = input_port_index(&to_node.inputs, &edge.to_input_name) else {
+            continue;
+        };
+
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: from_node_id,
+                output: from_output_index,
+            },
+            egui_snarl::InPinId {
+                node: to_node_id,
+                input: to_input_index,
+            },
+        );
+    }
 }
 
 #[cfg(test)]

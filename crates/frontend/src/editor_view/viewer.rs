@@ -10,8 +10,8 @@ use shared::{
 
 use super::EditorSnarlNode;
 use super::model::{
-    build_snarl_from_document, editor_node_from_definition, find_node_definition,
-    sync_document_from_snarl, visible_parameter_definitions,
+    editor_node_from_definition, find_node_definition, sync_document_from_snarl,
+    visible_parameter_definitions,
 };
 use super::widgets::{
     draw_color_frame_preview, draw_float_plot, edit_input_value, edit_parameter_value,
@@ -441,12 +441,9 @@ fn render_graph_menu_contents(
 /// node-menu search text, and the next graph-space position for the add-node menu.
 pub(super) fn show_snarl_canvas(
     ui: &mut egui::Ui,
+    mut snarl: &mut Snarl<EditorSnarlNode>,
     document: &mut GraphDocument,
     available_node_definitions: &[NodeDefinition],
-    runtime_node_values: &std::collections::HashMap<
-        String,
-        std::collections::HashMap<String, shared::InputValue>,
-    >,
     plot_history: &std::collections::HashMap<String, std::collections::VecDeque<f32>>,
     diagnostic_summaries: &std::collections::HashMap<String, NodeDiagnosticSummary>,
     wled_instances: &[WledInstance],
@@ -461,8 +458,6 @@ pub(super) fn show_snarl_canvas(
         center_viewport_on_nodes(document, canvas_size);
     }
 
-    let mut snarl =
-        build_snarl_from_document(document, available_node_definitions, runtime_node_values);
     let should_apply_transform = apply_document_viewport || focus_requested;
     let initial_transform = if should_apply_transform {
         Some(TSTransform::new(

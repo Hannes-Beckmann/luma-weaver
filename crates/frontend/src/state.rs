@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use eframe::egui;
+use egui_snarl::Snarl;
 use futures_channel::mpsc;
 use shared::{
     EventSubscription, GraphDocument, GraphExchangeFile, GraphMetadata, GraphRuntimeMode,
@@ -86,6 +87,9 @@ pub(crate) struct GraphState {
     pub(crate) graph_update_last_change_secs: Option<f64>,
     pub(crate) graph_update_last_observed_document: Option<GraphDocument>,
     pub(crate) snarl_viewport_initialized_graph_id: Option<String>,
+    pub(crate) live_snarl_graph_id: Option<String>,
+    pub(crate) live_snarl: Option<Snarl<crate::editor_view::EditorSnarlNode>>,
+    pub(crate) live_snarl_needs_rebuild: bool,
     pub(crate) graph_runtime_modes: HashMap<String, GraphRuntimeMode>,
     pub(crate) runtime_node_values: HashMap<String, HashMap<String, InputValue>>,
     pub(crate) plot_history: HashMap<String, VecDeque<f32>>,
@@ -115,6 +119,9 @@ impl Default for GraphState {
             graph_update_last_change_secs: None,
             graph_update_last_observed_document: None,
             snarl_viewport_initialized_graph_id: None,
+            live_snarl_graph_id: None,
+            live_snarl: None,
+            live_snarl_needs_rebuild: false,
             graph_runtime_modes: HashMap::new(),
             runtime_node_values: HashMap::new(),
             plot_history: HashMap::new(),
