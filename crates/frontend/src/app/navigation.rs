@@ -179,6 +179,31 @@ impl FrontendApp {
         self.graphs.loaded_graph_document.as_mut()
     }
 
+    /// Returns the loaded graph document and live snarl when both match the selected graph.
+    pub(crate) fn active_graph_document_and_snarl_mut(
+        &mut self,
+    ) -> Option<(
+        &mut shared::GraphDocument,
+        &mut egui_snarl::Snarl<crate::editor_view::EditorSnarlNode>,
+    )> {
+        let selected_id = self.ui.selected_graph_id.as_deref()?;
+        let loaded_id = self
+            .graphs
+            .loaded_graph_document
+            .as_ref()
+            .map(|document| document.metadata.id.as_str())?;
+        let live_graph_id = self.graphs.live_snarl_graph_id.as_deref()?;
+        if loaded_id != selected_id || live_graph_id != selected_id {
+            return None;
+        }
+
+        let graphs = &mut self.graphs;
+        Some((
+            graphs.loaded_graph_document.as_mut()?,
+            graphs.live_snarl.as_mut()?,
+        ))
+    }
+
     /// Requests the selected graph document from the backend when it is not already loaded.
     ///
     /// Repeated requests for the same graph are suppressed while a previous request is still
@@ -224,6 +249,9 @@ impl FrontendApp {
         self.graphs.save_in_flight_document = None;
         self.clear_pending_graph_update_tracking();
         self.graphs.snarl_viewport_initialized_graph_id = None;
+        self.graphs.live_snarl_graph_id = None;
+        self.graphs.live_snarl = None;
+        self.graphs.live_snarl_needs_rebuild = false;
         self.graphs.runtime_node_values.clear();
         self.ui.diagnostics_window_graph_id = None;
         self.ui.diagnostics_window_node_id = None;

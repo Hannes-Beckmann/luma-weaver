@@ -101,13 +101,15 @@ impl FrontendApp {
         self.graphs.loaded_graph_document = Some(document.clone());
         self.reset_graph_history(Some(document));
         self.graphs.save_in_flight_document = None;
-        self.clear_pending_graph_update_tracking();
 
         if !same_loaded_graph {
             self.graphs.snarl_viewport_initialized_graph_id = None;
             self.graphs.runtime_node_values.clear();
             self.graphs.plot_history.clear();
         }
+
+        self.sync_live_snarl_from_loaded_document();
+        self.clear_pending_graph_update_tracking();
 
         info!(graph_id = %graph_id, "frontend loaded graph document");
         self.ui.status = "Graph document loaded".to_owned();
@@ -131,6 +133,7 @@ impl FrontendApp {
         if current_document_matches_ack {
             self.graphs.loaded_graph_document = Some(document.clone());
             self.graphs.history_committed_document = Some(document);
+            self.sync_live_snarl_from_loaded_document();
             self.clear_pending_graph_update_tracking();
             info!(graph_id = %graph_id, "frontend save acknowledged");
             self.ui.status = "Graph document saved".to_owned();
@@ -143,6 +146,8 @@ impl FrontendApp {
     /// Replaces the set of node definitions available to the editor palette.
     pub(crate) fn apply_node_definitions(&mut self, definitions: Vec<NodeDefinition>) {
         self.graphs.available_node_definitions = definitions;
+        self.graphs.live_snarl_needs_rebuild = false;
+        self.sync_live_snarl_from_loaded_document();
         self.ui.status = "Node definitions updated".to_owned();
     }
 
@@ -278,6 +283,9 @@ impl FrontendApp {
         self.graphs.save_in_flight_document = None;
         self.clear_pending_graph_update_tracking();
         self.graphs.snarl_viewport_initialized_graph_id = None;
+        self.graphs.live_snarl_graph_id = None;
+        self.graphs.live_snarl = None;
+        self.graphs.live_snarl_needs_rebuild = false;
         self.graphs.runtime_node_values.clear();
         self.graphs.plot_history.clear();
         self.ui.diagnostics_window_graph_id = None;
@@ -316,9 +324,33 @@ fn decode_runtime_update_value(value: NodeRuntimeUpdateValue) -> (String, InputV
 
 #[cfg(test)]
 mod tests {
-    use shared::{NodeDiagnosticEntry, NodeDiagnosticSeverity, NodeDiagnosticSummary};
+    use shared::{
+        GraphDocument, GraphNode, NodeDiagnosticEntry, NodeDiagnosticSeverity,
+        NodeDiagnosticSummary, NodeMetadata, NodeTypeId, NodeViewport,
+    };
 
     use crate::app::FrontendApp;
+
+    fn graph_document_with_node_title(title: &str) -> GraphDocument {
+        GraphDocument {
+            metadata: shared::GraphMetadata {
+                id: "graph-a".to_owned(),
+                name: "Graph A".to_owned(),
+                execution_frequency_hz: 60,
+            },
+            nodes: vec![GraphNode {
+                id: "node-1".to_owned(),
+                metadata: NodeMetadata {
+                    name: title.to_owned(),
+                },
+                node_type: NodeTypeId::new("test.unknown"),
+                viewport: NodeViewport::default(),
+                input_values: Vec::new(),
+                parameters: Vec::new(),
+            }],
+            ..GraphDocument::default()
+        }
+    }
 
     #[test]
     fn graph_diagnostics_are_cached_by_graph_id() {
@@ -350,5 +382,20 @@ mod tests {
             Some(1)
         );
         assert_eq!(app.node_diagnostic_details("graph-a", "node-1").len(), 1);
+    }
+
+    #[test]
+    fn save_acknowledgement_resyncs_cached_live_snarl() {
+        let mut app = FrontendApp::default();
+        let local_document = graph_document_with_node_title("Local Title");
+        app.graphs.loaded_graph_document = Some(local_document);
+        app.rebuild_live_snarl_from_loaded_document();
+
+        let acknowledged_document = graph_document_with_node_title("Backend Title");
+        app.acknowledge_graph_save(acknowledged_document, true);
+
+        let live_snarl = app.graphs.live_snarl.as_ref().expect("live snarl");
+        let node_titles = crate::editor_view::snarl_node_titles(live_snarl);
+        assert_eq!(node_titles, vec!["Backend Title".to_owned()]);
     }
 }

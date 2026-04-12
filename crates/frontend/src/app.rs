@@ -63,6 +63,79 @@ impl eframe::App for FrontendApp {
 }
 
 impl FrontendApp {
+    /// Rebuilds the live editor snarl from the currently loaded document.
+    pub(crate) fn rebuild_live_snarl_from_loaded_document(&mut self) {
+        let Some(document) = self.graphs.loaded_graph_document.clone() else {
+            self.graphs.live_snarl_graph_id = None;
+            self.graphs.live_snarl = None;
+            self.graphs.live_snarl_needs_rebuild = false;
+            return;
+        };
+
+        self.graphs.live_snarl_graph_id = Some(document.metadata.id.clone());
+        self.graphs.live_snarl = Some(crate::editor_view::build_snarl_from_document(
+            &document,
+            &self.graphs.available_node_definitions,
+            &self.graphs.runtime_node_values,
+        ));
+        self.graphs.live_snarl_needs_rebuild = false;
+    }
+
+    /// Synchronizes the live snarl with the currently loaded document, patching in place when
+    /// possible so surviving nodes keep their `egui_snarl` identities across history restores.
+    pub(crate) fn sync_live_snarl_from_loaded_document(&mut self) {
+        let Some(document) = self.graphs.loaded_graph_document.clone() else {
+            self.graphs.live_snarl_graph_id = None;
+            self.graphs.live_snarl = None;
+            self.graphs.live_snarl_needs_rebuild = false;
+            return;
+        };
+
+        let loaded_graph_id = document.metadata.id.clone();
+        let can_patch = self.graphs.live_snarl_graph_id.as_deref()
+            == Some(loaded_graph_id.as_str())
+            && self.graphs.live_snarl.is_some();
+
+        if can_patch {
+            if let Some(snarl) = self.graphs.live_snarl.as_mut() {
+                crate::editor_view::patch_snarl_from_document(
+                    snarl,
+                    &document,
+                    &self.graphs.available_node_definitions,
+                    &self.graphs.runtime_node_values,
+                );
+            }
+            self.graphs.live_snarl_needs_rebuild = false;
+            return;
+        }
+
+        self.rebuild_live_snarl_from_loaded_document();
+    }
+
+    /// Ensures the selected graph has a live snarl instance ready for rendering.
+    pub(crate) fn ensure_live_snarl_for_active_graph(&mut self) {
+        let Some(selected_graph_id) = self.ui.selected_graph_id.as_deref() else {
+            return;
+        };
+        let loaded_graph_id = self
+            .graphs
+            .loaded_graph_document
+            .as_ref()
+            .map(|document| document.metadata.id.as_str());
+        if loaded_graph_id != Some(selected_graph_id) {
+            return;
+        }
+
+        let live_graph_matches =
+            self.graphs.live_snarl_graph_id.as_deref() == Some(selected_graph_id);
+        if self.graphs.live_snarl.is_none()
+            || !live_graph_matches
+            || self.graphs.live_snarl_needs_rebuild
+        {
+            self.sync_live_snarl_from_loaded_document();
+        }
+    }
+
     /// Restores a graph-history snapshot while preserving the current editor viewport.
     ///
     /// Undo and redo intentionally treat camera movement as transient UI state, so history
@@ -75,6 +148,8 @@ impl FrontendApp {
         self.graphs.history_committed_document = Some(document.clone());
         self.graphs.save_in_flight_document = None;
         self.graphs.graph_update_last_observed_document = Some(document);
+        self.graphs.live_snarl_needs_rebuild = false;
+        self.sync_live_snarl_from_loaded_document();
         self.clear_pending_graph_update_tracking();
     }
 }

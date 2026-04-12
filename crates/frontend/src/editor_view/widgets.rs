@@ -1,7 +1,7 @@
 use serde_json::Value as JsonValue;
 use shared::{
     ColorGradient, ColorGradientStop, InputValue, MqttBrokerConfig, NodeDefinition, NodeParameter,
-    ParameterUiHint, RgbaColor, WledInstance,
+    ParameterUiHint, RgbaColor, ValueKind, WledInstance,
 };
 
 use super::model::{coerce_input_value_kind, parameters_with_defaults};
@@ -236,6 +236,9 @@ pub(super) fn draw_float_plot(ui: &mut egui::Ui, samples: &[f32]) {
 /// not leak into the editor UI.
 pub(super) fn edit_input_value(ui: &mut egui::Ui, input: &mut EditorInputPort) {
     input.value = coerce_input_value_kind(input.value.clone(), input.value_kind);
+    if !supports_disconnected_inline_editor(input.value_kind) {
+        return;
+    }
     match &mut input.value {
         InputValue::Float(value) => {
             ui.add(
@@ -262,9 +265,19 @@ pub(super) fn edit_input_value(ui: &mut egui::Ui, input: &mut EditorInputPort) {
         InputValue::LedLayout(layout) => {
             ui.label(format!("{} LEDs ({})", layout.pixel_count, layout.id));
         }
-        InputValue::ColorFrame(frame) => {
-            ui.label(format!("{} LEDs ({})", frame.pixels.len(), frame.layout.id));
-        }
+        InputValue::ColorFrame(_) => {}
+    }
+}
+
+/// Returns whether a disconnected input kind should render an inline editor in the node row.
+pub(super) fn supports_disconnected_inline_editor(kind: ValueKind) -> bool {
+    match kind {
+        ValueKind::Any => true,
+        ValueKind::Float => true,
+        ValueKind::FloatTensor => true,
+        ValueKind::Color => true,
+        ValueKind::LedLayout => true,
+        ValueKind::ColorFrame => false,
     }
 }
 
@@ -832,8 +845,8 @@ pub(super) fn max_input_label_width(ui: &egui::Ui, node: &EditorSnarlNode) -> f3
 
 #[cfg(test)]
 mod tests {
-    use super::frame_preview_dimensions;
-    use shared::{ColorFrame, LedLayout, RgbaColor};
+    use super::{frame_preview_dimensions, supports_disconnected_inline_editor};
+    use shared::{ColorFrame, LedLayout, RgbaColor, ValueKind};
 
     #[test]
     fn one_dimensional_layout_is_rendered_as_horizontal_strip() {
@@ -879,5 +892,10 @@ mod tests {
         };
 
         assert_eq!(frame_preview_dimensions(&frame), (4, 3));
+    }
+
+    #[test]
+    fn color_frame_inputs_do_not_render_disconnected_inline_editors() {
+        assert!(!supports_disconnected_inline_editor(ValueKind::ColorFrame));
     }
 }
