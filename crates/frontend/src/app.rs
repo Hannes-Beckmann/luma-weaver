@@ -1,3 +1,4 @@
+mod clipboard;
 mod graph_actions;
 mod history;
 mod image_assets;
@@ -47,6 +48,7 @@ impl eframe::App for FrontendApp {
         self.ensure_runtime_updates_subscription();
         self.drain_server_messages(ctx);
         self.drain_browser_graph_file_events();
+        self.drain_browser_clipboard_events();
         self.drain_browser_image_asset_events();
         crate::header_view::render(ctx, self);
 

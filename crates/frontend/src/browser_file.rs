@@ -17,6 +17,13 @@ pub(crate) enum BrowserImageAssetEvent {
     Error(String),
 }
 
+/// Represents the outcome of a browser-managed clipboard interaction.
+pub(crate) enum BrowserClipboardEvent {
+    Copied,
+    Read(String),
+    Error(String),
+}
+
 #[cfg(target_arch = "wasm32")]
 /// Opens the browser file picker for graph import and returns a stream of parse results.
 ///
@@ -162,6 +169,68 @@ pub(crate) fn download_graph_export(
     _file: &GraphExchangeFile,
 ) -> Result<(), String> {
     Err("Graph export is only available in the browser build".to_owned())
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Writes text to the browser clipboard and reports the async result through a receiver.
+pub(crate) fn write_text_to_clipboard(
+    text: String,
+) -> Result<mpsc::UnboundedReceiver<BrowserClipboardEvent>, String> {
+    use wasm_bindgen_futures::spawn_local;
+
+    let Some(window) = web_sys::window() else {
+        return Err("Browser window is unavailable".to_owned());
+    };
+    let clipboard = window.navigator().clipboard();
+    let (sender, receiver) = mpsc::unbounded();
+
+    spawn_local(async move {
+        let event = match wasm_bindgen_futures::JsFuture::from(clipboard.write_text(&text)).await {
+            Ok(_) => BrowserClipboardEvent::Copied,
+            Err(_) => BrowserClipboardEvent::Error("Failed to write to clipboard".to_owned()),
+        };
+        let _ = sender.unbounded_send(event);
+    });
+
+    Ok(receiver)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Reports that clipboard writes are unavailable on non-wasm builds.
+pub(crate) fn write_text_to_clipboard(
+    _text: String,
+) -> Result<mpsc::UnboundedReceiver<BrowserClipboardEvent>, String> {
+    Err("Clipboard access is only available in the browser build".to_owned())
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Reads text from the browser clipboard and reports the async result through a receiver.
+pub(crate) fn read_text_from_clipboard()
+-> Result<mpsc::UnboundedReceiver<BrowserClipboardEvent>, String> {
+    use wasm_bindgen_futures::spawn_local;
+
+    let Some(window) = web_sys::window() else {
+        return Err("Browser window is unavailable".to_owned());
+    };
+    let clipboard = window.navigator().clipboard();
+    let (sender, receiver) = mpsc::unbounded();
+
+    spawn_local(async move {
+        let event = match wasm_bindgen_futures::JsFuture::from(clipboard.read_text()).await {
+            Ok(value) => BrowserClipboardEvent::Read(value.as_string().unwrap_or_default()),
+            Err(_) => BrowserClipboardEvent::Error("Failed to read clipboard".to_owned()),
+        };
+        let _ = sender.unbounded_send(event);
+    });
+
+    Ok(receiver)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Reports that clipboard reads are unavailable on non-wasm builds.
+pub(crate) fn read_text_from_clipboard()
+-> Result<mpsc::UnboundedReceiver<BrowserClipboardEvent>, String> {
+    Err("Clipboard access is only available in the browser build".to_owned())
 }
 
 #[cfg(target_arch = "wasm32")]
