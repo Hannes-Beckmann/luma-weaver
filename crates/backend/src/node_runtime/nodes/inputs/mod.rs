@@ -4,6 +4,8 @@ pub(crate) mod color_constant;
 pub(crate) mod float_constant;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod ha_mqtt_number;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod image_source;
 pub(crate) mod signal_generator;
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod wled_sink;

@@ -27,6 +27,7 @@ struct GraphSnarlViewer {
     plot_history: std::collections::HashMap<String, Vec<f32>>,
     diagnostic_summaries: std::collections::HashMap<String, NodeDiagnosticSummary>,
     opened_diagnostics_node_id: Option<String>,
+    requested_image_upload: Option<(String, String)>,
     node_menu_search: String,
     requested_graph_menu_pos: Option<egui::Pos2>,
 }
@@ -260,7 +261,7 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
                 .show(ui, |ui| {
                     for parameter_definition in &visible_parameters {
                         ui.label(&parameter_definition.display_name);
-                        edit_parameter_value(
+                        let requested_upload = edit_parameter_value(
                             ui,
                             &mut editor_node.parameters,
                             &parameter_definition.name,
@@ -269,6 +270,12 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
                             &self.wled_instances,
                             &self.mqtt_broker_configs,
                         );
+                        if requested_upload {
+                            self.requested_image_upload = Some((
+                                editor_node.graph_node_id.clone(),
+                                parameter_definition.name.clone(),
+                            ));
+                        }
                         ui.end_row();
                     }
                 });
@@ -438,7 +445,8 @@ fn render_graph_menu_contents(
 /// Renders the graph canvas, synchronizes it with the document model, and returns UI side effects.
 ///
 /// The returned tuple carries viewport-application state, diagnostics-panel requests, hover state,
-/// node-menu search text, and the next graph-space position for the add-node menu.
+/// node-menu search text, the next graph-space position for the add-node menu, and any requested
+/// image upload action.
 pub(super) fn show_snarl_canvas(
     ui: &mut egui::Ui,
     mut snarl: &mut Snarl<EditorSnarlNode>,
@@ -452,7 +460,14 @@ pub(super) fn show_snarl_canvas(
     node_menu_graph_position: Option<egui::Pos2>,
     apply_document_viewport: bool,
     focus_requested: bool,
-) -> (bool, Option<String>, bool, String, Option<egui::Pos2>) {
+) -> (
+    bool,
+    Option<String>,
+    bool,
+    String,
+    Option<egui::Pos2>,
+    Option<(String, String)>,
+) {
     let canvas_size = ui.available_size();
     if focus_requested {
         center_viewport_on_nodes(document, canvas_size);
@@ -479,6 +494,7 @@ pub(super) fn show_snarl_canvas(
             .collect(),
         diagnostic_summaries: diagnostic_summaries.clone(),
         opened_diagnostics_node_id: None,
+        requested_image_upload: None,
         node_menu_search: node_menu_search.to_owned(),
         requested_graph_menu_pos: None,
     };
@@ -539,6 +555,7 @@ pub(super) fn show_snarl_canvas(
         canvas_hovered,
         viewer.node_menu_search,
         next_node_menu_graph_position,
+        viewer.requested_image_upload,
     )
 }
 

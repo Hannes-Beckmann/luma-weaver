@@ -4,5 +4,6 @@ dist
 node_modules
 .DS_Store
 .direnv
-*.json
+crates/backend/data/*
 !examples/*
+.vscode

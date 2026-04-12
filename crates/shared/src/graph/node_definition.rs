@@ -14,6 +14,7 @@ pub struct NodeTypeId(String);
 impl NodeTypeId {
     pub const FLOAT_CONSTANT: &'static str = "inputs.float_constant";
     pub const COLOR_CONSTANT: &'static str = "inputs.color_constant";
+    pub const IMAGE_SOURCE: &'static str = "inputs.image_source";
     pub const DISPLAY: &'static str = "outputs.display";
     pub const PLOT: &'static str = "outputs.plot";
     pub const DELAY: &'static str = "temporal_filters.delay";
@@ -381,6 +382,7 @@ pub enum ParameterUiHint {
     ColorGradient,
     Checkbox,
     TextSingleLine,
+    ImageAssetUpload,
     EnumSelect { options: Vec<EnumOption> },
     IntegerDrag { speed: f64, min: i64, max: i64 },
     WledInstanceOrHost,

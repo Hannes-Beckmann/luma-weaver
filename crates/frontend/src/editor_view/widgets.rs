@@ -303,7 +303,7 @@ pub(super) fn edit_parameter_value(
     default_value: JsonValue,
     wled_instances: &[WledInstance],
     mqtt_broker_configs: &[MqttBrokerConfig],
-) {
+) -> bool {
     let value = parameter_value_mut(parameters, name, default_value);
     match ui_hint {
         ParameterUiHint::DragFloat { speed, min, max } => {
@@ -318,6 +318,7 @@ pub(super) fn edit_parameter_value(
             {
                 *value = JsonValue::from(float_value);
             }
+            false
         }
         ParameterUiHint::ColorPicker => {
             let mut color =
@@ -335,18 +336,21 @@ pub(super) fn edit_parameter_value(
                 color.a = rgba[3];
                 *value = serde_json::to_value(color).unwrap_or(JsonValue::Null);
             }
+            false
         }
         ParameterUiHint::ColorGradient => {
             let mut gradient = serde_json::from_value::<ColorGradient>(value.clone())
                 .unwrap_or_else(|_| default_editor_gradient());
             edit_color_gradient_button(ui, name, &mut gradient);
             *value = serde_json::to_value(normalize_gradient(gradient)).unwrap_or(JsonValue::Null);
+            false
         }
         ParameterUiHint::Checkbox => {
             let mut bool_value = value.as_bool().unwrap_or(false);
             if ui.checkbox(&mut bool_value, "").changed() {
                 *value = JsonValue::from(bool_value);
             }
+            false
         }
         ParameterUiHint::TextSingleLine => {
             let mut text = value.as_str().unwrap_or("").to_owned();
@@ -359,6 +363,36 @@ pub(super) fn edit_parameter_value(
             {
                 *value = JsonValue::from(text);
             }
+            false
+        }
+        ParameterUiHint::ImageAssetUpload => {
+            let asset_id = value.as_str().unwrap_or("").to_owned();
+            let mut requested_upload = false;
+            ui.horizontal(|ui| {
+                let label = if asset_id.trim().is_empty() {
+                    "No image uploaded".to_owned()
+                } else {
+                    format!("{}", shorten_asset_id(&asset_id))
+                };
+                let response = ui.label(label);
+                if !asset_id.trim().is_empty() {
+                    response.on_hover_text(asset_id.clone());
+                }
+                if ui
+                    .small_button(if asset_id.trim().is_empty() {
+                        "Upload"
+                    } else {
+                        "Replace"
+                    })
+                    .clicked()
+                {
+                    requested_upload = true;
+                }
+                if !asset_id.trim().is_empty() && ui.small_button("Clear").clicked() {
+                    *value = JsonValue::from(String::new());
+                }
+            });
+            requested_upload
         }
         ParameterUiHint::EnumSelect { options } => {
             let mut selected = value.as_str().unwrap_or("").to_owned();
@@ -390,6 +424,7 @@ pub(super) fn edit_parameter_value(
                 }
             }
             *value = JsonValue::from(selected);
+            false
         }
         ParameterUiHint::IntegerDrag { speed, min, max } => {
             let mut int_value = value.as_i64().unwrap_or(0);
@@ -403,6 +438,7 @@ pub(super) fn edit_parameter_value(
             {
                 *value = JsonValue::from(int_value);
             }
+            false
         }
         ParameterUiHint::WledInstanceOrHost => {
             let mut target = value.as_str().unwrap_or("").to_owned();
@@ -443,6 +479,7 @@ pub(super) fn edit_parameter_value(
                 *parameter_value_mut(parameters, "led_count", JsonValue::from(led_count as i64)) =
                     JsonValue::from(led_count as i64);
             }
+            false
         }
         ParameterUiHint::MqttBrokerSelect => {
             let mut selected = value.as_str().unwrap_or("").to_owned();
@@ -488,7 +525,16 @@ pub(super) fn edit_parameter_value(
                     }
                 });
             *value = JsonValue::from(selected);
+            false
         }
+    }
+}
+
+fn shorten_asset_id(asset_id: &str) -> String {
+    if asset_id.len() <= 12 {
+        asset_id.to_owned()
+    } else {
+        format!("{}...", &asset_id[..12])
     }
 }
 

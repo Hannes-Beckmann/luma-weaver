@@ -184,6 +184,10 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
             nodes::inputs::audio_fft_receiver::AudioFftReceiverNode
         );
         register_builtin!(
+            NodeTypeId::IMAGE_SOURCE,
+            nodes::inputs::image_source::ImageSourceNode
+        );
+        register_builtin!(
             NodeTypeId::HA_MQTT_NUMBER,
             nodes::inputs::ha_mqtt_number::HomeAssistantMqttNumberNode
         );
