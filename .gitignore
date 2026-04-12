@@ -6,3 +6,4 @@ node_modules
 .direnv
 crates/backend/data/*
 !examples/*
+.vscode
