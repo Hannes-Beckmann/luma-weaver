@@ -341,13 +341,22 @@ static WLED_TARGET_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
     display_name: "Wled Target".to_owned(),
     category: NodeCategory::Outputs,
     needs_io: true,
-    inputs: vec![NodeInputDefinition {
-        name: "value".to_owned(),
-        display_name: title_case_name("value"),
-        value_kind: ValueKind::ColorFrame,
-        accepted_kinds: vec![ValueKind::Color],
-        default_value: None,
-    }],
+    inputs: vec![
+        NodeInputDefinition {
+            name: "value".to_owned(),
+            display_name: title_case_name("value"),
+            value_kind: ValueKind::ColorFrame,
+            accepted_kinds: vec![ValueKind::Color],
+            default_value: None,
+        },
+        NodeInputDefinition {
+            name: "disable".to_owned(),
+            display_name: title_case_name("disable"),
+            value_kind: ValueKind::Float,
+            accepted_kinds: vec![],
+            default_value: Some(InputValue::Float(0.0)),
+        },
+    ],
     outputs: vec![],
     parameters: vec![
         NodeParameterDefinition::new(
@@ -2048,13 +2057,22 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
     display_name: "Wled Dummy Display".to_owned(),
     category: NodeCategory::Debug,
     needs_io: false,
-    inputs: vec![NodeInputDefinition {
-        name: "value".to_owned(),
-        display_name: title_case_name("value"),
-        value_kind: ValueKind::ColorFrame,
-        accepted_kinds: vec![ValueKind::Color],
-        default_value: None,
-    }],
+    inputs: vec![
+        NodeInputDefinition {
+            name: "value".to_owned(),
+            display_name: title_case_name("value"),
+            value_kind: ValueKind::ColorFrame,
+            accepted_kinds: vec![ValueKind::Color],
+            default_value: None,
+        },
+        NodeInputDefinition {
+            name: "disable".to_owned(),
+            display_name: title_case_name("disable"),
+            value_kind: ValueKind::Float,
+            accepted_kinds: vec![],
+            default_value: Some(InputValue::Float(0.0)),
+        },
+    ],
     outputs: vec![],
     parameters: vec![
         NodeParameterDefinition::new(

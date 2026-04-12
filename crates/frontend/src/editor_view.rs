@@ -13,7 +13,7 @@ mod widgets;
 
 #[derive(Clone)]
 /// Editor-side representation of a single input port on a rendered node card.
-struct EditorInputPort {
+pub(crate) struct EditorInputPort {
     name: String,
     display_name: String,
     value_kind: ValueKind,
@@ -22,7 +22,7 @@ struct EditorInputPort {
 
 #[derive(Clone)]
 /// Editor-side representation of a single output port on a rendered node card.
-struct EditorOutputPort {
+pub(crate) struct EditorOutputPort {
     name: String,
     display_name: String,
     value_kind: ValueKind,
@@ -31,7 +31,7 @@ struct EditorOutputPort {
 
 #[derive(Clone)]
 /// Editor-side representation of a graph node as shown on the snarl canvas.
-struct EditorSnarlNode {
+pub(crate) struct EditorSnarlNode {
     graph_node_id: String,
     title: String,
     node_type_id: String,
@@ -39,6 +39,17 @@ struct EditorSnarlNode {
     outputs: Vec<EditorOutputPort>,
     parameters: Vec<NodeParameter>,
     runtime_values: Vec<(String, InputValue)>,
+}
+
+pub(crate) use self::model::{
+    build_snarl_from_document, patch_snarl_from_document, refresh_snarl_runtime_values,
+};
+
+#[cfg(test)]
+pub(crate) fn snarl_node_titles(
+    snarl: &egui_snarl::Snarl<EditorSnarlNode>,
+) -> Vec<String> {
+    snarl.nodes().map(|node| node.title.clone()).collect()
 }
 
 /// Renders the graph editor view, including header controls, the node canvas, and diagnostics UI.
@@ -187,7 +198,8 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 .node_menu_graph_position
                 .map(|(x, y)| egui::pos2(x, y));
             let mut requested_image_upload = None;
-            if let Some(document) = app.active_graph_document_mut() {
+            app.ensure_live_snarl_for_active_graph();
+            if let Some((document, snarl)) = app.active_graph_document_and_snarl_mut() {
                 if available_node_definitions.is_empty() {
                     egui::Frame::group(ui.style()).show(ui, |ui| {
                         ui.set_min_height(100.0);
@@ -199,6 +211,11 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                     });
                     return;
                 }
+                refresh_snarl_runtime_values(
+                    snarl,
+                    &available_node_definitions,
+                    &runtime_node_values,
+                );
                 let (
                     initialized,
                     opened_diagnostics_node_id,
@@ -208,9 +225,9 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                     image_upload_request,
                 ) = viewer::show_snarl_canvas(
                     ui,
+                    snarl,
                     document,
                     &available_node_definitions,
-                    &runtime_node_values,
                     &plot_history,
                     &diagnostic_summaries,
                     &wled_instances,

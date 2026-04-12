@@ -58,10 +58,12 @@ impl RuntimeNodeFromParameters for WledTargetNode {
 
 pub(crate) struct WledTargetInputs {
     value: Option<AnyInputValue>,
+    disable: f32,
 }
 
 crate::node_runtime::impl_runtime_inputs!(WledTargetInputs {
     value = None,
+    disable = 0.0,
 });
 
 impl RuntimeNode for WledTargetNode {
@@ -75,6 +77,7 @@ impl RuntimeNode for WledTargetNode {
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let mut diagnostics = Vec::new();
+        let disabled = is_disabled(inputs.disable);
         let layout = context.render_layout.clone().unwrap_or(LedLayout {
             id: "wled_target".to_owned(),
             pixel_count: self.led_count,
@@ -104,18 +107,20 @@ impl RuntimeNode for WledTargetNode {
 
         diagnostics.extend(self.refresh_transport_if_needed());
 
-        if let Some(transport) = &mut self.transport {
-            if let Err(error) = transport.send(&frame_for_transport, self.led_count) {
-                tracing::warn!(
-                    target = %self.target,
-                    %error,
-                    "failed to send DDP frame to WLED target"
-                );
-                diagnostics.push(NodeDiagnostic {
-                    severity: NodeDiagnosticSeverity::Error,
-                    code: Some("wled_target_send_failed".to_owned()),
-                    message: format!("Failed to send DDP frame to target {}.", self.target),
-                });
+        if !disabled {
+            if let Some(transport) = &mut self.transport {
+                if let Err(error) = transport.send(&frame_for_transport, self.led_count) {
+                    tracing::warn!(
+                        target = %self.target,
+                        %error,
+                        "failed to send DDP frame to WLED target"
+                    );
+                    diagnostics.push(NodeDiagnostic {
+                        severity: NodeDiagnosticSeverity::Error,
+                        code: Some("wled_target_send_failed".to_owned()),
+                        message: format!("Failed to send DDP frame to target {}.", self.target),
+                    });
+                }
             }
         }
 
@@ -157,6 +162,10 @@ impl WledTargetNode {
         }
         diagnostics
     }
+}
+
+fn is_disabled(value: f32) -> bool {
+    value >= 0.5
 }
 
 struct WledDdpTransport {
@@ -203,12 +212,58 @@ fn resolve_target(target: &str) -> Result<SocketAddr> {
 
 #[cfg(test)]
 mod tests {
-    use super::resolve_target;
+    use std::collections::HashMap;
+
+    use shared::{InputValue, NodeDiagnosticSeverity};
+
+    use super::{WledTargetInputs, WledTargetNode, is_disabled, resolve_target};
+    use crate::node_runtime::{NodeEvaluationContext, RuntimeInputs, RuntimeNode};
+
+    fn evaluation_context() -> NodeEvaluationContext {
+        NodeEvaluationContext {
+            graph_id: "graph".to_owned(),
+            graph_name: "Graph".to_owned(),
+            elapsed_seconds: 0.0,
+            render_layout: None,
+        }
+    }
 
     /// Tests that bare hostnames inherit the default DDP port during target resolution.
     #[test]
     fn resolve_target_adds_default_ddp_port() {
         let addr = resolve_target("127.0.0.1").expect("resolve target");
         assert_eq!(addr.port(), 4048);
+    }
+
+    #[test]
+    fn disable_threshold_matches_issue_contract() {
+        assert!(!is_disabled(0.49));
+        assert!(is_disabled(0.5));
+        assert!(is_disabled(1.0));
+    }
+
+    #[test]
+    fn disabled_target_still_reports_missing_target_diagnostic() {
+        let mut node = WledTargetNode::default();
+        let mut runtime_inputs = HashMap::new();
+        runtime_inputs.insert("disable".to_owned(), InputValue::Float(1.0));
+        let inputs =
+            WledTargetInputs::from_runtime_inputs(&runtime_inputs).expect("runtime inputs");
+
+        let evaluation = node
+            .evaluate(&evaluation_context(), inputs)
+            .expect("evaluate disabled node");
+
+        assert!(evaluation.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code.as_deref() == Some("wled_target_missing_target")
+                && diagnostic.severity == NodeDiagnosticSeverity::Warning
+        }));
+    }
+
+    #[test]
+    fn disabled_target_skips_invalid_value_types_for_disable_by_using_default() {
+        let inputs =
+            WledTargetInputs::from_runtime_inputs(&HashMap::new()).expect("default inputs");
+        assert!(!is_disabled(inputs.disable));
     }
 }
