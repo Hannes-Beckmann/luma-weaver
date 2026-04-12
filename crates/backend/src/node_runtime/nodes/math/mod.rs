@@ -1,5 +1,6 @@
 pub(crate) mod abs_float;
 pub(crate) mod add_float;
+pub(crate) mod binary_select;
 pub(crate) mod clamp_float;
 pub(crate) mod divide_float;
 pub(crate) mod exponential_float;

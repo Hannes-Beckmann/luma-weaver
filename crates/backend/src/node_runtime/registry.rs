@@ -192,6 +192,10 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         NodeTypeId::SIGNAL_GENERATOR,
         nodes::inputs::signal_generator::SignalGeneratorNode
     );
+    register_builtin!(
+        NodeTypeId::BINARY_SELECT,
+        nodes::math::binary_select::BinarySelectNode
+    );
     register_builtin!(NodeTypeId::ADD_FLOAT, nodes::math::add_float::AddFloatNode);
     register_builtin!(
         NodeTypeId::SUBTRACT_FLOAT,
