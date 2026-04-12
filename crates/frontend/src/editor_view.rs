@@ -186,6 +186,7 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 .ui
                 .node_menu_graph_position
                 .map(|(x, y)| egui::pos2(x, y));
+            let mut requested_image_upload = None;
             if let Some(document) = app.active_graph_document_mut() {
                 if available_node_definitions.is_empty() {
                     egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -204,6 +205,7 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                     canvas_hovered,
                     node_menu_search,
                     node_menu_graph_position,
+                    image_upload_request,
                 ) = viewer::show_snarl_canvas(
                     ui,
                     document,
@@ -226,6 +228,7 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 if let Some(node_id) = opened_diagnostics_node_id {
                     app.open_node_diagnostics(node_id);
                 }
+                requested_image_upload = image_upload_request;
             } else {
                 egui::Frame::group(ui.style()).show(ui, |ui| {
                     ui.set_min_height(100.0);
@@ -238,6 +241,9 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
             }
             if initialized_viewport_for_graph {
                 app.graphs.snarl_viewport_initialized_graph_id = Some(graph.id.clone());
+            }
+            if let Some((node_id, parameter_name)) = requested_image_upload {
+                app.begin_image_asset_upload(node_id, parameter_name);
             }
 
             crate::diagnostics_view::render_node_diagnostics_window(ui.ctx(), app);

@@ -94,6 +94,23 @@ static AUDIO_FFT_RECEIVE_MODES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
     ]
 });
 
+static IMAGE_FIT_MODES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
+    vec![
+        EnumOption {
+            value: "stretch".to_owned(),
+            label: "Stretch".to_owned(),
+        },
+        EnumOption {
+            value: "contain".to_owned(),
+            label: "Contain".to_owned(),
+        },
+        EnumOption {
+            value: "cover".to_owned(),
+            label: "Cover".to_owned(),
+        },
+    ]
+});
+
 static MIN_MAX_FLOAT_MODES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
     vec![
         EnumOption {
@@ -176,6 +193,41 @@ static COLOR_CONSTANT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
         }),
         ParameterUiHint::ColorPicker,
     )],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
+static IMAGE_SOURCE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::IMAGE_SOURCE.to_owned(),
+    display_name: "Image Source".to_owned(),
+    category: NodeCategory::Inputs,
+    needs_io: true,
+    inputs: vec![],
+    outputs: vec![NodeOutputDefinition {
+        name: "frame".to_owned(),
+        display_name: title_case_name("frame"),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![],
+    }],
+    parameters: vec![
+        NodeParameterDefinition::new(
+            "asset_id",
+            title_case_name("asset_id"),
+            ParameterDefaultValue::String(String::new()),
+            ParameterUiHint::ImageAssetUpload,
+        ),
+        NodeParameterDefinition::new(
+            "fit_mode",
+            title_case_name("fit_mode"),
+            ParameterDefaultValue::String("contain".to_owned()),
+            ParameterUiHint::EnumSelect {
+                options: IMAGE_FIT_MODES.clone(),
+            },
+        ),
+    ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -2084,6 +2136,7 @@ pub fn builtin_node_definitions() -> Vec<NodeDefinition> {
     vec![
         (*FLOAT_CONSTANT_NODE_TYPE).clone(),
         (*COLOR_CONSTANT_NODE_TYPE).clone(),
+        (*IMAGE_SOURCE_NODE_TYPE).clone(),
         (*DISPLAY_NODE_TYPE).clone(),
         (*PLOT_NODE_TYPE).clone(),
         (*DELAY_NODE_TYPE).clone(),

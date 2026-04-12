@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
 use eframe::egui;
+#[cfg(target_arch = "wasm32")]
 use futures_channel::mpsc;
 use shared::{
     EventSubscription, GraphDocument, GraphExchangeFile, GraphMetadata, GraphRuntimeMode,
@@ -40,6 +41,9 @@ pub(crate) struct UiState {
     #[cfg(target_arch = "wasm32")]
     pub(crate) browser_graph_file_events:
         Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserGraphFileEvent>>,
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) browser_image_asset_events:
+        Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserImageAssetEvent>>,
 }
 
 impl Default for UiState {
@@ -66,6 +70,8 @@ impl Default for UiState {
             pending_import_graph_file: None,
             #[cfg(target_arch = "wasm32")]
             browser_graph_file_events: None,
+            #[cfg(target_arch = "wasm32")]
+            browser_image_asset_events: None,
         }
     }
 }

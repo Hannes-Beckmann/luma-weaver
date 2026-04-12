@@ -1,5 +1,6 @@
 mod graph_actions;
 mod history;
+mod image_assets;
 mod import_export;
 mod messaging;
 mod navigation;
@@ -46,6 +47,7 @@ impl eframe::App for FrontendApp {
         self.ensure_runtime_updates_subscription();
         self.drain_server_messages(ctx);
         self.drain_browser_graph_file_events();
+        self.drain_browser_image_asset_events();
         crate::header_view::render(ctx, self);
 
         egui::CentralPanel::default().show(ctx, |ui| match self.ui.active_view {
@@ -56,7 +58,7 @@ impl eframe::App for FrontendApp {
         self.handle_history_shortcuts(ctx);
         self.schedule_graph_document_update(ctx);
 
-        if self.demo_runtime_needs_repaint() {
+        if self.demo_runtime_needs_repaint() || self.browser_background_work_needs_repaint() {
             ctx.request_repaint_after(Duration::from_millis(16));
         }
     }
