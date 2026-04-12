@@ -89,25 +89,38 @@ impl FrontendApp {
             return;
         }
 
-        let (undo_pressed, redo_pressed, mouse_back_pressed, mouse_forward_pressed) =
-            ctx.input(|input| {
-                let undo_pressed = input.modifiers.command
-                    && !input.modifiers.shift
-                    && input.key_pressed(egui::Key::Z);
-                let redo_pressed = (input.modifiers.command && input.key_pressed(egui::Key::Y))
-                    || (input.modifiers.command
-                        && input.modifiers.shift
-                        && input.key_pressed(egui::Key::Z));
-                let mouse_back_pressed = input.pointer.button_pressed(egui::PointerButton::Extra1);
-                let mouse_forward_pressed =
-                    input.pointer.button_pressed(egui::PointerButton::Extra2);
-                (
-                    undo_pressed,
-                    redo_pressed,
-                    mouse_back_pressed,
-                    mouse_forward_pressed,
-                )
-            });
+        let (
+            undo_pressed,
+            redo_pressed,
+            copy_pressed,
+            paste_pressed,
+            mouse_back_pressed,
+            mouse_forward_pressed,
+        ) = ctx.input(|input| {
+            let undo_pressed = input.modifiers.command
+                && !input.modifiers.shift
+                && input.key_pressed(egui::Key::Z);
+            let redo_pressed = (input.modifiers.command && input.key_pressed(egui::Key::Y))
+                || (input.modifiers.command
+                    && input.modifiers.shift
+                    && input.key_pressed(egui::Key::Z));
+            let copy_pressed = input.modifiers.command
+                && !input.modifiers.shift
+                && input.key_pressed(egui::Key::C);
+            let paste_pressed = input.modifiers.command
+                && !input.modifiers.shift
+                && input.key_pressed(egui::Key::V);
+            let mouse_back_pressed = input.pointer.button_pressed(egui::PointerButton::Extra1);
+            let mouse_forward_pressed = input.pointer.button_pressed(egui::PointerButton::Extra2);
+            (
+                undo_pressed,
+                redo_pressed,
+                copy_pressed,
+                paste_pressed,
+                mouse_back_pressed,
+                mouse_forward_pressed,
+            )
+        });
 
         if undo_pressed {
             self.undo_graph_edit();
@@ -115,6 +128,14 @@ impl FrontendApp {
         }
         if redo_pressed {
             self.redo_graph_edit();
+            return;
+        }
+        if copy_pressed {
+            self.copy_selected_nodes_to_clipboard();
+            return;
+        }
+        if paste_pressed {
+            self.paste_nodes_from_clipboard();
             return;
         }
         if mouse_back_pressed {

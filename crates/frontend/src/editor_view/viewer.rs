@@ -1,7 +1,10 @@
 use eframe::egui;
 use eframe::egui::emath::TSTransform;
 use eframe::egui::{Popup, PopupCloseBehavior, SetOpenCommand};
-use egui_snarl::ui::{NodeLayout, PinInfo, PinPlacement, SnarlPin, SnarlStyle, SnarlViewer};
+use egui_snarl::ui::{
+    NodeLayout, PinInfo, PinPlacement, SelectionStyle, SnarlPin, SnarlStyle, SnarlViewer,
+    get_selected_nodes,
+};
 use egui_snarl::{InPin, NodeId, OutPin, Snarl};
 use shared::{
     GraphDocument, MqttBrokerConfig, NodeCategory, NodeDefinition, NodeDiagnosticSeverity,
@@ -445,8 +448,8 @@ fn render_graph_menu_contents(
 /// Renders the graph canvas, synchronizes it with the document model, and returns UI side effects.
 ///
 /// The returned tuple carries viewport-application state, diagnostics-panel requests, hover state,
-/// node-menu search text, the next graph-space position for the add-node menu, and any requested
-/// image upload action.
+/// selected nodes, pointer position in graph space, node-menu search text, the next graph-space
+/// position for the add-node menu, and any requested image upload action.
 pub(super) fn show_snarl_canvas(
     ui: &mut egui::Ui,
     mut snarl: &mut Snarl<EditorSnarlNode>,
@@ -464,6 +467,8 @@ pub(super) fn show_snarl_canvas(
     bool,
     Option<String>,
     bool,
+    Vec<String>,
+    Option<egui::Pos2>,
     String,
     Option<egui::Pos2>,
     Option<(String, String)>,
@@ -503,13 +508,22 @@ pub(super) fn show_snarl_canvas(
         crisp_magnified_text: Some(true),
         pin_placement: Some(PinPlacement::Edge),
         header_drag_space: Some([0.0, 0.0].into()),
+        select_style: Some(SelectionStyle {
+            margin: egui::Margin::same(2),
+            rounding: egui::CornerRadius::same(8),
+            fill: egui::Color32::from_rgba_premultiplied(255, 153, 51, 18),
+            stroke: egui::Stroke::new(1.0, egui::Color32::from_rgb(255, 153, 51)),
+        }),
         ..SnarlStyle::new()
     };
+    let mut snarl_widget_id = None;
 
     let canvas_response = ui.allocate_ui_with_layout(
         canvas_size,
         egui::Layout::top_down(egui::Align::Min),
         |ui| {
+            snarl_widget_id =
+                Some(ui.make_persistent_id(format!("graph_snarl_{}", document.metadata.id)));
             snarl.show(
                 &mut viewer,
                 &style,
@@ -518,6 +532,8 @@ pub(super) fn show_snarl_canvas(
             );
         },
     );
+    let snarl_widget_id = snarl_widget_id
+        .unwrap_or_else(|| ui.make_persistent_id(format!("graph_snarl_{}", document.metadata.id)));
     let mut next_node_menu_graph_position = node_menu_graph_position;
     let open_context_menu = viewer.requested_graph_menu_pos.is_some();
     if let Some(menu_pos) = viewer.requested_graph_menu_pos {
@@ -542,20 +558,41 @@ pub(super) fn show_snarl_canvas(
         next_node_menu_graph_position = None;
     }
 
-    sync_document_from_snarl(document, &snarl);
+    let mut pointer_graph_position = None;
     if let Some(transform) = viewer.current_transform {
         document.viewport.zoom = transform.scaling;
         document.viewport.pan.x = transform.translation.x;
         document.viewport.pan.y = transform.translation.y;
+        if let Some(pointer_pos) = ui.ctx().pointer_hover_pos() {
+            pointer_graph_position = Some(screen_to_graph(pointer_pos, transform));
+        }
     }
     let canvas_hovered = ui.rect_contains_pointer(canvas_response.response.rect);
+    let selected_graph_node_ids = get_selected_nodes(snarl_widget_id, ui.ctx())
+        .into_iter()
+        .filter_map(|node_id| {
+            snarl
+                .get_node(node_id)
+                .map(|node| node.graph_node_id.clone())
+        })
+        .collect();
+    sync_document_from_snarl(document, &snarl);
     (
         should_apply_transform,
         viewer.opened_diagnostics_node_id,
         canvas_hovered,
+        selected_graph_node_ids,
+        canvas_hovered.then_some(pointer_graph_position).flatten(),
         viewer.node_menu_search,
         next_node_menu_graph_position,
         viewer.requested_image_upload,
+    )
+}
+
+fn screen_to_graph(pos: egui::Pos2, transform: TSTransform) -> egui::Pos2 {
+    egui::pos2(
+        (pos.x - transform.translation.x) / transform.scaling,
+        (pos.y - transform.translation.y) / transform.scaling,
     )
 }
 

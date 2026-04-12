@@ -41,6 +41,8 @@ Current building blocks include:
 - runtime/debug nodes such as plot, display, and a WLED dummy display
 - network nodes for WLED output, WLED frame input, audio FFT receive, and Home Assistant MQTT numbers
 
+The editor also supports multi-select graph editing with node-group dragging plus clipboard copy and paste via `Ctrl/Cmd+C` and `Ctrl/Cmd+V`.
+
 ## Quick Start
 
 ### Standalone With Docker Compose
