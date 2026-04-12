@@ -416,6 +416,79 @@ mod tests {
             .expect("execute sample graph tick");
     }
 
+    #[test]
+    fn binary_select_graph_executes_one_tick() {
+        let document: GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "binary-select-sample",
+                "name": "binary select sample",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "selector",
+                    "metadata": { "name": "selector" },
+                    "node_type": "inputs.float_constant",
+                    "parameters": [{ "name": "value", "value": 1.0 }]
+                },
+                {
+                    "id": "a",
+                    "metadata": { "name": "a" },
+                    "node_type": "inputs.float_constant",
+                    "parameters": [{ "name": "value", "value": 2.0 }]
+                },
+                {
+                    "id": "b",
+                    "metadata": { "name": "b" },
+                    "node_type": "inputs.float_constant",
+                    "parameters": [{ "name": "value", "value": 7.0 }]
+                },
+                {
+                    "id": "select",
+                    "metadata": { "name": "select" },
+                    "node_type": "math.binary_select"
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "selector",
+                    "from_output_name": "value",
+                    "to_node_id": "select",
+                    "to_input_name": "selector"
+                },
+                {
+                    "from_node_id": "a",
+                    "from_output_name": "value",
+                    "to_node_id": "select",
+                    "to_input_name": "a"
+                },
+                {
+                    "from_node_id": "b",
+                    "from_output_name": "value",
+                    "to_node_id": "select",
+                    "to_input_name": "b"
+                }
+            ]
+        }))
+        .expect("parse binary select graph");
+
+        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile binary select graph");
+        let mut execution_state = GraphExecutionState::default();
+
+        graph
+            .execute_tick("binary-select-sample", &NoopEvents, 0.0, &mut execution_state)
+            .expect("execute binary select graph tick");
+
+        let selected = execution_state
+            .previous_outputs
+            .get(&(3usize, "__default__".to_owned(), "value".to_owned()))
+            .cloned()
+            .expect("binary select output");
+        assert_eq!(selected, InputValue::Float(7.0));
+    }
+
     /// Measures the average tick time for the sample runtime graph.
     #[test]
     fn sample_runtime_graph_tick_timing() {

@@ -23,6 +23,7 @@ impl NodeTypeId {
     pub const AUDIO_FFT_RECEIVER: &'static str = "inputs.audio_fft_receiver";
     pub const HA_MQTT_NUMBER: &'static str = "inputs.ha_mqtt_number";
     pub const SIGNAL_GENERATOR: &'static str = "inputs.signal_generator";
+    pub const BINARY_SELECT: &'static str = "math.binary_select";
     pub const ADD_FLOAT: &'static str = "math.add_float";
     pub const SUBTRACT_FLOAT: &'static str = "math.subtract_float";
     pub const DIVIDE_FLOAT: &'static str = "math.divide_float";

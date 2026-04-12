@@ -36,7 +36,7 @@ With Luma Weaver, you build animation graphs from reusable nodes and run them co
 Current building blocks include:
 
 - animation and pattern nodes such as linear sweep, circle sweep, plasma, twinkle stars, bouncing balls, and level bar
-- math and signal nodes such as constants, add/subtract/multiply/divide, min/max/clamp, abs, map range, power/root/exp/log, rounding, and signal generator
+- math and signal nodes such as constants, add/subtract/multiply/divide, min/max/clamp, abs, map range, binary select, power/root/exp/log, rounding, and signal generator
 - frame and color processing nodes such as tint, mix, blur, Laplacian edge/detail filtering, mask, brightness, and filters
 - runtime/debug nodes such as plot, display, and a WLED dummy display
 - network nodes for WLED output, WLED frame input, audio FFT receive, and Home Assistant MQTT numbers

@@ -597,6 +597,48 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
     runtime_updates: None,
 });
 
+static BINARY_SELECT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::BINARY_SELECT.to_owned(),
+    display_name: "Binary Select".to_owned(),
+    category: NodeCategory::Math,
+    needs_io: false,
+    inputs: vec![
+        NodeInputDefinition {
+            name: "selector".to_owned(),
+            display_name: title_case_name("selector"),
+            value_kind: ValueKind::Float,
+            accepted_kinds: vec![],
+            default_value: Some(InputValue::Float(0.0)),
+        },
+        NodeInputDefinition {
+            name: "a".to_owned(),
+            display_name: title_case_name("a"),
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![],
+            default_value: Some(InputValue::Float(0.0)),
+        },
+        NodeInputDefinition {
+            name: "b".to_owned(),
+            display_name: title_case_name("b"),
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![],
+            default_value: Some(InputValue::Float(0.0)),
+        },
+    ],
+    outputs: vec![NodeOutputDefinition {
+        name: "value".to_owned(),
+        display_name: title_case_name("value"),
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![],
+    }],
+    parameters: vec![],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
 static ADD_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
     id: NodeTypeId::ADD_FLOAT.to_owned(),
     display_name: "Add Float".to_owned(),
@@ -2162,6 +2204,7 @@ pub fn builtin_node_definitions() -> Vec<NodeDefinition> {
         (*WLED_SINK_NODE_TYPE).clone(),
         (*AUDIO_FFT_RECEIVER_NODE_TYPE).clone(),
         (*HA_MQTT_NUMBER_NODE_TYPE).clone(),
+        (*BINARY_SELECT_NODE_TYPE).clone(),
         (*ADD_FLOAT_NODE_TYPE).clone(),
         (*SUBTRACT_FLOAT_NODE_TYPE).clone(),
         (*SIGNAL_GENERATOR_NODE_TYPE).clone(),
