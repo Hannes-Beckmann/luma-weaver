@@ -239,6 +239,9 @@ impl FrontendApp {
         self.ui.selected_graph_id = Some(graph_id.clone());
         self.ui.node_menu_search.clear();
         self.ui.node_menu_graph_position = None;
+        self.ui.selected_graph_node_ids.clear();
+        self.ui.editor_pointer_graph_position = None;
+        self.ui.pending_clipboard_read_graph_id = None;
         self.ui.rename_graph_dialog_open = false;
         self.ui.rename_graph_id = Some(graph_id.clone());
         self.ui.rename_graph_name.clear();

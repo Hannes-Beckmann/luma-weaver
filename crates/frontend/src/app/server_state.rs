@@ -271,6 +271,9 @@ impl FrontendApp {
     pub(crate) fn clear_selected_graph_session(&mut self) {
         self.ui.selected_graph_id = None;
         self.ui.editor_canvas_hovered = false;
+        self.ui.selected_graph_node_ids.clear();
+        self.ui.editor_pointer_graph_position = None;
+        self.ui.pending_clipboard_read_graph_id = None;
         self.ui.node_menu_search.clear();
         self.ui.node_menu_graph_position = None;
         self.ui.rename_graph_dialog_open = false;
@@ -290,6 +293,10 @@ impl FrontendApp {
         self.graphs.plot_history.clear();
         self.ui.diagnostics_window_graph_id = None;
         self.ui.diagnostics_window_node_id = None;
+        #[cfg(target_arch = "wasm32")]
+        {
+            self.ui.browser_clipboard_events = None;
+        }
     }
 
     /// Clears autosave bookkeeping for pending local graph edits.

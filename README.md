@@ -42,6 +42,8 @@ Current building blocks include:
 - runtime/debug nodes such as plot, display, and a WLED dummy display
 - network nodes for WLED output, WLED frame input, audio FFT receive, and Home Assistant MQTT numbers
 
+The editor also supports multi-select graph editing with node-group dragging plus clipboard copy and paste via `Ctrl/Cmd+C` and `Ctrl/Cmd+V`.
+
 ## Quick Start
 
 ### Standalone With Docker Compose
@@ -131,7 +133,7 @@ The workspace is split into three crates:
 
 - `crates/frontend`: the browser UI, built with `eframe`/`egui` and compiled to WebAssembly with `trunk`
 - `crates/backend`: the HTTP/WebSocket server, graph storage, graph runtime, WLED discovery, and MQTT/Home Assistant integration
-- `crates/shared`: shared protocol types, graph schema, validation, and built-in node definitions used by both frontend and backend
+- `crates/shared`: shared protocol types, graph schema, validation, and node definitions used by both frontend and backend
 
 In backend mode, the flow looks like this:
 
@@ -184,6 +186,3 @@ The backend includes:
 ## Status
 
 The project already contains a substantial runtime and node catalog, but it is still evolving. If you deploy it, expect the graph format, node set, and integrations to continue growing.
-
-
-

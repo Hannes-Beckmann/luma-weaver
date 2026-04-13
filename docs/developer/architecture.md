@@ -14,7 +14,7 @@ The Rust workspace is split into three crates:
 
 - `crates/backend`: Axum server, WebSocket API, graph persistence, runtime execution, WLED and MQTT services
 - `crates/frontend`: `egui`/`eframe` browser UI compiled to WebAssembly with `trunk`
-- `crates/shared`: graph schema, protocol types, validation, and built-in node definitions shared by frontend and backend
+- `crates/shared`: graph schema, protocol types, validation, and node definitions shared by frontend and backend
 
 Top-level deployment and packaging files:
 
@@ -65,14 +65,14 @@ Important shared areas:
 
 - `crates/shared/src/protocol.rs`: frontend/backend WebSocket contract
 - `crates/shared/src/graph/node_definition.rs`: node schema types, categories, parameter UI hints
-- `crates/shared/src/graph/builtin_nodes.rs`: built-in node catalog
+- `crates/shared/src/graph/node_catalog.rs`: node catalog
 - `crates/shared/src/validation.rs`: graph validation against shared schema
 
 ## Node System
 
-Each built-in node spans multiple layers:
+Each node spans multiple layers:
 
-1. Shared schema definition in `crates/shared/src/graph/builtin_nodes.rs`
+1. Shared schema definition in `crates/shared/src/graph/node_catalog.rs`
 2. Backend runtime implementation under `crates/backend/src/node_runtime/nodes/...`
 3. Registry entry in `crates/backend/src/node_runtime/registry.rs`
 4. Frontend editor behavior driven from shared definitions and rendered in `crates/frontend/src/editor_view/...`

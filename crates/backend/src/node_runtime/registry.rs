@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde_json::Value as JsonValue;
 use shared::NodeDiagnostic;
-use shared::{NodeDefinition, NodeExecutionTarget, NodeTypeId, builtin_node_definitions};
+use shared::{NodeDefinition, NodeExecutionTarget, NodeTypeId, node_definitions};
 
 use crate::node_runtime::nodes;
 use crate::node_runtime::{
@@ -78,7 +78,7 @@ impl NodeRegistry {
 
     /// Registers a typed runtime node using the fast evaluator path.
     ///
-    /// This is the common path for built-in nodes whose inputs, parameters, and outputs are all
+    /// This is the common path for nodes whose inputs, parameters, and outputs are all
     /// described by the shared node schema.
     pub(crate) fn register_fast_node<T>(&mut self, definition: NodeDefinition) -> anyhow::Result<()>
     where
@@ -126,12 +126,12 @@ impl NodeRegistry {
     }
 }
 
-/// Builds the registry containing all built-in node types.
+/// Builds the registry containing all node types.
 ///
-/// This function pairs the shared built-in node definitions with their backend runtime
+/// This function pairs the shared node definitions with their backend runtime
 /// implementations and returns the result as a shared `Arc`.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) fn build_builtin_node_registry() -> anyhow::Result<Arc<NodeRegistry>> {
+pub(crate) fn build_node_registry() -> anyhow::Result<Arc<NodeRegistry>> {
     build_registry(NodeExecutionTarget::Backend)
 }
 
@@ -141,210 +141,210 @@ pub(crate) fn build_portable_node_registry() -> anyhow::Result<Arc<NodeRegistry>
 
 fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistry>> {
     let mut registry = NodeRegistry::new();
-    let definitions_by_id = builtin_node_definitions()
+    let definitions_by_id = node_definitions()
         .into_iter()
         .filter(|definition| definition.supports_execution_target(target))
         .map(|definition| (definition.id.clone(), definition))
         .collect::<HashMap<_, _>>();
 
-    macro_rules! register_builtin {
+    macro_rules! register_node {
         ($node_type:expr, $runtime:ty) => {
             registry.register_fast_node::<$runtime>(
                 definitions_by_id
                     .get($node_type)
                     .cloned()
-                    .expect("builtin node definition must exist"),
+                    .expect("node definition must exist"),
             )?;
         };
     }
 
-    register_builtin!(
+    register_node!(
         NodeTypeId::FLOAT_CONSTANT,
         nodes::inputs::float_constant::FloatConstantNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::COLOR_CONSTANT,
         nodes::inputs::color_constant::ColorConstantNode
     );
-    register_builtin!(NodeTypeId::DELAY, nodes::temporal_filters::delay::DelayNode);
-    register_builtin!(
+    register_node!(NodeTypeId::DELAY, nodes::temporal_filters::delay::DelayNode);
+    register_node!(
         NodeTypeId::DIFFERENTIATE,
         nodes::temporal_filters::differentiate::DifferentiateNode
     );
-    register_builtin!(NodeTypeId::DISPLAY, nodes::outputs::display::DisplayNode);
-    register_builtin!(NodeTypeId::PLOT, nodes::outputs::plot::PlotNode);
+    register_node!(NodeTypeId::DISPLAY, nodes::outputs::display::DisplayNode);
+    register_node!(NodeTypeId::PLOT, nodes::outputs::plot::PlotNode);
     #[cfg(not(target_arch = "wasm32"))]
     if matches!(target, NodeExecutionTarget::Backend) {
-        register_builtin!(
+        register_node!(
             NodeTypeId::WLED_TARGET,
             nodes::outputs::wled_target::WledTargetNode
         );
-        register_builtin!(
+        register_node!(
             NodeTypeId::WLED_SINK,
             nodes::inputs::wled_sink::WledSinkNode
         );
-        register_builtin!(
+        register_node!(
             NodeTypeId::AUDIO_FFT_RECEIVER,
             nodes::inputs::audio_fft_receiver::AudioFftReceiverNode
         );
-        register_builtin!(
+        register_node!(
             NodeTypeId::IMAGE_SOURCE,
             nodes::inputs::image_source::ImageSourceNode
         );
-        register_builtin!(
+        register_node!(
             NodeTypeId::HA_MQTT_NUMBER,
             nodes::inputs::ha_mqtt_number::HomeAssistantMqttNumberNode
         );
     }
-    register_builtin!(
+    register_node!(
         NodeTypeId::SIGNAL_GENERATOR,
         nodes::inputs::signal_generator::SignalGeneratorNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::BINARY_SELECT,
         nodes::math::binary_select::BinarySelectNode
     );
-    register_builtin!(NodeTypeId::ADD_FLOAT, nodes::math::add_float::AddFloatNode);
-    register_builtin!(
+    register_node!(NodeTypeId::ADD_FLOAT, nodes::math::add_float::AddFloatNode);
+    register_node!(
         NodeTypeId::SUBTRACT_FLOAT,
         nodes::math::subtract_float::SubtractFloatNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::DIVIDE_FLOAT,
         nodes::math::divide_float::DivideFloatNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::MIN_MAX_FLOAT,
         nodes::math::min_max_float::MinMaxFloatNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::MULTIPLY_FLOAT,
         nodes::math::multiply_float::MultiplyFloatNode
     );
-    register_builtin!(NodeTypeId::ABS_FLOAT, nodes::math::abs_float::AbsFloatNode);
-    register_builtin!(
+    register_node!(NodeTypeId::ABS_FLOAT, nodes::math::abs_float::AbsFloatNode);
+    register_node!(
         NodeTypeId::CLAMP_FLOAT,
         nodes::math::clamp_float::ClampFloatNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::POWER_FLOAT,
         nodes::math::power_float::PowerFloatNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::ROOT_FLOAT,
         nodes::math::root_float::RootFloatNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::EXPONENTIAL_FLOAT,
         nodes::math::exponential_float::ExponentialFloatNode
     );
-    register_builtin!(NodeTypeId::LOG_FLOAT, nodes::math::log_float::LogFloatNode);
-    register_builtin!(
+    register_node!(NodeTypeId::LOG_FLOAT, nodes::math::log_float::LogFloatNode);
+    register_node!(
         NodeTypeId::MAP_RANGE_FLOAT,
         nodes::math::map_range_float::MapRangeFloatNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::ROUND_FLOAT,
         nodes::math::round_float::RoundFloatNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::SCALE_TENSOR,
         nodes::math::scale_tensor::ScaleTensorNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::SCALE_COLOR,
         nodes::frame_operations::scale_color::ScaleColorNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::MULTIPLY_COLOR,
         nodes::frame_operations::multiply_color::MultiplyColorNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::TINT_FRAME,
         nodes::frame_operations::tint_frame::TintFrameNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::MASK_FRAME,
         nodes::frame_operations::mask_frame::MaskFrameNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::MIX_COLOR,
         nodes::frame_operations::mix_color::MixColorNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::ALPHA_OVER,
         nodes::frame_operations::alpha_over::AlphaOverNode
     );
-    register_builtin!(NodeTypeId::FADE, nodes::temporal_filters::fade::FadeNode);
-    register_builtin!(
+    register_node!(NodeTypeId::FADE, nodes::temporal_filters::fade::FadeNode);
+    register_node!(
         NodeTypeId::INTEGRATE,
         nodes::temporal_filters::integrate::IntegrateNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::MOVING_AVERAGE,
         nodes::temporal_filters::moving_average::MovingAverageNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::MOVING_MEDIAN,
         nodes::temporal_filters::moving_median::MovingMedianNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::BOX_BLUR,
         nodes::spatial_filters::box_blur::BoxBlurNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::GAUSSIAN_BLUR,
         nodes::spatial_filters::gaussian_blur::GaussianBlurNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::MEDIAN_FILTER,
         nodes::spatial_filters::median_filter::MedianFilterNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::LAPLACIAN_FILTER,
         nodes::spatial_filters::laplacian_filter::LaplacianFilterNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::SPECTRUM_ANALYZER,
         nodes::generators::spectrum_analyzer::SpectrumAnalyzerNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::SOLID_FRAME,
         nodes::generators::solid_frame::SolidFrameNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::RAINBOW_SWEEP,
         nodes::generators::rainbow_sweep::RainbowSweepNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::CIRCLE_SWEEP,
         nodes::generators::circle_sweep::CircleSweepNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::LEVEL_BAR,
         nodes::generators::level_bar::LevelBarNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::BOUNCING_BALLS,
         nodes::generators::bouncing_balls::BouncingBallsNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::TWINKLE_STARS,
         nodes::generators::twinkle_stars::TwinkleStarsNode
     );
-    register_builtin!(NodeTypeId::PLASMA, nodes::generators::plasma::PlasmaNode);
-    register_builtin!(
+    register_node!(NodeTypeId::PLASMA, nodes::generators::plasma::PlasmaNode);
+    register_node!(
         NodeTypeId::FRAME_BRIGHTNESS,
         nodes::frame_operations::frame_brightness::FrameBrightnessNode
     );
-    register_builtin!(
+    register_node!(
         NodeTypeId::WLED_DUMMY_DISPLAY,
         nodes::debug::wled_dummy_display::WledDummyDisplayNode
     );
 
     anyhow::ensure!(
         registry.definition(NodeTypeId::FLOAT_CONSTANT).is_some(),
-        "builtin node registry must contain inputs.float_constant"
+        "node registry must contain inputs.float_constant"
     );
 
     Ok(Arc::new(registry))
@@ -355,10 +355,10 @@ mod tests {
     use std::collections::HashMap;
 
     use serde_json::Value as JsonValue;
-    use shared::{NodeCategory, NodeDefinition, builtin_node_definition};
+    use shared::{NodeCategory, NodeDefinition, node_definition};
 
     use super::{
-        NodeRegistry, RegisteredNodeType, build_builtin_node_registry, build_portable_node_registry,
+        NodeRegistry, RegisteredNodeType, build_node_registry, build_portable_node_registry,
     };
     use crate::node_runtime::{
         NodeEvaluationContext, RuntimeNode, RuntimeNodeEvaluator, RuntimeNodeFromParameters,
@@ -402,9 +402,9 @@ mod tests {
     }
 
     #[test]
-    /// Tests that the built-in registry contains the expected built-in node entries.
-    fn builtin_registry_contains_nodes() {
-        let registry = build_builtin_node_registry().expect("build builtin registry");
+    /// Tests that the node registry contains the expected node entries.
+    fn node_registry_contains_nodes() {
+        let registry = build_node_registry().expect("build node registry");
         assert!(registry.definitions().len() > 10);
         assert!(
             registry
@@ -417,8 +417,8 @@ mod tests {
     /// Tests that registering the same node ID twice returns an error.
     fn duplicate_node_ids_are_rejected() {
         let mut registry = NodeRegistry::new();
-        let definition = builtin_node_definition(shared::NodeTypeId::FLOAT_CONSTANT)
-            .expect("builtin float constant definition");
+        let definition =
+            node_definition(shared::NodeTypeId::FLOAT_CONSTANT).expect("float constant definition");
         registry
             .register(RegisteredNodeType {
                 definition: definition.clone(),
@@ -438,7 +438,7 @@ mod tests {
     }
 
     #[test]
-    /// Tests that custom Rust nodes can be registered through the same API as built-ins.
+    /// Tests that custom Rust nodes can be registered through the same API as catalog nodes.
     fn custom_rust_nodes_register_through_same_api() {
         let mut registry = NodeRegistry::new();
         registry

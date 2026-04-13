@@ -9,7 +9,7 @@ use shared::{
     GraphRuntimeMode, GraphRuntimeStatus, MqttBrokerConfig, NodeDefinition, NodeDiagnostic,
     NodeDiagnosticEntry, NodeDiagnosticSeverity, NodeDiagnosticSummary, NodeExecutionTarget,
     NodeRuntimeUpdateValue, NodeRuntimeValue, ServerMessage, ServerState, WledInstance,
-    builtin_node_definitions, validate_graph_document,
+    node_definitions, validate_graph_document,
 };
 use uuid::Uuid;
 
@@ -67,7 +67,7 @@ impl DemoTransport {
             response_tx,
             node_registry: build_portable_node_registry()
                 .context("build portable node registry")?,
-            node_definitions: builtin_node_definitions()
+            node_definitions: node_definitions()
                 .into_iter()
                 .filter(|definition| {
                     definition.supports_execution_target(NodeExecutionTarget::FrontendDemo)
@@ -699,7 +699,7 @@ fn validate_demo_document(document: &GraphDocument) -> anyhow::Result<()> {
             .join("; ")
     );
     for node in &document.nodes {
-        let supported = builtin_node_definitions()
+        let supported = node_definitions()
             .into_iter()
             .find(|definition| definition.id == node.node_type.as_str())
             .map(|definition| {

@@ -1,10 +1,12 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use egui_snarl::{NodeId, Snarl};
 use shared::{
-    GraphDocument, GraphEdge, GraphNode, InputValue, NodeDefinition, NodeInputValue, NodeMetadata,
-    NodeParameter, NodeParameterDefinition, NodeTypeId, ValueKind,
+    GraphClipboardFragment, GraphDocument, GraphEdge, GraphNode, InputValue, NodeDefinition,
+    NodeInputValue, NodeMetadata, NodeParameter, NodeParameterDefinition, NodePosition, NodeTypeId,
+    ValueKind,
 };
+use uuid::Uuid;
 
 use super::{EditorInputPort, EditorOutputPort, EditorSnarlNode};
 
@@ -613,13 +615,147 @@ pub(crate) fn patch_snarl_from_document(
     }
 }
 
+/// Summarizes the result of pasting a clipboard fragment into a graph document.
+pub(crate) struct PasteClipboardFragmentResult {
+    pub(crate) inserted_node_ids: Vec<String>,
+    pub(crate) skipped_node_type_ids: Vec<String>,
+}
+
+/// Builds a clipboard fragment from the selected nodes in a graph document.
+pub(crate) fn clipboard_fragment_from_document(
+    document: &GraphDocument,
+    selected_node_ids: &HashSet<String>,
+) -> Option<GraphClipboardFragment> {
+    if selected_node_ids.is_empty() {
+        return None;
+    }
+
+    let nodes = document
+        .nodes
+        .iter()
+        .filter(|node| selected_node_ids.contains(node.id.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if nodes.is_empty() {
+        return None;
+    }
+
+    let origin = clipboard_fragment_origin(&nodes);
+    let edges = document
+        .edges
+        .iter()
+        .filter(|edge| {
+            selected_node_ids.contains(edge.from_node_id.as_str())
+                && selected_node_ids.contains(edge.to_node_id.as_str())
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+
+    Some(GraphClipboardFragment::new(origin, nodes, edges))
+}
+
+/// Pastes a clipboard fragment into the graph document, generating fresh node IDs.
+pub(crate) fn paste_clipboard_fragment_into_document(
+    document: &mut GraphDocument,
+    fragment: &GraphClipboardFragment,
+    available_node_definitions: &[NodeDefinition],
+    paste_origin: Option<NodePosition>,
+) -> PasteClipboardFragmentResult {
+    let target_origin = paste_origin.unwrap_or_else(|| NodePosition {
+        x: fragment.origin.x + 32.0,
+        y: fragment.origin.y + 32.0,
+    });
+    let delta_x = target_origin.x - fragment.origin.x;
+    let delta_y = target_origin.y - fragment.origin.y;
+
+    let available_node_type_ids = available_node_definitions
+        .iter()
+        .map(|definition| definition.id.as_str())
+        .collect::<HashSet<_>>();
+    let mut id_map = HashMap::<String, String>::new();
+    let mut skipped_node_type_ids = Vec::<String>::new();
+
+    for node in &fragment.nodes {
+        if !available_node_type_ids.contains(node.node_type.as_str()) {
+            if skipped_node_type_ids
+                .iter()
+                .all(|node_type_id| node_type_id != node.node_type.as_str())
+            {
+                skipped_node_type_ids.push(node.node_type.as_str().to_owned());
+            }
+            continue;
+        }
+
+        let new_node_id = Uuid::new_v4().to_string();
+        id_map.insert(node.id.clone(), new_node_id.clone());
+
+        let mut pasted_node = node.clone();
+        pasted_node.id = new_node_id.clone();
+        pasted_node.viewport.position.x += delta_x;
+        pasted_node.viewport.position.y += delta_y;
+        document.nodes.push(pasted_node);
+    }
+
+    for edge in &fragment.edges {
+        let Some(from_node_id) = id_map.get(edge.from_node_id.as_str()) else {
+            continue;
+        };
+        let Some(to_node_id) = id_map.get(edge.to_node_id.as_str()) else {
+            continue;
+        };
+
+        document.edges.push(GraphEdge {
+            from_node_id: from_node_id.clone(),
+            from_output_name: edge.from_output_name.clone(),
+            to_node_id: to_node_id.clone(),
+            to_input_name: edge.to_input_name.clone(),
+        });
+    }
+
+    document.edges.sort_by(|a, b| {
+        (
+            &a.from_node_id,
+            &a.from_output_name,
+            &a.to_node_id,
+            &a.to_input_name,
+        )
+            .cmp(&(
+                &b.from_node_id,
+                &b.from_output_name,
+                &b.to_node_id,
+                &b.to_input_name,
+            ))
+    });
+
+    PasteClipboardFragmentResult {
+        inserted_node_ids: id_map.into_values().collect(),
+        skipped_node_type_ids,
+    }
+}
+
+fn clipboard_fragment_origin(nodes: &[GraphNode]) -> NodePosition {
+    let mut iter = nodes.iter();
+    let Some(first) = iter.next() else {
+        return NodePosition::default();
+    };
+
+    let mut min_x = first.viewport.position.x;
+    let mut min_y = first.viewport.position.y;
+    for node in iter {
+        min_x = min_x.min(node.viewport.position.x);
+        min_y = min_y.min(node.viewport.position.y);
+    }
+
+    NodePosition { x: min_x, y: min_y }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
     use shared::{
-        NodeCategory, NodeConnectionDefinition, ParameterDefaultValue, ParameterUiHint,
-        ParameterVisibilityCondition,
+        GraphMetadata, NodeCategory, NodeConnectionDefinition, NodeParameter,
+        ParameterDefaultValue, ParameterUiHint, ParameterVisibilityCondition,
     };
 
     fn sample_definition() -> NodeDefinition {
@@ -713,5 +849,111 @@ mod tests {
                 .iter()
                 .any(|parameter| parameter.name == "advanced_value")
         );
+    }
+
+    fn test_graph_node(id: &str, node_type: &str, x: f32, y: f32) -> GraphNode {
+        GraphNode {
+            id: id.to_owned(),
+            metadata: NodeMetadata {
+                name: id.to_owned(),
+            },
+            node_type: NodeTypeId::new(node_type.to_owned()),
+            viewport: shared::NodeViewport {
+                position: NodePosition { x, y },
+                collapsed: false,
+            },
+            input_values: Vec::new(),
+            parameters: vec![NodeParameter {
+                name: "example".to_owned(),
+                value: json!(1.0),
+            }],
+        }
+    }
+
+    fn test_graph_document() -> GraphDocument {
+        GraphDocument {
+            metadata: GraphMetadata {
+                id: "graph-a".to_owned(),
+                name: "Graph A".to_owned(),
+                execution_frequency_hz: 60,
+            },
+            viewport: shared::GraphViewport::default(),
+            nodes: vec![
+                test_graph_node("node-a", "test.visibility", 10.0, 20.0),
+                test_graph_node("node-b", "test.visibility", 30.0, 60.0),
+                test_graph_node("node-c", "test.unknown", 90.0, 120.0),
+            ],
+            edges: vec![
+                GraphEdge {
+                    from_node_id: "node-a".to_owned(),
+                    from_output_name: "value".to_owned(),
+                    to_node_id: "node-b".to_owned(),
+                    to_input_name: "value".to_owned(),
+                },
+                GraphEdge {
+                    from_node_id: "node-b".to_owned(),
+                    from_output_name: "value".to_owned(),
+                    to_node_id: "node-c".to_owned(),
+                    to_input_name: "value".to_owned(),
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn clipboard_fragment_only_keeps_selected_nodes_and_internal_edges() {
+        let document = test_graph_document();
+        let selected_node_ids = ["node-a".to_owned(), "node-b".to_owned()]
+            .into_iter()
+            .collect::<HashSet<_>>();
+
+        let fragment =
+            clipboard_fragment_from_document(&document, &selected_node_ids).expect("fragment");
+
+        assert_eq!(fragment.origin, NodePosition { x: 10.0, y: 20.0 });
+        assert_eq!(fragment.nodes.len(), 2);
+        assert_eq!(fragment.edges.len(), 1);
+        assert_eq!(fragment.edges[0].from_node_id, "node-a");
+        assert_eq!(fragment.edges[0].to_node_id, "node-b");
+    }
+
+    #[test]
+    fn paste_clipboard_fragment_remaps_ids_and_skips_unknown_nodes() {
+        let mut destination = GraphDocument {
+            metadata: GraphMetadata {
+                id: "graph-b".to_owned(),
+                name: "Graph B".to_owned(),
+                execution_frequency_hz: 60,
+            },
+            ..GraphDocument::default()
+        };
+        let fragment = GraphClipboardFragment::new(
+            NodePosition { x: 10.0, y: 20.0 },
+            vec![
+                test_graph_node("node-a", "test.visibility", 10.0, 20.0),
+                test_graph_node("node-c", "test.unknown", 90.0, 120.0),
+            ],
+            vec![GraphEdge {
+                from_node_id: "node-a".to_owned(),
+                from_output_name: "value".to_owned(),
+                to_node_id: "node-c".to_owned(),
+                to_input_name: "value".to_owned(),
+            }],
+        );
+
+        let result = paste_clipboard_fragment_into_document(
+            &mut destination,
+            &fragment,
+            &[sample_definition()],
+            Some(NodePosition { x: 50.0, y: 80.0 }),
+        );
+
+        assert_eq!(destination.nodes.len(), 1);
+        assert_eq!(destination.edges.len(), 0);
+        assert_eq!(result.inserted_node_ids.len(), 1);
+        assert_eq!(result.skipped_node_type_ids, vec!["test.unknown"]);
+        assert_eq!(destination.nodes[0].viewport.position.x, 50.0);
+        assert_eq!(destination.nodes[0].viewport.position.y, 80.0);
+        assert_ne!(destination.nodes[0].id, "node-a");
     }
 }

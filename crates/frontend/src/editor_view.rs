@@ -42,13 +42,13 @@ pub(crate) struct EditorSnarlNode {
 }
 
 pub(crate) use self::model::{
-    build_snarl_from_document, patch_snarl_from_document, refresh_snarl_runtime_values,
+    build_snarl_from_document, clipboard_fragment_from_document,
+    paste_clipboard_fragment_into_document, patch_snarl_from_document,
+    refresh_snarl_runtime_values,
 };
 
 #[cfg(test)]
-pub(crate) fn snarl_node_titles(
-    snarl: &egui_snarl::Snarl<EditorSnarlNode>,
-) -> Vec<String> {
+pub(crate) fn snarl_node_titles(snarl: &egui_snarl::Snarl<EditorSnarlNode>) -> Vec<String> {
     snarl.nodes().map(|node| node.title.clone()).collect()
 }
 
@@ -160,6 +160,18 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                             app.redo_graph_edit();
                         }
 
+                        let copy_response = ui.add_enabled(
+                            !app.ui.selected_graph_node_ids.is_empty(),
+                            secondary_action_button("Copy"),
+                        );
+                        if copy_response.clicked() {
+                            app.copy_selected_nodes_to_clipboard();
+                        }
+
+                        if ui.add(secondary_action_button("Paste")).clicked() {
+                            app.paste_nodes_from_clipboard();
+                        }
+
                         if ui.add(secondary_action_button("Export")).clicked() {
                             app.request_graph_export(graph.id.clone());
                         }
@@ -220,6 +232,8 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                     initialized,
                     opened_diagnostics_node_id,
                     canvas_hovered,
+                    selected_graph_node_ids,
+                    editor_pointer_graph_position,
                     node_menu_search,
                     node_menu_graph_position,
                     image_upload_request,
@@ -239,6 +253,9 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 );
                 initialized_viewport_for_graph = initialized;
                 app.ui.editor_canvas_hovered = canvas_hovered;
+                app.ui.selected_graph_node_ids = selected_graph_node_ids;
+                app.ui.editor_pointer_graph_position =
+                    editor_pointer_graph_position.map(|pos| (pos.x, pos.y));
                 app.ui.node_menu_search = node_menu_search;
                 app.ui.node_menu_graph_position =
                     node_menu_graph_position.map(|pos| (pos.x, pos.y));
@@ -255,6 +272,8 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                         ui.label("Waiting for the backend to send the latest saved version.");
                     });
                 });
+                app.ui.selected_graph_node_ids.clear();
+                app.ui.editor_pointer_graph_position = None;
             }
             if initialized_viewport_for_graph {
                 app.graphs.snarl_viewport_initialized_graph_id = Some(graph.id.clone());

@@ -36,12 +36,18 @@ pub(crate) struct UiState {
     pub(crate) mqtt_broker_dialog_open: bool,
     pub(crate) mqtt_broker_draft: Vec<MqttBrokerConfig>,
     pub(crate) editor_canvas_hovered: bool,
+    pub(crate) selected_graph_node_ids: Vec<String>,
+    pub(crate) editor_pointer_graph_position: Option<(f32, f32)>,
     pub(crate) node_menu_search: String,
     pub(crate) node_menu_graph_position: Option<(f32, f32)>,
     pub(crate) pending_import_graph_file: Option<GraphExchangeFile>,
     #[cfg(target_arch = "wasm32")]
     pub(crate) browser_graph_file_events:
         Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserGraphFileEvent>>,
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) browser_clipboard_events:
+        Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserClipboardEvent>>,
+    pub(crate) pending_clipboard_read_graph_id: Option<String>,
     #[cfg(target_arch = "wasm32")]
     pub(crate) browser_image_asset_events:
         Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserImageAssetEvent>>,
@@ -66,11 +72,16 @@ impl Default for UiState {
             mqtt_broker_dialog_open: false,
             mqtt_broker_draft: Vec::new(),
             editor_canvas_hovered: false,
+            selected_graph_node_ids: Vec::new(),
+            editor_pointer_graph_position: None,
             node_menu_search: String::new(),
             node_menu_graph_position: None,
             pending_import_graph_file: None,
             #[cfg(target_arch = "wasm32")]
             browser_graph_file_events: None,
+            #[cfg(target_arch = "wasm32")]
+            browser_clipboard_events: None,
+            pending_clipboard_read_graph_id: None,
             #[cfg(target_arch = "wasm32")]
             browser_image_asset_events: None,
         }

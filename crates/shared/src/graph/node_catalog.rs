@@ -7,7 +7,7 @@ use super::{
 use serde_json::json;
 use std::sync::LazyLock;
 
-/// Returns the canonical opaque-white default input value used by the built-in catalog.
+/// Returns the canonical opaque-white default input value used by the node catalog.
 fn white_input() -> InputValue {
     InputValue::Color(RgbaColor {
         r: 1.0,
@@ -17,7 +17,7 @@ fn white_input() -> InputValue {
     })
 }
 
-/// Returns the canonical fully transparent color used by the built-in catalog.
+/// Returns the canonical fully transparent color used by the node catalog.
 fn transparent_input() -> InputValue {
     InputValue::Color(RgbaColor {
         r: 0.0,
@@ -27,7 +27,7 @@ fn transparent_input() -> InputValue {
     })
 }
 
-/// Returns the canonical single-element zero tensor used by the built-in catalog.
+/// Returns the canonical single-element zero tensor used by the node catalog.
 fn default_tensor_input() -> InputValue {
     InputValue::FloatTensor(FloatTensor {
         shape: vec![1],
@@ -35,7 +35,7 @@ fn default_tensor_input() -> InputValue {
     })
 }
 
-/// Converts a snake_case field name into the title-cased label used by built-in schema definitions.
+/// Converts a snake_case field name into the title-cased label used by node schema definitions.
 fn title_case_name(name: &str) -> String {
     name.split('_')
         .filter(|part| !part.is_empty())
@@ -54,7 +54,7 @@ fn title_case_name(name: &str) -> String {
         .join(" ")
 }
 
-/// Enumerates the waveform options exposed by the built-in signal generator node.
+/// Enumerates the waveform options exposed by the signal generator node.
 static SIGNAL_GENERATOR_WAVEFORMS: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
     vec![
         EnumOption {
@@ -560,7 +560,7 @@ static HA_MQTT_NUMBER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
         NodeParameterDefinition::new(
             "entity_id",
             title_case_name("entity_id"),
-            ParameterDefaultValue::String("animation_builder_number".to_owned()),
+            ParameterDefaultValue::String("luma_weaver_number".to_owned()),
             ParameterUiHint::TextSingleLine,
         ),
         NodeParameterDefinition::new(
@@ -2302,11 +2302,11 @@ static FRAME_BRIGHTNESS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
     runtime_updates: None,
 });
 
-/// Returns the full shared schema catalog for all built-in node types.
+/// Returns the full shared schema catalog for all node types.
 ///
 /// Each call clones the lazily initialized static node definitions into a fresh vector so callers
 /// can freely sort or modify their local copy.
-pub fn builtin_node_definitions() -> Vec<NodeDefinition> {
+pub fn node_definitions() -> Vec<NodeDefinition> {
     vec![
         (*FLOAT_CONSTANT_NODE_TYPE).clone(),
         (*COLOR_CONSTANT_NODE_TYPE).clone(),
@@ -2362,9 +2362,9 @@ pub fn builtin_node_definitions() -> Vec<NodeDefinition> {
     ]
 }
 
-/// Returns the built-in node definition for the requested node type identifier, if it exists.
-pub fn builtin_node_definition(node_type_id: &str) -> Option<NodeDefinition> {
-    builtin_node_definitions()
+/// Returns the node definition for the requested node type identifier, if it exists.
+pub fn node_definition(node_type_id: &str) -> Option<NodeDefinition> {
+    node_definitions()
         .into_iter()
         .find(|definition| definition.id == node_type_id)
 }

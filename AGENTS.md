@@ -12,7 +12,7 @@ Luma Weaver is a Rust workspace for a node-based lighting and animation editor.
 
 - `crates/backend`: Axum HTTP/WebSocket server, graph persistence, runtime executor/compiler, WLED discovery/output, MQTT/Home Assistant integration
 - `crates/frontend`: `egui`/`eframe` WebAssembly UI built with `trunk`
-- `crates/shared`: graph schema, protocol types, validation, and built-in node definitions shared by frontend and backend
+- `crates/shared`: graph schema, protocol types, validation, and node definitions shared by frontend and backend
 
 Runtime shape:
 
@@ -61,6 +61,7 @@ Common commands:
 - Preserve persisted graph compatibility unless the task explicitly allows a breaking change. If you must break compatibility, call it out clearly in the PR notes.
 - Treat `config.yaml`, Docker, and workflow changes as release-sensitive. Keep them minimal and verify carefully.
 - Do not invent new infrastructure or project structure when an existing pattern already exists nearby.
+- Update docs in `docs`
 
 ## Event-Driven TODOs
 
@@ -80,9 +81,9 @@ Use this section as a maintenance checklist. When one of these events happens, e
   - `build.yaml`
   - `repository.yaml`
 
-### If you add, remove, rename, or materially change a built-in node
+### If you add, remove, rename, or materially change a node
 
-- Update the shared node catalog in `crates/shared/src/graph/builtin_nodes.rs`.
+- Update the shared node catalog in `crates/shared/src/graph/node_catalog.rs`.
 - Update or add the backend runtime implementation under `crates/backend/src/node_runtime/nodes/...`.
 - Register the runtime in `crates/backend/src/node_runtime/registry.rs`.
 - Verify the frontend editor picks it up correctly through the shared node definitions, especially:

@@ -395,7 +395,7 @@ pub enum ParameterUiHint {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::builtin_node_definition;
+    use crate::node_definition;
     use serde_json::json;
 
     #[test]
@@ -504,28 +504,28 @@ mod tests {
     }
 
     #[test]
-    fn builtin_needs_io_marks_backend_only_nodes() {
+    fn node_catalog_marks_backend_only_nodes() {
         assert!(
-            builtin_node_definition(NodeTypeId::AUDIO_FFT_RECEIVER)
+            node_definition(NodeTypeId::AUDIO_FFT_RECEIVER)
                 .expect("audio fft receiver definition")
                 .needs_io
         );
         assert!(
-            builtin_node_definition(NodeTypeId::WLED_TARGET)
+            node_definition(NodeTypeId::WLED_TARGET)
                 .expect("wled target definition")
                 .needs_io
         );
     }
 
     #[test]
-    fn builtin_needs_io_marks_portable_nodes() {
+    fn node_catalog_marks_portable_nodes() {
         assert!(
-            !builtin_node_definition(NodeTypeId::PLOT)
+            !node_definition(NodeTypeId::PLOT)
                 .expect("plot definition")
                 .needs_io
         );
         assert!(
-            !builtin_node_definition(NodeTypeId::WLED_DUMMY_DISPLAY)
+            !node_definition(NodeTypeId::WLED_DUMMY_DISPLAY)
                 .expect("wled dummy display definition")
                 .needs_io
         );

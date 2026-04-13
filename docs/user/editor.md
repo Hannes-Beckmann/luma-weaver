@@ -26,6 +26,8 @@ Inside the editor you can:
 - add nodes
 - connect nodes
 - change parameter values
+- select and move multiple nodes together
+- copy and paste selected nodes
 - inspect runtime values for debug-oriented nodes
 - run the graph
 - step or pause the runtime
@@ -41,6 +43,38 @@ The usual graph-editing loop looks like this:
 4. Adjust parameters and defaults.
 5. Start the runtime and inspect the result.
 6. Use diagnostics or debug-oriented nodes when behavior is not what you expect.
+
+## Selection And Clipboard
+
+The editor supports multi-selection on the node canvas.
+
+You can:
+
+- select multiple nodes
+- drag one selected node to move the full selected group
+- copy the selected nodes to the system clipboard
+- paste copied nodes into the current graph
+- copy from one graph or browser window and paste into another
+
+Selection gestures:
+
+- `Shift`+click: add a node to the current selection
+- `Ctrl`+click or `Cmd`+click: remove a node from the current selection
+- `Shift`+drag: box-select multiple nodes
+- `Ctrl`+click or `Cmd`+click on empty canvas space: clear the current selection
+
+When you copy a selection:
+
+- only the selected nodes are included
+- connections between the selected nodes are preserved
+- connections to nodes outside the selection are not copied
+
+When you paste:
+
+- pasted nodes receive fresh node ids
+- copied internal connections are restored
+- the paste location prefers the current canvas pointer position when the canvas is hovered
+- unsupported node types are skipped instead of failing the whole paste
 
 ## Dashboard Actions
 
@@ -65,6 +99,8 @@ When a graph is open, the editor header gives you graph-level controls such as:
 - pause
 - step by a configurable number of ticks
 - stop
+- copy selected nodes
+- paste copied nodes
 - export
 - focus the canvas
 - reload the selected graph from storage
@@ -72,6 +108,15 @@ When a graph is open, the editor header gives you graph-level controls such as:
 - undo and redo
 
 These controls let you move between editing, runtime inspection, and recovery without leaving the graph.
+
+## Keyboard Shortcuts
+
+Useful editor shortcuts:
+
+- `Ctrl+C` or `Cmd+C`: copy the currently selected nodes
+- `Ctrl+V` or `Cmd+V`: paste copied nodes into the open graph
+- `Ctrl+Z` or `Cmd+Z`: undo
+- `Ctrl+Y` or `Cmd+Shift+Z`: redo
 
 ## Imports And Exports
 
