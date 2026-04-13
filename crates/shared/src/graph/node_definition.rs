@@ -18,6 +18,7 @@ impl NodeTypeId {
     pub const DISPLAY: &'static str = "outputs.display";
     pub const PLOT: &'static str = "outputs.plot";
     pub const DELAY: &'static str = "temporal_filters.delay";
+    pub const DIFFERENTIATE: &'static str = "temporal_filters.differentiate";
     pub const WLED_TARGET: &'static str = "outputs.wled_target";
     pub const WLED_SINK: &'static str = "inputs.wled_sink";
     pub const AUDIO_FFT_RECEIVER: &'static str = "inputs.audio_fft_receiver";
@@ -45,6 +46,7 @@ impl NodeTypeId {
     pub const MIX_COLOR: &'static str = "frame_operations.mix";
     pub const ALPHA_OVER: &'static str = "frame_operations.alpha_over";
     pub const FADE: &'static str = "temporal_filters.fade";
+    pub const INTEGRATE: &'static str = "temporal_filters.integrate";
     pub const MOVING_AVERAGE: &'static str = "temporal_filters.moving_average";
     pub const MOVING_MEDIAN: &'static str = "temporal_filters.moving_median";
     pub const BOX_BLUR: &'static str = "spatial_filters.box_blur";
