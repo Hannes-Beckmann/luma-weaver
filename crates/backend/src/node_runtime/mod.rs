@@ -44,7 +44,7 @@ pub(crate) use macros::{
 pub(crate) use parameters::{ParameterStatus, parameter_status};
 /// Built-in registry construction and lookup.
 #[cfg(not(target_arch = "wasm32"))]
-pub(crate) use registry::build_builtin_node_registry;
+pub(crate) use registry::build_node_registry;
 pub(crate) use registry::{NodeRegistry, build_portable_node_registry};
 /// Generic serde-based runtime input and output conversion helpers.
 pub(crate) use shared::{AnyInputValue, deserialize_inputs, serialize_outputs};

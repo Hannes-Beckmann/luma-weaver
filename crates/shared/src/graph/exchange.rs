@@ -2,7 +2,7 @@ use super::GraphDocument;
 use serde::{Deserialize, Serialize};
 
 /// Stable file-format identifier for exported graph documents.
-pub const GRAPH_EXCHANGE_FORMAT: &str = "animation_builder_graph";
+pub const GRAPH_EXCHANGE_FORMAT: &str = "luma_weaver_graph";
 /// Current version of the single-graph exchange file format.
 pub const GRAPH_EXCHANGE_VERSION: u32 = 1;
 

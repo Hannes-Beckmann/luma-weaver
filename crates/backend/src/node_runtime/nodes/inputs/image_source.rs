@@ -252,9 +252,7 @@ fn user_facing_load_error_message(asset_id: &str, error: &anyhow::Error) -> Stri
         return format!("Uploaded image asset '{asset_id}' is missing.");
     }
 
-    if error.to_string().contains("image asset id")
-        && error.to_string().contains("is invalid")
-    {
+    if error.to_string().contains("image asset id") && error.to_string().contains("is invalid") {
         return "Uploaded image reference is invalid.".to_owned();
     }
 
@@ -597,7 +595,9 @@ mod tests {
 
         assert_eq!(message, "Uploaded image asset 'asset-123' is missing.");
         assert!(matches!(
-            error.downcast_ref::<std::io::Error>().map(std::io::Error::kind),
+            error
+                .downcast_ref::<std::io::Error>()
+                .map(std::io::Error::kind),
             Some(ErrorKind::NotFound)
         ));
     }

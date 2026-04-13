@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::graph::{GraphDocument, builtin_node_definition};
+use crate::graph::{GraphDocument, node_definition};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Describes one validation problem found while checking a persisted graph document.
@@ -25,7 +25,7 @@ pub enum GraphValidationIssueCode {
     EdgeTypeMismatch,
 }
 
-/// Validates a graph document against the shared built-in node catalog.
+/// Validates a graph document against the shared node catalog.
 ///
 /// Validation checks node identity, declared input values, edge endpoints, and type compatibility.
 /// All discovered issues are returned at once so callers can show a complete error list.
@@ -45,7 +45,7 @@ pub fn validate_graph_document(document: &GraphDocument) -> Vec<GraphValidationI
         }
         nodes_by_id.insert(node.id.clone(), node);
 
-        let Some(definition) = builtin_node_definition(node.node_type.as_str()) else {
+        let Some(definition) = node_definition(node.node_type.as_str()) else {
             issues.push(GraphValidationIssue {
                 code: GraphValidationIssueCode::UnknownNodeType,
                 path: format!("{node_path}.node_type"),
@@ -112,7 +112,7 @@ pub fn validate_graph_document(document: &GraphDocument) -> Vec<GraphValidationI
             continue;
         };
 
-        let Some(from_definition) = builtin_node_definition(from_node.node_type.as_str()) else {
+        let Some(from_definition) = node_definition(from_node.node_type.as_str()) else {
             issues.push(GraphValidationIssue {
                 code: GraphValidationIssueCode::UnknownNodeType,
                 path: format!("{edge_path}.from_node_id"),
@@ -124,7 +124,7 @@ pub fn validate_graph_document(document: &GraphDocument) -> Vec<GraphValidationI
             });
             continue;
         };
-        let Some(to_definition) = builtin_node_definition(to_node.node_type.as_str()) else {
+        let Some(to_definition) = node_definition(to_node.node_type.as_str()) else {
             issues.push(GraphValidationIssue {
                 code: GraphValidationIssueCode::UnknownNodeType,
                 path: format!("{edge_path}.to_node_id"),

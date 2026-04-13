@@ -46,9 +46,7 @@ pub(crate) use self::model::{
 };
 
 #[cfg(test)]
-pub(crate) fn snarl_node_titles(
-    snarl: &egui_snarl::Snarl<EditorSnarlNode>,
-) -> Vec<String> {
+pub(crate) fn snarl_node_titles(snarl: &egui_snarl::Snarl<EditorSnarlNode>) -> Vec<String> {
     snarl.nodes().map(|node| node.title.clone()).collect()
 }
 
