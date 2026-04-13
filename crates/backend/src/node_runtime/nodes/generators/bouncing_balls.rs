@@ -1012,9 +1012,7 @@ mod tests {
     use std::collections::HashMap;
 
     use crate::node_runtime::{NodeEvaluationContext, RuntimeInputs, RuntimeNode};
-    use shared::{
-        LedLayout, NodeDiagnosticSeverity, NodeTypeId, RgbaColor, builtin_node_definition,
-    };
+    use shared::{LedLayout, NodeDiagnosticSeverity, NodeTypeId, RgbaColor, node_definition};
 
     #[test]
     fn boundary_collision_time_hits_exact_contact() {
@@ -1102,7 +1100,7 @@ mod tests {
 
     #[test]
     fn default_inputs_do_not_trigger_radius_clamp_diagnostics() {
-        let definition = builtin_node_definition(NodeTypeId::BOUNCING_BALLS)
+        let definition = node_definition(NodeTypeId::BOUNCING_BALLS)
             .expect("bouncing balls node definition must exist");
         let radius_default = definition
             .input_port("radius")

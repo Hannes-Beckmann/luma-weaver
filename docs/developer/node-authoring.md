@@ -1,6 +1,6 @@
 # Node Authoring
 
-This page describes the normal workflow for adding or changing built-in nodes in `luma-weaver`.
+This page describes the normal workflow for adding or changing nodes in `luma-weaver`.
 
 Keep this page focused on node lifecycle work.
 
@@ -9,7 +9,7 @@ Keep this page focused on node lifecycle work.
 
 ## Mental Model
 
-A built-in node is not implemented in just one place.
+A node is not implemented in just one place.
 
 Most node changes require coordinated updates in:
 
@@ -25,7 +25,7 @@ Most node changes require coordinated updates in:
 Shared schema:
 
 - `crates/shared/src/graph/node_definition.rs`
-- `crates/shared/src/graph/builtin_nodes.rs`
+- `crates/shared/src/graph/node_catalog.rs`
 
 Backend runtime:
 
@@ -38,12 +38,12 @@ Frontend editor:
 - `crates/frontend/src/editor_view/model.rs`
 - `crates/frontend/src/editor_view/widgets.rs`
 
-## Add A New Built-In Node
+## Add A New Node
 
 Typical sequence:
 
 1. Add or reuse a `NodeTypeId` when needed.
-2. Add the node definition to `crates/shared/src/graph/builtin_nodes.rs`.
+2. Add the node definition to `crates/shared/src/graph/node_catalog.rs`.
 3. Implement the runtime node in the appropriate backend module.
 4. Register it in `crates/backend/src/node_runtime/registry.rs`.
 5. Verify the frontend add-menu placement and parameter rendering.
@@ -63,7 +63,7 @@ Review all of these before finishing:
 
 If the node is renamed, removed, or materially reworked, also review unknown-node and graph migration implications.
 
-Built-in node IDs should use the same category prefix as the add-menu taxonomy and backend module
+Node IDs should use the same category prefix as the add-menu taxonomy and backend module
 layout, for example:
 
 - `inputs.*`

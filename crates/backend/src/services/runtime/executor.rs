@@ -287,7 +287,7 @@ mod tests {
     use anyhow::Context;
     use shared::{GraphDocument, InputValue};
 
-    use crate::node_runtime::{NodeEvaluationContext, build_builtin_node_registry};
+    use crate::node_runtime::{NodeEvaluationContext, build_node_registry};
     use crate::services::runtime::compiler::compile_graph_document;
     use crate::services::runtime::executor::{evaluate_node, initialize_delay_previous_outputs};
     use crate::services::runtime::types::{GraphExecutionState, RuntimeEventPublisher};
@@ -406,7 +406,7 @@ mod tests {
     #[test]
     fn sample_runtime_graph_executes_one_tick() {
         let document = sample_runtime_graph();
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let mut graph =
             compile_graph_document(document, node_registry).expect("compile graph document");
         let mut execution_state = GraphExecutionState::default();
@@ -472,13 +472,18 @@ mod tests {
         }))
         .expect("parse binary select graph");
 
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let mut graph =
             compile_graph_document(document, node_registry).expect("compile binary select graph");
         let mut execution_state = GraphExecutionState::default();
 
         graph
-            .execute_tick("binary-select-sample", &NoopEvents, 0.0, &mut execution_state)
+            .execute_tick(
+                "binary-select-sample",
+                &NoopEvents,
+                0.0,
+                &mut execution_state,
+            )
             .expect("execute binary select graph tick");
 
         let selected = execution_state
@@ -493,7 +498,7 @@ mod tests {
     #[test]
     fn sample_runtime_graph_tick_timing() {
         let document = sample_runtime_graph();
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let mut graph =
             compile_graph_document(document, node_registry).expect("compile graph document");
         let mut execution_state = GraphExecutionState::default();
@@ -530,7 +535,7 @@ mod tests {
         const DEFAULT_CONTEXT_ID: &str = "__default__";
 
         let document = sample_runtime_graph();
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let mut graph =
             compile_graph_document(document, node_registry).expect("compile graph document");
         let mut execution_state = GraphExecutionState::default();
@@ -728,7 +733,7 @@ mod tests {
         }))
         .expect("parse delay cycle graph");
 
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let mut graph =
             compile_graph_document(document, node_registry).expect("compile delay cycle graph");
         let mut execution_state = GraphExecutionState::default();
@@ -800,7 +805,7 @@ mod tests {
             ]
         }))
         .expect("parse delay frame seed graph");
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let graph = compile_graph_document(document, node_registry)
             .expect("compile delay frame seed graph");
         let mut execution_state = GraphExecutionState::default();

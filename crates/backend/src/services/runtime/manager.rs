@@ -585,7 +585,7 @@ mod tests {
     use shared::{GraphRuntimeStatus, NodeDiagnostic, NodeRuntimeValue};
 
     use super::emit_startup_compile_diagnostics;
-    use crate::node_runtime::build_builtin_node_registry;
+    use crate::node_runtime::build_node_registry;
     use crate::services::runtime::types::RuntimeEventPublisher;
 
     #[derive(Default)]
@@ -636,7 +636,7 @@ mod tests {
             "edges": []
         }))
         .expect("parse graph");
-        let node_registry = build_builtin_node_registry().expect("build node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let events = RecordingEvents::default();
 
         emit_startup_compile_diagnostics(&document, node_registry.as_ref(), &events);

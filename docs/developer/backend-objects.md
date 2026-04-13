@@ -106,7 +106,7 @@ That means both the graph store and the runtime manager can report changes witho
 
 The node registry is built once at startup and shared through `Arc`.
 
-It is the runtime/schema lookup object for built-in nodes. Other backend objects use it to:
+It is the runtime/schema lookup object for the shared node catalog. Other backend objects use it to:
 
 - resolve node definitions
 - create runtime evaluators

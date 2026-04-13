@@ -342,19 +342,19 @@ mod tests {
 
         assert_eq!(
             discovery_topic(&config, &registration.graph_id, &registration.entity_id),
-            "homeassistant/number/animation_builder/graph_one_number_one/config"
+            "homeassistant/number/luma_weaver/graph_one_number_one/config"
         );
         assert_eq!(
             number_state_topic(&config.id, &registration.graph_id, &registration.entity_id),
-            "animation_builder/primary/graph/graph_one/number/number_one/state"
+            "luma_weaver/primary/graph/graph_one/number/number_one/state"
         );
         assert_eq!(
             number_command_topic(&config.id, &registration.graph_id, &registration.entity_id),
-            "animation_builder/primary/graph/graph_one/number/number_one/set"
+            "luma_weaver/primary/graph/graph_one/number/number_one/set"
         );
         assert_eq!(
             device_identifier(&registration.graph_id),
-            "animation_builder_graph_graph_one"
+            "luma_weaver_graph_graph_one"
         );
         assert_eq!(
             entity_object_id(&registration.graph_id, &registration.entity_id),
@@ -362,7 +362,7 @@ mod tests {
         );
         assert_eq!(
             entity_unique_id(&config.id, &registration.graph_id, &registration.entity_id),
-            "animation_builder_primary_graph_one_number_one"
+            "luma_weaver_primary_graph_one_number_one"
         );
     }
 
@@ -764,7 +764,7 @@ fn update_connected(
 /// Returns the Home Assistant discovery topic for a number entity.
 fn discovery_topic(config: &MqttBrokerConfig, graph_id: &str, entity_id: &str) -> String {
     format!(
-        "{}/number/animation_builder/{}/config",
+        "{}/number/luma_weaver/{}/config",
         config.discovery_prefix.trim().trim_end_matches('/'),
         entity_object_id(graph_id, entity_id)
     )
@@ -773,7 +773,7 @@ fn discovery_topic(config: &MqttBrokerConfig, graph_id: &str, entity_id: &str) -
 /// Returns the MQTT state topic for a Home Assistant number entity.
 fn number_state_topic(broker_id: &str, graph_id: &str, entity_id: &str) -> String {
     format!(
-        "animation_builder/{}/graph/{}/number/{}/state",
+        "luma_weaver/{}/graph/{}/number/{}/state",
         sanitize_identifier(broker_id),
         sanitize_identifier(graph_id),
         sanitize_identifier(entity_id)
@@ -783,7 +783,7 @@ fn number_state_topic(broker_id: &str, graph_id: &str, entity_id: &str) -> Strin
 /// Returns the MQTT command topic for a Home Assistant number entity.
 fn number_command_topic(broker_id: &str, graph_id: &str, entity_id: &str) -> String {
     format!(
-        "animation_builder/{}/graph/{}/number/{}/set",
+        "luma_weaver/{}/graph/{}/number/{}/set",
         sanitize_identifier(broker_id),
         sanitize_identifier(graph_id),
         sanitize_identifier(entity_id)
@@ -793,14 +793,14 @@ fn number_command_topic(broker_id: &str, graph_id: &str, entity_id: &str) -> Str
 /// Returns the MQTT availability topic for a broker connection.
 fn broker_availability_topic(broker_id: &str) -> String {
     format!(
-        "animation_builder/{}/availability",
+        "luma_weaver/{}/availability",
         sanitize_identifier(broker_id)
     )
 }
 
 /// Returns the stable Home Assistant device identifier for a graph-backed entity set.
 fn device_identifier(graph_id: &str) -> String {
-    format!("animation_builder_graph_{}", sanitize_identifier(graph_id))
+    format!("luma_weaver_graph_{}", sanitize_identifier(graph_id))
 }
 
 /// Returns the stable Home Assistant object ID for one number entity within a graph.
@@ -815,7 +815,7 @@ fn entity_object_id(graph_id: &str, entity_id: &str) -> String {
 /// Returns the stable Home Assistant unique ID for one graph-backed entity.
 fn entity_unique_id(broker_id: &str, graph_id: &str, entity_id: &str) -> String {
     format!(
-        "animation_builder_{}_{}_{}",
+        "luma_weaver_{}_{}_{}",
         sanitize_identifier(broker_id),
         sanitize_identifier(graph_id),
         sanitize_identifier(entity_id),
@@ -845,7 +845,7 @@ fn sanitize_identifier(value: &str) -> String {
         }
     }
     if output.is_empty() {
-        "animation_builder".to_owned()
+        "luma_weaver".to_owned()
     } else {
         output
     }

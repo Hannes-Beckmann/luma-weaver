@@ -1,6 +1,6 @@
 # Node Catalog Overview
 
-This page gives a user-facing overview of the built-in node families currently present in Luma Weaver.
+This page gives a user-facing overview of the node families currently present in Luma Weaver.
 
 It is not intended to replace source-level schema definitions. Instead, it helps users understand the kinds of nodes available when building graphs.
 

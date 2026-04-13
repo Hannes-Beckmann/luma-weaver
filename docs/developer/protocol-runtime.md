@@ -57,7 +57,7 @@ This exists so the Pages preview can stay close to the real app without becoming
 
 ## Structured Protocol
 
-The shared protocol in [protocol.rs](c:/Users/Hannes/repos/animation-builder-rust.worktrees/gundula/crates/shared/src/protocol.rs) is centered around two tagged enums:
+The shared protocol in [protocol.rs](c:/Users/Hannes/repos/luma-weaver.worktrees/hermann/crates/shared/src/protocol.rs) is centered around two tagged enums:
 
 - `ClientMessage`: requests and commands sent by the frontend
 - `ServerMessage`: responses, snapshots, and streamed updates sent back to the frontend

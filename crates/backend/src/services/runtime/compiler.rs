@@ -206,11 +206,11 @@ fn topological_order(adjacency: &[Vec<usize>], in_degree: &[usize]) -> anyhow::R
 
 #[cfg(test)]
 mod tests {
-    use crate::node_runtime::{NodeEvaluationContext, build_builtin_node_registry};
+    use crate::node_runtime::{NodeEvaluationContext, build_node_registry};
     use crate::services::runtime::compiler::compile_graph_document;
     use shared::{
         GraphDocument, GraphMetadata, GraphNode, LedLayout, NodeMetadata, NodeTypeId,
-        ParameterDefaultValue, builtin_node_definition,
+        ParameterDefaultValue, node_definition,
     };
 
     /// Tests that parameter-normalization diagnostics are preserved on compiled nodes.
@@ -239,7 +239,7 @@ mod tests {
         }))
         .expect("parse graph");
 
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let compiled = compile_graph_document(document, node_registry).expect("compile graph");
         let diagnostics = &compiled.nodes[0].construction_diagnostics;
 
@@ -279,7 +279,7 @@ mod tests {
         }))
         .expect("parse unknown node graph");
 
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+        let node_registry = build_node_registry().expect("build node registry");
         let error = match compile_graph_document(document, node_registry) {
             Ok(_) => panic!("unknown node type should fail"),
             Err(error) => error,
@@ -287,11 +287,11 @@ mod tests {
         assert!(error.to_string().contains("Unknown node type"));
     }
 
-    /// Audits every built-in node using schema defaults and fails if any default configuration
+    /// Audits every node using schema defaults and fails if any default configuration
     /// immediately triggers clamp diagnostics.
     #[test]
-    fn builtin_defaults_do_not_emit_clamp_diagnostics() {
-        let node_registry = build_builtin_node_registry().expect("build builtin node registry");
+    fn node_defaults_do_not_emit_clamp_diagnostics() {
+        let node_registry = build_node_registry().expect("build node registry");
         let context = NodeEvaluationContext {
             graph_id: "default-audit-graph".to_owned(),
             graph_name: "Default Audit Graph".to_owned(),
@@ -368,14 +368,14 @@ mod tests {
 
         assert!(
             clamp_findings.is_empty(),
-            "built-in defaults emitted clamp diagnostics:\n{}",
+            "node defaults emitted clamp diagnostics:\n{}",
             clamp_findings.join("\n")
         );
     }
 
     #[test]
     fn frame_brightness_default_factor_is_neutral() {
-        let definition = builtin_node_definition(NodeTypeId::FRAME_BRIGHTNESS)
+        let definition = node_definition(NodeTypeId::FRAME_BRIGHTNESS)
             .expect("frame brightness node definition must exist");
         let factor = definition
             .input_port("factor")
@@ -386,7 +386,7 @@ mod tests {
 
     #[test]
     fn spectrum_analyzer_schema_exposes_decay_parameter() {
-        let definition = builtin_node_definition(NodeTypeId::SPECTRUM_ANALYZER)
+        let definition = node_definition(NodeTypeId::SPECTRUM_ANALYZER)
             .expect("spectrum analyzer node definition must exist");
         let decay = definition
             .parameter("decay")

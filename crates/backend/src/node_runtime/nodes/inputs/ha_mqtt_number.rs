@@ -31,7 +31,7 @@ impl Default for HomeAssistantMqttNumberConfig {
     fn default() -> Self {
         Self {
             broker_id: String::new(),
-            entity_id: "animation_builder_number".to_owned(),
+            entity_id: "luma_weaver_number".to_owned(),
             display_name: "Luma Weaver Number".to_owned(),
             default_value: 0.0,
             min: 0.0,
@@ -44,7 +44,7 @@ impl Default for HomeAssistantMqttNumberConfig {
 
 crate::node_runtime::impl_runtime_parameters!(HomeAssistantMqttNumberConfig {
     broker_id: String => |value| value.trim().to_owned(), default String::new(),
-    entity_id: String => |value| value.trim().to_owned(), default "animation_builder_number".to_owned(),
+    entity_id: String => |value| value.trim().to_owned(), default "luma_weaver_number".to_owned(),
     display_name: String => |value| value.trim().to_owned(), default "Luma Weaver Number".to_owned(),
     default_value: f64 => |value| value as f32, default 0.0f32,
     min: f64 => |value| value as f32, default 0.0f32,

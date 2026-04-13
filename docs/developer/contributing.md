@@ -8,7 +8,7 @@ Use this page as the developer entry point.
 - If you want to understand backend service ownership, read [backend-objects.md](backend-objects.md).
 - If you want to change protocol, subscriptions, or WebSocket behavior, read [protocol-runtime.md](protocol-runtime.md).
 - If you want to change graph compilation or runtime execution, read [runtime-execution.md](runtime-execution.md).
-- If you want to add or change built-in nodes, read [node-authoring.md](node-authoring.md).
+- If you want to add or change nodes, read [node-authoring.md](node-authoring.md).
 - If you want to understand CI, releases, or publishing, read [workflows.md](workflows.md).
 
 ## Source Of Truth
@@ -29,7 +29,7 @@ Use these files together:
 - `backend-objects.md`: long-lived backend service instances, ownership, and process-wide relationships
 - `protocol-runtime.md`: frontend/backend messaging, subscriptions, and transport routing
 - `runtime-execution.md`: graph compilation, render contexts, tick execution, runtime manager behavior
-- `node-authoring.md`: built-in node lifecycle across shared schema, backend runtime, registry, and editor
+- `node-authoring.md`: node lifecycle across shared schema, backend runtime, registry, and editor
 - `workflows.md`: CI, Docker/release validation, add-on publishing, and Pages publishing
 
 ## Git Workflow
