@@ -167,6 +167,10 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         nodes::inputs::color_constant::ColorConstantNode
     );
     register_builtin!(NodeTypeId::DELAY, nodes::temporal_filters::delay::DelayNode);
+    register_builtin!(
+        NodeTypeId::DIFFERENTIATE,
+        nodes::temporal_filters::differentiate::DifferentiateNode
+    );
     register_builtin!(NodeTypeId::DISPLAY, nodes::outputs::display::DisplayNode);
     register_builtin!(NodeTypeId::PLOT, nodes::outputs::plot::PlotNode);
     #[cfg(not(target_arch = "wasm32"))]
@@ -272,6 +276,10 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         nodes::frame_operations::alpha_over::AlphaOverNode
     );
     register_builtin!(NodeTypeId::FADE, nodes::temporal_filters::fade::FadeNode);
+    register_builtin!(
+        NodeTypeId::INTEGRATE,
+        nodes::temporal_filters::integrate::IntegrateNode
+    );
     register_builtin!(
         NodeTypeId::MOVING_AVERAGE,
         nodes::temporal_filters::moving_average::MovingAverageNode

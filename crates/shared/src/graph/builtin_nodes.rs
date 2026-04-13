@@ -336,6 +336,32 @@ static DELAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefiniti
     runtime_updates: None,
 });
 
+static DIFFERENTIATE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::DIFFERENTIATE.to_owned(),
+    display_name: "Differentiate".to_owned(),
+    category: NodeCategory::TemporalFilters,
+    needs_io: false,
+    inputs: vec![NodeInputDefinition {
+        name: "value".to_owned(),
+        display_name: title_case_name("value"),
+        value_kind: ValueKind::Float,
+        accepted_kinds: vec![],
+        default_value: Some(InputValue::Float(0.0)),
+    }],
+    outputs: vec![NodeOutputDefinition {
+        name: "value".to_owned(),
+        display_name: title_case_name("value"),
+        value_kind: ValueKind::Float,
+        accepted_kinds: vec![],
+    }],
+    parameters: vec![],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
 static WLED_TARGET_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
     id: NodeTypeId::WLED_TARGET.to_owned(),
     display_name: "Wled Target".to_owned(),
@@ -1455,6 +1481,94 @@ static FADE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinitio
     runtime_updates: None,
 });
 
+static INTEGRATE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::INTEGRATE.to_owned(),
+    display_name: "Integrate".to_owned(),
+    category: NodeCategory::TemporalFilters,
+    needs_io: false,
+    inputs: vec![
+        NodeInputDefinition {
+            name: "rate".to_owned(),
+            display_name: title_case_name("rate"),
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
+            default_value: Some(InputValue::Float(0.0)),
+        },
+        NodeInputDefinition {
+            name: "reset".to_owned(),
+            display_name: title_case_name("reset"),
+            value_kind: ValueKind::Float,
+            accepted_kinds: vec![],
+            default_value: Some(InputValue::Float(0.0)),
+        },
+    ],
+    outputs: vec![NodeOutputDefinition {
+        name: "value".to_owned(),
+        display_name: title_case_name("value"),
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![
+            ValueKind::Float,
+            ValueKind::FloatTensor,
+            ValueKind::ColorFrame,
+        ],
+    }],
+    parameters: vec![
+        NodeParameterDefinition::new(
+            "initial_value",
+            title_case_name("initial_value"),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.01,
+                min: -10_000.0,
+                max: 10_000.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "clamp_output",
+            title_case_name("clamp_output"),
+            ParameterDefaultValue::Bool(false),
+            ParameterUiHint::Checkbox,
+        ),
+        NodeParameterDefinition::new(
+            "min",
+            title_case_name("min"),
+            ParameterDefaultValue::Float(-1.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.01,
+                min: -10_000.0,
+                max: 10_000.0,
+            },
+        )
+        .visible_when(ParameterVisibilityCondition::Equals {
+            parameter: "clamp_output".to_owned(),
+            value: json!(true),
+        }),
+        NodeParameterDefinition::new(
+            "max",
+            title_case_name("max"),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.01,
+                min: -10_000.0,
+                max: 10_000.0,
+            },
+        )
+        .visible_when(ParameterVisibilityCondition::Equals {
+            parameter: "clamp_output".to_owned(),
+            value: json!(true),
+        }),
+    ],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
 static MOVING_AVERAGE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
     id: NodeTypeId::MOVING_AVERAGE.to_owned(),
     display_name: "Moving Average".to_owned(),
@@ -2200,6 +2314,7 @@ pub fn builtin_node_definitions() -> Vec<NodeDefinition> {
         (*DISPLAY_NODE_TYPE).clone(),
         (*PLOT_NODE_TYPE).clone(),
         (*DELAY_NODE_TYPE).clone(),
+        (*DIFFERENTIATE_NODE_TYPE).clone(),
         (*WLED_TARGET_NODE_TYPE).clone(),
         (*WLED_SINK_NODE_TYPE).clone(),
         (*AUDIO_FFT_RECEIVER_NODE_TYPE).clone(),
@@ -2227,6 +2342,7 @@ pub fn builtin_node_definitions() -> Vec<NodeDefinition> {
         (*MIX_COLOR_NODE_TYPE).clone(),
         (*ALPHA_OVER_NODE_TYPE).clone(),
         (*FADE_NODE_TYPE).clone(),
+        (*INTEGRATE_NODE_TYPE).clone(),
         (*MOVING_AVERAGE_NODE_TYPE).clone(),
         (*MOVING_MEDIAN_NODE_TYPE).clone(),
         (*BOX_BLUR_NODE_TYPE).clone(),

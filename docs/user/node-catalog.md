@@ -75,11 +75,13 @@ These nodes work across time.
 Examples:
 
 - Delay
+- Differentiate
+- Integrate
 - Fade
 - Moving Average
 - Moving Median
 
-Use these when you want smoothing, trailing, or history-aware behavior.
+Use these when you want smoothing, trailing, accumulation, or other history-aware behavior.
 
 ## Spatial Filters
 
