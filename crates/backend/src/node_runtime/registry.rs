@@ -204,49 +204,22 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         NodeTypeId::BINARY_SELECT,
         nodes::math::binary_select::BinarySelectNode
     );
-    register_node!(NodeTypeId::ADD_FLOAT, nodes::math::add_float::AddFloatNode);
+    register_node!(NodeTypeId::ADD, nodes::math::add::AddNode);
+    register_node!(NodeTypeId::SUBTRACT, nodes::math::subtract::SubtractNode);
+    register_node!(NodeTypeId::DIVIDE, nodes::math::divide::DivideNode);
+    register_node!(NodeTypeId::MIN_MAX, nodes::math::min_max::MinMaxNode);
+    register_node!(NodeTypeId::MULTIPLY, nodes::math::multiply::MultiplyNode);
+    register_node!(NodeTypeId::ABS, nodes::math::abs::AbsNode);
+    register_node!(NodeTypeId::CLAMP, nodes::math::clamp::ClampNode);
+    register_node!(NodeTypeId::POWER, nodes::math::power::PowerNode);
+    register_node!(NodeTypeId::ROOT, nodes::math::root::RootNode);
     register_node!(
-        NodeTypeId::SUBTRACT_FLOAT,
-        nodes::math::subtract_float::SubtractFloatNode
+        NodeTypeId::EXPONENTIAL,
+        nodes::math::exponential::ExponentialNode
     );
-    register_node!(
-        NodeTypeId::DIVIDE_FLOAT,
-        nodes::math::divide_float::DivideFloatNode
-    );
-    register_node!(
-        NodeTypeId::MIN_MAX_FLOAT,
-        nodes::math::min_max_float::MinMaxFloatNode
-    );
-    register_node!(
-        NodeTypeId::MULTIPLY_FLOAT,
-        nodes::math::multiply_float::MultiplyFloatNode
-    );
-    register_node!(NodeTypeId::ABS_FLOAT, nodes::math::abs_float::AbsFloatNode);
-    register_node!(
-        NodeTypeId::CLAMP_FLOAT,
-        nodes::math::clamp_float::ClampFloatNode
-    );
-    register_node!(
-        NodeTypeId::POWER_FLOAT,
-        nodes::math::power_float::PowerFloatNode
-    );
-    register_node!(
-        NodeTypeId::ROOT_FLOAT,
-        nodes::math::root_float::RootFloatNode
-    );
-    register_node!(
-        NodeTypeId::EXPONENTIAL_FLOAT,
-        nodes::math::exponential_float::ExponentialFloatNode
-    );
-    register_node!(NodeTypeId::LOG_FLOAT, nodes::math::log_float::LogFloatNode);
-    register_node!(
-        NodeTypeId::MAP_RANGE_FLOAT,
-        nodes::math::map_range_float::MapRangeFloatNode
-    );
-    register_node!(
-        NodeTypeId::ROUND_FLOAT,
-        nodes::math::round_float::RoundFloatNode
-    );
+    register_node!(NodeTypeId::LOG, nodes::math::log::LogNode);
+    register_node!(NodeTypeId::MAP_RANGE, nodes::math::map_range::MapRangeNode);
+    register_node!(NodeTypeId::ROUND, nodes::math::round::RoundNode);
     register_node!(
         NodeTypeId::SCALE_TENSOR,
         nodes::math::scale_tensor::ScaleTensorNode
@@ -258,6 +231,18 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
     register_node!(
         NodeTypeId::MULTIPLY_COLOR,
         nodes::frame_operations::multiply_color::MultiplyColorNode
+    );
+    register_node!(
+        NodeTypeId::EXTRACT_CHANNELS,
+        nodes::frame_operations::extract_channels::ExtractChannelsNode
+    );
+    register_node!(
+        NodeTypeId::SET_CHANNEL,
+        nodes::frame_operations::set_channel::SetChannelNode
+    );
+    register_node!(
+        NodeTypeId::COLORIZE,
+        nodes::frame_operations::colorize::ColorizeNode
     );
     register_node!(
         NodeTypeId::TINT_FRAME,
@@ -341,6 +326,10 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         NodeTypeId::WLED_DUMMY_DISPLAY,
         nodes::debug::wled_dummy_display::WledDummyDisplayNode
     );
+    register_node!(
+        NodeTypeId::TYPE_DEBUG,
+        nodes::debug::type_debug::TypeDebugNode
+    );
 
     anyhow::ensure!(
         registry.definition(NodeTypeId::FLOAT_CONSTANT).is_some(),
@@ -406,11 +395,7 @@ mod tests {
     fn node_registry_contains_nodes() {
         let registry = build_node_registry().expect("build node registry");
         assert!(registry.definitions().len() > 10);
-        assert!(
-            registry
-                .definition(shared::NodeTypeId::MULTIPLY_FLOAT)
-                .is_some()
-        );
+        assert!(registry.definition(shared::NodeTypeId::MULTIPLY).is_some());
     }
 
     #[test]

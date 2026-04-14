@@ -328,6 +328,7 @@ pub(super) fn default_input_value(kind: ValueKind) -> InputValue {
     match kind {
         ValueKind::Any => InputValue::Float(0.0),
         ValueKind::Float => InputValue::Float(0.0),
+        ValueKind::String => InputValue::String(String::new()),
         ValueKind::FloatTensor => InputValue::FloatTensor(shared::FloatTensor {
             shape: vec![1],
             values: vec![0.0],
@@ -364,6 +365,7 @@ pub(super) fn coerce_input_value_kind(value: InputValue, kind: ValueKind) -> Inp
     match (kind, value) {
         (ValueKind::Any, value) => value,
         (ValueKind::Float, InputValue::Float(v)) => InputValue::Float(v),
+        (ValueKind::String, InputValue::String(v)) => InputValue::String(v),
         (ValueKind::FloatTensor, InputValue::FloatTensor(v)) => InputValue::FloatTensor(v),
         (ValueKind::Color, InputValue::Color(v)) => InputValue::Color(v),
         (ValueKind::LedLayout, InputValue::LedLayout(v)) => InputValue::LedLayout(v),

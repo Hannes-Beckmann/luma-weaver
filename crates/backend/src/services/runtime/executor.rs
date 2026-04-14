@@ -1,8 +1,10 @@
 use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use shared::{InputValue, NodeDiagnostic, NodeDiagnosticSeverity, NodeRuntimeValue};
 
+use crate::node_runtime::nodes::temporal_filters::delay::seeded_initial_value_for_layout;
 use crate::node_runtime::{NodeEvaluation, NodeEvaluationContext, RuntimeNodeEvaluator};
 use crate::services::runtime::types::{CompiledGraph, GraphExecutionState, RuntimeEventPublisher};
 
@@ -20,7 +22,8 @@ impl CompiledGraph {
         execution_state: &mut GraphExecutionState,
     ) -> anyhow::Result<()> {
         const DEFAULT_CONTEXT_ID: &str = "__default__";
-        const RUNTIME_UPDATE_INTERVAL_SECONDS: f64 = 1.0 / 20.0;
+        const RUNTIME_UPDATE_MIN_INTERVAL: Duration = Duration::from_millis(50);
+        let tick_started_at = Instant::now();
         initialize_delay_previous_outputs(self, execution_state);
         let previous_outputs = execution_state.previous_outputs.clone();
         let mut outputs = HashMap::<(usize, String, String), InputValue>::new();
@@ -131,11 +134,11 @@ impl CompiledGraph {
                 let should_emit_runtime_update = node_updates.is_empty()
                     || should_emit_runtime_update(
                         execution_state
-                            .last_runtime_update_seconds
+                            .last_runtime_update_instants
                             .get(&update_key)
                             .copied(),
-                        elapsed_seconds,
-                        RUNTIME_UPDATE_INTERVAL_SECONDS,
+                        tick_started_at,
+                        RUNTIME_UPDATE_MIN_INTERVAL,
                     );
                 if !node_updates.is_empty() && should_emit_runtime_update {
                     tracing::trace!(
@@ -147,8 +150,8 @@ impl CompiledGraph {
                         "emitting node runtime updates"
                     );
                     execution_state
-                        .last_runtime_update_seconds
-                        .insert(update_key, elapsed_seconds);
+                        .last_runtime_update_instants
+                        .insert(update_key, tick_started_at);
                     events.node_runtime_update(graph_id.to_owned(), node.id.clone(), node_updates);
                 }
 
@@ -188,9 +191,9 @@ fn evaluation_contexts_for_node(
 
 /// Seeds previous-tick outputs for delay nodes when they have not produced a value yet.
 ///
-/// Delay nodes need an initial value so feedback cycles can evaluate on the first tick. Frame
-/// contexts are seeded with transparent frames of the correct layout, while the default context
-/// is seeded with `0.0`.
+/// Delay nodes need an initial value so feedback cycles can evaluate on the first tick. The
+/// seeded value follows the node's configured `initial_type` parameter, using render-layout shape
+/// information when available.
 fn initialize_delay_previous_outputs(
     graph: &CompiledGraph,
     execution_state: &mut GraphExecutionState,
@@ -213,23 +216,19 @@ fn initialize_delay_previous_outputs(
         };
 
         for render_context in render_contexts {
+            let initial_type_id = node
+                .parameters
+                .get("initial_type")
+                .and_then(|value| value.as_str());
             let (context_id, value) = match render_context {
                 Some(context) => (
                     context.id,
-                    InputValue::ColorFrame(shared::ColorFrame {
-                        layout: context.layout.clone(),
-                        pixels: vec![
-                            shared::RgbaColor {
-                                r: 0.0,
-                                g: 0.0,
-                                b: 0.0,
-                                a: 0.0,
-                            };
-                            context.layout.pixel_count
-                        ],
-                    }),
+                    seeded_initial_value_for_layout(initial_type_id, Some(&context.layout)),
                 ),
-                None => (DEFAULT_CONTEXT_ID.to_owned(), InputValue::Float(0.0)),
+                None => (
+                    DEFAULT_CONTEXT_ID.to_owned(),
+                    seeded_initial_value_for_layout(initial_type_id, None),
+                ),
             };
 
             execution_state
@@ -263,19 +262,18 @@ fn runtime_update_name_allowed(
             && name.starts_with("value"))
 }
 
-/// Returns whether a runtime update should be emitted at `elapsed_seconds`.
+/// Returns whether a runtime update should be emitted at `now`.
 ///
-/// Updates are rate-limited per node and render context, but the limiter resets when time moves
-/// backward, which can happen in tests or during manual stepping.
+/// Updates are rate-limited per node and render context using wall-clock time so manual stepping
+/// and simulated-time jumps do not affect preview cadence.
 fn should_emit_runtime_update(
-    last_emitted_seconds: Option<f64>,
-    elapsed_seconds: f64,
-    min_interval_seconds: f64,
+    last_emitted_at: Option<Instant>,
+    now: Instant,
+    min_interval: Duration,
 ) -> bool {
-    match last_emitted_seconds {
+    match last_emitted_at {
         None => true,
-        Some(last) if elapsed_seconds < last => true,
-        Some(last) => elapsed_seconds - last >= min_interval_seconds,
+        Some(last) => now.duration_since(last) >= min_interval,
     }
 }
 
@@ -340,7 +338,7 @@ mod tests {
                 {
                     "id": "scale_1",
                     "metadata": { "name": "scale_1" },
-                    "node_type": "math.multiply_float"
+                    "node_type": "math.multiply"
                 },
                 {
                     "id": "solid_1",
@@ -699,9 +697,9 @@ mod tests {
                     "parameters": [{ "name": "value", "value": 1.0 }]
                 },
                 {
-                    "id": "add_float_1",
-                    "metadata": { "name": "add_float_1" },
-                    "node_type": "math.add_float"
+                    "id": "add_1",
+                    "metadata": { "name": "add_1" },
+                    "node_type": "math.add"
                 },
                 {
                     "id": "delay_1",
@@ -714,17 +712,17 @@ mod tests {
                 {
                     "from_node_id": "constant_1",
                     "from_output_name": "value",
-                    "to_node_id": "add_float_1",
+                    "to_node_id": "add_1",
                     "to_input_name": "a"
                 },
                 {
                     "from_node_id": "delay_1",
                     "from_output_name": "value",
-                    "to_node_id": "add_float_1",
+                    "to_node_id": "add_1",
                     "to_input_name": "b"
                 },
                 {
-                    "from_node_id": "add_float_1",
+                    "from_node_id": "add_1",
                     "from_output_name": "sum",
                     "to_node_id": "delay_1",
                     "to_input_name": "value"
@@ -783,7 +781,10 @@ mod tests {
                     "id": "delay_1",
                     "metadata": { "name": "delay_1" },
                     "node_type": "temporal_filters.delay",
-                    "parameters": [{ "name": "ticks", "value": 1 }]
+                    "parameters": [
+                        { "name": "ticks", "value": 1 },
+                        { "name": "initial_type", "value": "colorframe" }
+                    ]
                 },
                 {
                     "id": "wled_1",
@@ -826,5 +827,63 @@ mod tests {
                 pixel.r == 0.0 && pixel.g == 0.0 && pixel.b == 0.0 && pixel.a == 0.0
             })
         );
+    }
+
+    #[test]
+    fn delay_previous_output_honors_tensor_initial_type_in_render_contexts() {
+        let document: GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "delay-tensor-seed",
+                "name": "delay tensor seed",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "delay_1",
+                    "metadata": { "name": "delay_1" },
+                    "node_type": "temporal_filters.delay",
+                    "parameters": [
+                        { "name": "ticks", "value": 1 },
+                        { "name": "initial_type", "value": "tensor" }
+                    ]
+                },
+                {
+                    "id": "wled_1",
+                    "metadata": { "name": "wled_1" },
+                    "node_type": "outputs.wled_target",
+                    "parameters": [
+                        { "name": "target", "value": "dummy" },
+                        { "name": "led_count", "value": 4 }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "delay_1",
+                    "from_output_name": "value",
+                    "to_node_id": "wled_1",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse delay tensor seed graph");
+        let node_registry = build_node_registry().expect("build node registry");
+        let graph = compile_graph_document(document, node_registry)
+            .expect("compile delay tensor seed graph");
+        let mut execution_state = GraphExecutionState::default();
+
+        initialize_delay_previous_outputs(&graph, &mut execution_state);
+
+        let seeded_tensor = execution_state
+            .previous_outputs
+            .values()
+            .find_map(|value| match value {
+                InputValue::FloatTensor(tensor) => Some(tensor),
+                _ => None,
+            })
+            .expect("seeded tensor delay output");
+
+        assert_eq!(seeded_tensor.shape, vec![4]);
+        assert_eq!(seeded_tensor.values, vec![0.0; 4]);
     }
 }

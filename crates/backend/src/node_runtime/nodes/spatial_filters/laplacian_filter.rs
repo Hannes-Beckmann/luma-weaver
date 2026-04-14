@@ -1,9 +1,9 @@
-use anyhow::Result;
-use shared::{ColorFrame, InputValue, RgbaColor};
+use anyhow::{Result, bail};
+use shared::{ColorFrame, FloatTensor, InputValue, RgbaColor};
 
 use crate::node_runtime::nodes::filter_utils::{clamped_index, layout_dimensions};
 use crate::node_runtime::{
-    NodeEvaluationContext, RuntimeNode, RuntimeOutputs, TypedNodeEvaluation,
+    AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeOutputs, TypedNodeEvaluation,
 };
 
 pub(crate) struct LaplacianFilterNode {
@@ -29,7 +29,7 @@ crate::node_runtime::impl_runtime_parameters!(LaplacianFilterNode {
 });
 
 pub(crate) struct LaplacianFilterInputs {
-    frame: Option<ColorFrame>,
+    frame: Option<AnyInputValue>,
 }
 
 crate::node_runtime::impl_runtime_inputs!(LaplacianFilterInputs {
@@ -37,14 +37,18 @@ crate::node_runtime::impl_runtime_inputs!(LaplacianFilterInputs {
 });
 
 pub(crate) struct LaplacianFilterOutputs {
-    frame: Option<ColorFrame>,
+    frame: Option<InputValue>,
+    tensor: Option<FloatTensor>,
 }
 
 impl RuntimeOutputs for LaplacianFilterOutputs {
     fn into_runtime_outputs(self) -> anyhow::Result<std::collections::HashMap<String, InputValue>> {
         let mut outputs = std::collections::HashMap::new();
         if let Some(frame) = self.frame {
-            outputs.insert("frame".to_owned(), InputValue::ColorFrame(frame));
+            outputs.insert("frame".to_owned(), frame);
+        }
+        if let Some(tensor) = self.tensor {
+            outputs.insert("tensor".to_owned(), InputValue::FloatTensor(tensor));
         }
         Ok(outputs)
     }
@@ -59,16 +63,43 @@ impl RuntimeNode for LaplacianFilterNode {
         _context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
-        let Some(frame) = inputs.frame else {
+        let Some(value) = inputs.frame else {
             return Ok(TypedNodeEvaluation::from_outputs(LaplacianFilterOutputs {
                 frame: None,
+                tensor: None,
             }));
         };
 
+        let outputs = match value.0 {
+            InputValue::ColorFrame(frame) => LaplacianFilterOutputs {
+                frame: Some(InputValue::ColorFrame(self.filter_frame(frame))),
+                tensor: None,
+            },
+            InputValue::FloatTensor(tensor) => {
+                let filtered = self.filter_tensor(tensor)?;
+                LaplacianFilterOutputs {
+                    frame: Some(InputValue::FloatTensor(filtered.clone())),
+                    tensor: Some(filtered),
+                }
+            }
+            other => bail!(
+                "laplacian filter expects ColorFrame or FloatTensor input, got {:?}",
+                other.value_kind()
+            ),
+        };
+
+        Ok(TypedNodeEvaluation {
+            outputs,
+            frontend_updates: Vec::new(),
+            diagnostics: Vec::new(),
+        })
+    }
+}
+
+impl LaplacianFilterNode {
+    fn filter_frame(&self, frame: ColorFrame) -> ColorFrame {
         if frame.pixels.is_empty() {
-            return Ok(TypedNodeEvaluation::from_outputs(LaplacianFilterOutputs {
-                frame: Some(frame),
-            }));
+            return frame;
         }
 
         let (width, height) = layout_dimensions(&frame.layout);
@@ -117,21 +148,67 @@ impl RuntimeNode for LaplacianFilterNode {
             }
         }
 
-        Ok(TypedNodeEvaluation {
-            outputs: LaplacianFilterOutputs {
-                frame: Some(ColorFrame {
-                    layout: frame.layout,
-                    pixels,
-                }),
-            },
-            frontend_updates: Vec::new(),
-            diagnostics: Vec::new(),
+        ColorFrame {
+            layout: frame.layout,
+            pixels,
+        }
+    }
+
+    fn filter_tensor(&self, tensor: FloatTensor) -> Result<FloatTensor> {
+        let (width, height) = tensor_dimensions(&tensor)?;
+        if tensor.values.is_empty() {
+            return Ok(tensor);
+        }
+
+        let mut values = Vec::with_capacity(tensor.values.len());
+        for y in 0..height {
+            for x in 0..width {
+                let center = sample_tensor(&tensor, x, y, width, height);
+                let left = sample_tensor(&tensor, x.saturating_sub(1), y, width, height);
+                let right = sample_tensor(&tensor, x.saturating_add(1), y, width, height);
+                let up = sample_tensor(&tensor, x, y.saturating_sub(1), width, height);
+                let down = sample_tensor(&tensor, x, y.saturating_add(1), width, height);
+
+                values.push(shape_tensor_value(
+                    laplacian_response(center, left, right, up, down),
+                    self.strength,
+                    self.absolute_value,
+                ));
+
+                if values.len() == tensor.values.len() {
+                    break;
+                }
+            }
+            if values.len() == tensor.values.len() {
+                break;
+            }
+        }
+
+        Ok(FloatTensor {
+            shape: tensor.shape,
+            values,
         })
     }
 }
 
 fn sample_pixel(frame: &ColorFrame, x: usize, y: usize, width: usize, height: usize) -> RgbaColor {
     frame.pixels[clamped_index(x, y, width, height, frame.pixels.len())]
+}
+
+fn sample_tensor(tensor: &FloatTensor, x: usize, y: usize, width: usize, height: usize) -> f32 {
+    tensor.values[clamped_index(x, y, width, height, tensor.values.len())]
+}
+
+fn tensor_dimensions(tensor: &FloatTensor) -> Result<(usize, usize)> {
+    match tensor.shape.as_slice() {
+        [] => Ok((1, 1)),
+        [width] => Ok(((*width).max(1), 1)),
+        [height, width] => Ok(((*width).max(1), (*height).max(1))),
+        shape => bail!(
+            "laplacian filter only supports 1D or 2D tensors, got shape {:?}",
+            shape
+        ),
+    }
 }
 
 fn laplacian_response(center: f32, left: f32, right: f32, up: f32, down: f32) -> f32 {
@@ -147,15 +224,25 @@ fn shape_channel(response: f32, strength: f32, absolute_value: bool) -> f32 {
     shaped.clamp(0.0, 1.0)
 }
 
+fn shape_tensor_value(response: f32, strength: f32, absolute_value: bool) -> f32 {
+    if absolute_value {
+        response.abs() * strength
+    } else {
+        response * strength
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
 
     use serde_json::Value as JsonValue;
-    use shared::{ColorFrame, LedLayout, RgbaColor};
+    use shared::{ColorFrame, FloatTensor, InputValue, LedLayout, RgbaColor};
 
     use super::{LaplacianFilterInputs, LaplacianFilterNode};
-    use crate::node_runtime::{NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters};
+    use crate::node_runtime::{
+        AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters,
+    };
 
     fn context() -> NodeEvaluationContext {
         NodeEvaluationContext {
@@ -192,6 +279,7 @@ mod tests {
             .expect("laplacian filter evaluation should succeed");
 
         assert!(evaluation.outputs.frame.is_none());
+        assert!(evaluation.outputs.tensor.is_none());
         assert!(evaluation.diagnostics.is_empty());
     }
 
@@ -204,16 +292,29 @@ mod tests {
         };
 
         let evaluation = node
-            .evaluate(&context(), LaplacianFilterInputs { frame: Some(frame) })
+            .evaluate(
+                &context(),
+                LaplacianFilterInputs {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(frame))),
+                },
+            )
             .expect("laplacian filter evaluation should succeed");
 
-        let pixels = &evaluation.outputs.frame.expect("filtered frame").pixels;
+        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        else {
+            panic!("expected color frame output");
+        };
         assert!(
-            pixels
-                .iter()
-                .all(|pixel| pixel.r.abs() < 1e-6 && pixel.g.abs() < 1e-6 && pixel.b.abs() < 1e-6)
+            frame.pixels.iter().all(|pixel| {
+                pixel.r.abs() < 1e-6 && pixel.g.abs() < 1e-6 && pixel.b.abs() < 1e-6
+            })
         );
-        assert!(pixels.iter().all(|pixel| (pixel.a - 1.0).abs() < 1e-6));
+        assert!(
+            frame
+                .pixels
+                .iter()
+                .all(|pixel| (pixel.a - 1.0).abs() < 1e-6)
+        );
     }
 
     #[test]
@@ -225,13 +326,21 @@ mod tests {
         };
 
         let evaluation = node
-            .evaluate(&context(), LaplacianFilterInputs { frame: Some(frame) })
+            .evaluate(
+                &context(),
+                LaplacianFilterInputs {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(frame))),
+                },
+            )
             .expect("laplacian filter evaluation should succeed");
 
-        let pixels = &evaluation.outputs.frame.expect("filtered frame").pixels;
-        assert_eq!(pixels[1].r, 1.0);
-        assert_eq!(pixels[0].r, 1.0);
-        assert_eq!(pixels[2].r, 1.0);
+        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        else {
+            panic!("expected color frame output");
+        };
+        assert_eq!(frame.pixels[1].r, 1.0);
+        assert_eq!(frame.pixels[0].r, 1.0);
+        assert_eq!(frame.pixels[2].r, 1.0);
     }
 
     #[test]
@@ -245,12 +354,30 @@ mod tests {
         };
 
         let evaluation = node
-            .evaluate(&context(), LaplacianFilterInputs { frame: Some(frame) })
+            .evaluate(
+                &context(),
+                LaplacianFilterInputs {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(frame))),
+                },
+            )
             .expect("laplacian filter evaluation should succeed");
 
-        let pixels = &evaluation.outputs.frame.expect("filtered frame").pixels;
-        assert!(pixels.iter().all(|pixel| (pixel.r - 0.5).abs() < 1e-6));
-        assert!(pixels.iter().all(|pixel| (pixel.a - 1.0).abs() < 1e-6));
+        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        else {
+            panic!("expected color frame output");
+        };
+        assert!(
+            frame
+                .pixels
+                .iter()
+                .all(|pixel| (pixel.r - 0.5).abs() < 1e-6)
+        );
+        assert!(
+            frame
+                .pixels
+                .iter()
+                .all(|pixel| (pixel.a - 1.0).abs() < 1e-6)
+        );
     }
 
     #[test]
@@ -267,14 +394,22 @@ mod tests {
         };
 
         let evaluation = node
-            .evaluate(&context(), LaplacianFilterInputs { frame: Some(frame) })
+            .evaluate(
+                &context(),
+                LaplacianFilterInputs {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(frame))),
+                },
+            )
             .expect("laplacian filter evaluation should succeed");
 
-        let pixels = &evaluation.outputs.frame.expect("filtered frame").pixels;
-        assert!((pixels[0].r - 0.25).abs() < 1e-6);
-        assert!((pixels[1].r - 0.25).abs() < 1e-6);
-        assert!((pixels[2].r - 0.25).abs() < 1e-6);
-        assert!((pixels[3].r - 0.25).abs() < 1e-6);
+        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        else {
+            panic!("expected color frame output");
+        };
+        assert!((frame.pixels[0].r - 0.25).abs() < 1e-6);
+        assert!((frame.pixels[1].r - 0.25).abs() < 1e-6);
+        assert!((frame.pixels[2].r - 0.25).abs() < 1e-6);
+        assert!((frame.pixels[3].r - 0.25).abs() < 1e-6);
     }
 
     #[test]
@@ -307,12 +442,104 @@ mod tests {
         };
 
         let evaluation = node
-            .evaluate(&context(), LaplacianFilterInputs { frame: Some(frame) })
+            .evaluate(
+                &context(),
+                LaplacianFilterInputs {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(frame))),
+                },
+            )
             .expect("laplacian filter evaluation should succeed");
 
-        let pixels = &evaluation.outputs.frame.expect("filtered frame").pixels;
-        assert_eq!(pixels[0].a, 1.0);
-        assert_eq!(pixels[1].a, 1.0);
-        assert_eq!(pixels[2].a, 1.0);
+        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        else {
+            panic!("expected color frame output");
+        };
+        assert_eq!(frame.pixels[0].a, 1.0);
+        assert_eq!(frame.pixels[1].a, 1.0);
+        assert_eq!(frame.pixels[2].a, 1.0);
+    }
+
+    #[test]
+    fn tensor_input_produces_tensor_output() {
+        let mut node = LaplacianFilterNode::default();
+
+        let evaluation = node
+            .evaluate(
+                &context(),
+                LaplacianFilterInputs {
+                    frame: Some(AnyInputValue(InputValue::FloatTensor(FloatTensor {
+                        shape: vec![3],
+                        values: vec![0.0, 1.0, 0.0],
+                    }))),
+                },
+            )
+            .expect("laplacian filter evaluation should succeed");
+
+        assert_eq!(
+            evaluation.outputs.frame,
+            Some(InputValue::FloatTensor(FloatTensor {
+                shape: vec![3],
+                values: vec![1.0, 2.0, 1.0],
+            }))
+        );
+        assert_eq!(
+            evaluation.outputs.tensor,
+            Some(FloatTensor {
+                shape: vec![3],
+                values: vec![1.0, 2.0, 1.0],
+            })
+        );
+    }
+
+    #[test]
+    fn tensor_signed_mode_preserves_zero_response_without_bias() {
+        let mut parameters = HashMap::new();
+        parameters.insert("absolute_value".to_owned(), JsonValue::from(false));
+        let mut node = LaplacianFilterNode::from_parameters(&parameters).node;
+
+        let evaluation = node
+            .evaluate(
+                &context(),
+                LaplacianFilterInputs {
+                    frame: Some(AnyInputValue(InputValue::FloatTensor(FloatTensor {
+                        shape: vec![2, 2],
+                        values: vec![0.4, 0.4, 0.4, 0.4],
+                    }))),
+                },
+            )
+            .expect("laplacian filter evaluation should succeed");
+
+        let tensor = evaluation
+            .outputs
+            .tensor
+            .expect("expected float tensor output");
+        assert_eq!(tensor.shape, vec![2, 2]);
+        assert!(tensor.values.iter().all(|value| value.abs() < 1e-6));
+    }
+
+    #[test]
+    fn tensor_signed_mode_preserves_negative_values() {
+        let mut parameters = HashMap::new();
+        parameters.insert("absolute_value".to_owned(), JsonValue::from(false));
+        let mut node = LaplacianFilterNode::from_parameters(&parameters).node;
+
+        let evaluation = node
+            .evaluate(
+                &context(),
+                LaplacianFilterInputs {
+                    frame: Some(AnyInputValue(InputValue::FloatTensor(FloatTensor {
+                        shape: vec![3],
+                        values: vec![1.0, 0.0, 1.0],
+                    }))),
+                },
+            )
+            .expect("laplacian filter evaluation should succeed");
+
+        let tensor = evaluation
+            .outputs
+            .tensor
+            .expect("expected float tensor output");
+        assert_eq!(tensor.shape, vec![3]);
+        assert_eq!(tensor.values, vec![1.0, -2.0, 1.0]);
     }
 }

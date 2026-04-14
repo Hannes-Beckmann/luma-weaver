@@ -127,7 +127,8 @@ impl FrontendApp {
                         self.ui.status = format!("Copied {copied_count} node(s) to clipboard");
                     }
                     crate::browser_file::BrowserClipboardEvent::Read(text) => {
-                        if let Err(message) = self.ensure_pending_clipboard_paste_targets_active_graph()
+                        if let Err(message) =
+                            self.ensure_pending_clipboard_paste_targets_active_graph()
                         {
                             self.ui.pending_clipboard_read_graph_id = None;
                             self.ui.status = message;

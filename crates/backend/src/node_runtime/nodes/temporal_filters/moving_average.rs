@@ -121,6 +121,7 @@ impl RunningSum {
     fn from_value(value: &InputValue) -> Option<Self> {
         match value {
             InputValue::Float(number) => Some(Self::Float(*number)),
+            InputValue::String(_) => None,
             InputValue::Color(color) => Some(Self::Color([color.r, color.g, color.b, color.a])),
             InputValue::FloatTensor(tensor) => Some(Self::Tensor {
                 shape: tensor.shape.clone(),
@@ -141,6 +142,7 @@ impl RunningSum {
     fn zero_for_value(value: &InputValue) -> Option<Self> {
         match value {
             InputValue::Float(_) => Some(Self::Float(0.0)),
+            InputValue::String(_) => None,
             InputValue::Color(_) => Some(Self::Color([0.0; 4])),
             InputValue::FloatTensor(tensor) => Some(Self::Tensor {
                 shape: tensor.shape.clone(),

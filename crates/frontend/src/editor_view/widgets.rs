@@ -11,6 +11,7 @@ use super::{EditorInputPort, EditorSnarlNode};
 pub(super) fn format_input_value(value: &InputValue) -> String {
     match value {
         InputValue::Float(value) => format!("{value:.3}"),
+        InputValue::String(value) => value.clone(),
         InputValue::FloatTensor(tensor) => {
             format!(
                 "tensor(shape={:?}, len={})",
@@ -49,12 +50,19 @@ pub(super) fn show_runtime_value(ui: &mut egui::Ui, value: &InputValue) {
         InputValue::Float(value) => {
             ui.label(format!("{value:.3}"));
         }
+        InputValue::String(value) => {
+            ui.label(value);
+        }
         InputValue::FloatTensor(tensor) => {
-            ui.label(format!(
-                "float_tensor(shape={:?}, len={})",
-                tensor.shape,
-                tensor.values.len()
-            ));
+            if tensor.shape.len() == 2 {
+                draw_float_tensor_preview(ui, tensor);
+            } else {
+                ui.label(format!(
+                    "float_tensor(shape={:?}, len={})",
+                    tensor.shape,
+                    tensor.values.len()
+                ));
+            }
         }
         InputValue::Color(color) => {
             let color32 = egui::Color32::from_rgba_unmultiplied(
@@ -247,6 +255,9 @@ pub(super) fn edit_input_value(ui: &mut egui::Ui, input: &mut EditorInputPort) {
                     .range(-10_000.0..=10_000.0),
             );
         }
+        InputValue::String(value) => {
+            ui.text_edit_singleline(value);
+        }
         InputValue::FloatTensor(tensor) => {
             ui.label(format!(
                 "tensor {:?} ({})",
@@ -274,11 +285,91 @@ pub(super) fn supports_disconnected_inline_editor(kind: ValueKind) -> bool {
     match kind {
         ValueKind::Any => true,
         ValueKind::Float => true,
+        ValueKind::String => true,
         ValueKind::FloatTensor => true,
         ValueKind::Color => true,
         ValueKind::LedLayout => true,
         ValueKind::ColorFrame => false,
     }
+}
+
+/// Draws a grayscale preview for a two-dimensional float tensor.
+pub(super) fn draw_float_tensor_preview(ui: &mut egui::Ui, tensor: &shared::FloatTensor) {
+    let [height, width]: [usize; 2] = match tensor.shape.as_slice() {
+        [height, width] => [*height, *width],
+        _ => return,
+    };
+    if height == 0 || width == 0 {
+        return;
+    }
+
+    let max_preview_size = egui::vec2(240.0, 240.0);
+    let aspect = width as f32 / height as f32;
+    let preview_size = if aspect >= 1.0 {
+        egui::vec2(max_preview_size.x, max_preview_size.x / aspect)
+    } else {
+        egui::vec2(max_preview_size.y * aspect, max_preview_size.y)
+    };
+
+    let mut min = f32::INFINITY;
+    let mut max = f32::NEG_INFINITY;
+    for value in &tensor.values {
+        if value.is_finite() {
+            min = min.min(*value);
+            max = max.max(*value);
+        }
+    }
+    if !min.is_finite() || !max.is_finite() {
+        return;
+    }
+    let range = (max - min).abs();
+
+    ui.label(format!("min {:.3}  max {:.3}", min, max));
+
+    let (rect, _) = ui.allocate_exact_size(preview_size, egui::Sense::hover());
+    let painter = ui.painter();
+    painter.rect_filled(rect, 0.0, egui::Color32::from_gray(20));
+
+    let pixels_per_point = ui.ctx().pixels_per_point();
+    let snap = |x: f32| (x * pixels_per_point).round() / pixels_per_point;
+
+    for y in 0..height {
+        let y0 = snap(egui::lerp(
+            rect.top()..=rect.bottom(),
+            y as f32 / height as f32,
+        ));
+        let y1 = rect.bottom();
+
+        for x in 0..width {
+            let x0 = snap(egui::lerp(
+                rect.left()..=rect.right(),
+                x as f32 / width as f32,
+            ));
+            let x1 = rect.right();
+
+            let idx = y * width + x;
+            let value = tensor.values.get(idx).copied().unwrap_or(0.0);
+            let normalized = if range <= f32::EPSILON {
+                0.5
+            } else {
+                ((value - min) / range).clamp(0.0, 1.0)
+            };
+            let channel = (normalized * 255.0).round() as u8;
+
+            painter.rect_filled(
+                egui::Rect::from_min_max(egui::pos2(x0, y0), egui::pos2(x1, y1)),
+                0.0,
+                egui::Color32::from_gray(channel),
+            );
+        }
+    }
+
+    painter.rect_stroke(
+        rect,
+        0.0,
+        egui::Stroke::new(1.0, egui::Color32::from_gray(70)),
+        egui::StrokeKind::Outside,
+    );
 }
 
 /// Ensures that a node's parameter list contains any missing schema defaults.

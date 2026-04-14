@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 pub enum ValueKind {
     Any,
     Float,
+    String,
     FloatTensor,
     Color,
     LedLayout,
@@ -16,6 +17,7 @@ pub enum ValueKind {
 /// Represents a concrete runtime or persisted value carried through the graph system.
 pub enum InputValue {
     Float(f32),
+    String(String),
     FloatTensor(FloatTensor),
     Color(RgbaColor),
     LedLayout(LedLayout),
@@ -27,6 +29,7 @@ impl InputValue {
     pub fn value_kind(&self) -> ValueKind {
         match self {
             Self::Float(_) => ValueKind::Float,
+            Self::String(_) => ValueKind::String,
             Self::FloatTensor(_) => ValueKind::FloatTensor,
             Self::Color(_) => ValueKind::Color,
             Self::LedLayout(_) => ValueKind::LedLayout,

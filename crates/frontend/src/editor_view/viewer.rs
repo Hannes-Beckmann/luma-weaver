@@ -632,6 +632,7 @@ fn pin_info_for_kind(kind: ValueKind) -> PinInfo {
     match kind {
         ValueKind::Any => PinInfo::circle().with_fill(egui::Color32::from_rgb(171, 178, 191)),
         ValueKind::Float => PinInfo::circle().with_fill(egui::Color32::from_rgb(97, 175, 239)),
+        ValueKind::String => PinInfo::circle().with_fill(egui::Color32::from_rgb(224, 196, 108)),
         ValueKind::FloatTensor => {
             PinInfo::circle().with_fill(egui::Color32::from_rgb(86, 182, 194))
         }

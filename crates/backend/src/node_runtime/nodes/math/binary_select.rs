@@ -82,6 +82,7 @@ fn selects_b(selector: f32) -> bool {
 fn value_kind(value: &InputValue) -> ValueKind {
     match value {
         InputValue::Float(_) => ValueKind::Float,
+        InputValue::String(_) => ValueKind::String,
         InputValue::FloatTensor(_) => ValueKind::FloatTensor,
         InputValue::Color(_) => ValueKind::Color,
         InputValue::LedLayout(_) => ValueKind::LedLayout,
