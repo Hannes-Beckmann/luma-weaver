@@ -211,6 +211,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
+ "web-time",
 ]
 
 [[package]]
