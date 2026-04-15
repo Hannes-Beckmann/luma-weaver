@@ -8,10 +8,10 @@
       "execution_frequency_hz": 30
     },
     "viewport": {
-      "zoom": 0.60653067,
+      "zoom": 0.4481688,
       "pan": {
-        "x": 736.6521,
-        "y": 301.87463
+        "x": 790.0467,
+        "y": 298.078
       }
     },
     "nodes": [
@@ -155,6 +155,13 @@
                 "pixels": []
               }
             }
+          },
+          {
+            "name": "disable",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
           }
         ],
         "parameters": [
@@ -268,7 +275,7 @@
         "viewport": {
           "position": {
             "x": 87.02021,
-            "y": 743.21686
+            "y": 787.73236
           },
           "collapsed": false
         },
@@ -306,8 +313,8 @@
         "node_type": "inputs.signal_generator",
         "viewport": {
           "position": {
-            "x": -932.31836,
-            "y": -54.02049
+            "x": -1202.7086,
+            "y": -63.912815
           },
           "collapsed": false
         },
@@ -332,15 +339,15 @@
         ]
       },
       {
-        "id": "math_add_float_1",
+        "id": "math_add_2",
         "metadata": {
-          "name": "Add Float"
+          "name": "Add"
         },
-        "node_type": "math.add_float",
+        "node_type": "math.add",
         "viewport": {
           "position": {
-            "x": -312.23953,
-            "y": 754.1394
+            "x": -368.73993,
+            "y": 794.89026
           },
           "collapsed": false
         },
@@ -356,53 +363,22 @@
             "name": "b",
             "value": {
               "kind": "Float",
-              "value": 2.31
+              "value": 1.26
             }
           }
         ],
         "parameters": []
       },
       {
-        "id": "math_add_float_2",
+        "id": "math_multiply_1",
         "metadata": {
-          "name": "Add Float"
+          "name": "Multiply"
         },
-        "node_type": "math.add_float",
+        "node_type": "math.multiply",
         "viewport": {
           "position": {
-            "x": -767.43713,
-            "y": 451.29337
-          },
-          "collapsed": false
-        },
-        "input_values": [
-          {
-            "name": "a",
-            "value": {
-              "kind": "Float",
-              "value": 0.0
-            }
-          },
-          {
-            "name": "b",
-            "value": {
-              "kind": "Float",
-              "value": 1.11
-            }
-          }
-        ],
-        "parameters": []
-      },
-      {
-        "id": "math_multiply_float_1",
-        "metadata": {
-          "name": "Multiply Float"
-        },
-        "node_type": "math.multiply_float",
-        "viewport": {
-          "position": {
-            "x": -818.2676,
-            "y": 754.3434
+            "x": -790.81256,
+            "y": 664.6413
           },
           "collapsed": false
         },
@@ -418,7 +394,7 @@
             "name": "b",
             "value": {
               "kind": "Float",
-              "value": 2.41
+              "value": 2.05
             }
           }
         ],
@@ -432,8 +408,8 @@
         "node_type": "temporal_filters.delay",
         "viewport": {
           "position": {
-            "x": 854.7792,
-            "y": 406.31995
+            "x": 727.8275,
+            "y": 322.23517
           },
           "collapsed": false
         },
@@ -450,6 +426,10 @@
           {
             "name": "ticks",
             "value": 1
+          },
+          {
+            "name": "initial_type",
+            "value": "colorframe"
           }
         ]
       },
@@ -461,8 +441,8 @@
         "node_type": "frame_operations.alpha_over",
         "viewport": {
           "position": {
-            "x": 869.36365,
-            "y": 744.2337
+            "x": 846.2814,
+            "y": 841.50854
           },
           "collapsed": false
         },
@@ -502,8 +482,8 @@
         "node_type": "temporal_filters.fade",
         "viewport": {
           "position": {
-            "x": 1246.2765,
-            "y": 556.57495
+            "x": 1252.8713,
+            "y": 508.76196
           },
           "collapsed": false
         },
@@ -562,8 +542,8 @@
         "node_type": "temporal_filters.moving_average",
         "viewport": {
           "position": {
-            "x": -510.52988,
-            "y": 56.26319
+            "x": -746.2967,
+            "y": -82.229454
           },
           "collapsed": false
         },
@@ -593,8 +573,8 @@
         "node_type": "outputs.display",
         "viewport": {
           "position": {
-            "x": 437.48456,
-            "y": 494.8229
+            "x": 327.02023,
+            "y": 423.92786
           },
           "collapsed": false
         },
@@ -608,9 +588,52 @@
           }
         ],
         "parameters": []
+      },
+      {
+        "id": "math_add_1",
+        "metadata": {
+          "name": "Add"
+        },
+        "node_type": "math.add",
+        "viewport": {
+          "position": {
+            "x": -782.569,
+            "y": 372.81772
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 1.22
+            }
+          }
+        ],
+        "parameters": []
       }
     ],
     "edges": [
+      {
+        "from_node_id": "frame_operations_alpha_over_1",
+        "from_output_name": "color",
+        "to_node_id": "temporal_filters_delay_1",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "frame_operations_mask_frame_1",
+        "from_output_name": "frame",
+        "to_node_id": "debug_wled_dummy_display_1",
+        "to_input_name": "value"
+      },
       {
         "from_node_id": "generators_bouncing_balls_1",
         "from_output_name": "frame",
@@ -624,16 +647,28 @@
         "to_input_name": "frame"
       },
       {
-        "from_node_id": "frame_operations_alpha_over_1",
-        "from_output_name": "color",
-        "to_node_id": "temporal_filters_delay_1",
+        "from_node_id": "inputs_signal_generator_1",
+        "from_output_name": "value",
+        "to_node_id": "temporal_filters_moving_average_1",
         "to_input_name": "value"
       },
       {
-        "from_node_id": "temporal_filters_fade_1",
-        "from_output_name": "value",
-        "to_node_id": "frame_operations_alpha_over_1",
-        "to_input_name": "background"
+        "from_node_id": "math_add_1",
+        "from_output_name": "sum",
+        "to_node_id": "generators_bouncing_balls_1",
+        "to_input_name": "radius"
+      },
+      {
+        "from_node_id": "math_add_2",
+        "from_output_name": "sum",
+        "to_node_id": "spatial_filters_gaussian_blur_1",
+        "to_input_name": "radius"
+      },
+      {
+        "from_node_id": "math_multiply_1",
+        "from_output_name": "product",
+        "to_node_id": "math_add_2",
+        "to_input_name": "a"
       },
       {
         "from_node_id": "spatial_filters_gaussian_blur_1",
@@ -648,28 +683,10 @@
         "to_input_name": "value"
       },
       {
-        "from_node_id": "frame_operations_mask_frame_1",
-        "from_output_name": "frame",
-        "to_node_id": "debug_wled_dummy_display_1",
-        "to_input_name": "value"
-      },
-      {
-        "from_node_id": "temporal_filters_moving_average_1",
+        "from_node_id": "temporal_filters_delay_1",
         "from_output_name": "value",
-        "to_node_id": "outputs_plot_1",
-        "to_input_name": "value"
-      },
-      {
-        "from_node_id": "temporal_filters_moving_average_1",
-        "from_output_name": "value",
-        "to_node_id": "math_add_float_2",
-        "to_input_name": "a"
-      },
-      {
-        "from_node_id": "temporal_filters_moving_average_1",
-        "from_output_name": "value",
-        "to_node_id": "math_multiply_float_1",
-        "to_input_name": "a"
+        "to_node_id": "frame_operations_mask_frame_1",
+        "to_input_name": "mask"
       },
       {
         "from_node_id": "temporal_filters_delay_1",
@@ -678,33 +695,27 @@
         "to_input_name": "value"
       },
       {
-        "from_node_id": "temporal_filters_delay_1",
+        "from_node_id": "temporal_filters_fade_1",
         "from_output_name": "value",
-        "to_node_id": "frame_operations_mask_frame_1",
-        "to_input_name": "mask"
+        "to_node_id": "frame_operations_alpha_over_1",
+        "to_input_name": "background"
       },
       {
-        "from_node_id": "math_add_float_1",
-        "from_output_name": "sum",
-        "to_node_id": "spatial_filters_gaussian_blur_1",
-        "to_input_name": "radius"
-      },
-      {
-        "from_node_id": "math_add_float_2",
-        "from_output_name": "sum",
-        "to_node_id": "generators_bouncing_balls_1",
-        "to_input_name": "radius"
-      },
-      {
-        "from_node_id": "math_multiply_float_1",
-        "from_output_name": "product",
-        "to_node_id": "math_add_float_1",
+        "from_node_id": "temporal_filters_moving_average_1",
+        "from_output_name": "value",
+        "to_node_id": "math_add_1",
         "to_input_name": "a"
       },
       {
-        "from_node_id": "inputs_signal_generator_1",
+        "from_node_id": "temporal_filters_moving_average_1",
         "from_output_name": "value",
-        "to_node_id": "temporal_filters_moving_average_1",
+        "to_node_id": "math_multiply_1",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "temporal_filters_moving_average_1",
+        "from_output_name": "value",
+        "to_node_id": "outputs_plot_1",
         "to_input_name": "value"
       }
     ]

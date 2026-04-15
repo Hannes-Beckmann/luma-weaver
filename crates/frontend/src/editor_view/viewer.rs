@@ -7,8 +7,8 @@ use egui_snarl::ui::{
 };
 use egui_snarl::{InPin, NodeId, OutPin, Snarl};
 use shared::{
-    GraphDocument, MqttBrokerConfig, NodeCategory, NodeDefinition, NodeDiagnosticSeverity,
-    NodeDiagnosticSummary, NodeTypeId, ValueKind, WledInstance,
+    GraphDocument, MqttBrokerConfig, NodeCategory, NodeDiagnosticSeverity, NodeDiagnosticSummary,
+    NodeSchema, NodeTypeId, OutputInference, ValueKind, WledInstance,
 };
 
 use super::EditorSnarlNode;
@@ -26,7 +26,8 @@ struct GraphSnarlViewer {
     current_transform: Option<TSTransform>,
     wled_instances: Vec<WledInstance>,
     mqtt_broker_configs: Vec<MqttBrokerConfig>,
-    available_node_definitions: Vec<NodeDefinition>,
+    available_node_definitions: Vec<NodeSchema>,
+    inferred_outputs: std::collections::HashMap<(NodeId, String), OutputInference>,
     plot_history: std::collections::HashMap<String, Vec<f32>>,
     diagnostic_summaries: std::collections::HashMap<String, NodeDiagnosticSummary>,
     opened_diagnostics_node_id: Option<String>,
@@ -150,6 +151,13 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
             max_input_label_width(ui, node)
         };
         let is_connected = !pin.remotes.is_empty();
+        let port_name = snarl[pin.id.node]
+            .inputs
+            .get(pin.id.input)
+            .map(|port| port.name.clone());
+        let connected_kind = port_name.as_deref().and_then(|port_name| {
+            infer_connected_input_from_map(&self.inferred_outputs, snarl, pin.id.node, port_name)
+        });
         let node = &mut snarl[pin.id.node];
         let Some(port) = node.inputs.get_mut(pin.id.input) else {
             ui.label("?");
@@ -163,7 +171,8 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
         if !is_connected {
             edit_input_value(ui, port);
         }
-        pin_info_for_kind(port.value_kind)
+        let inferred = connected_kind.unwrap_or_else(|| OutputInference::Resolved(port.value_kind));
+        pin_info_for_inference(&inferred)
     }
 
     /// Connects two pins when their shared node definitions allow the connection.
@@ -200,7 +209,13 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
         let Some(to_port_definition) = to_definition.input_port(&to_port.name) else {
             return;
         };
-        if !to_definition.can_connect_ports(from_port_definition, to_port_definition) {
+        let Some(from_kind) =
+            infer_node_output_kind(&self.inferred_outputs, from.id.node, &from_port.name)
+        else {
+            return;
+        };
+
+        if self.connection_kind_mismatch(from_kind, from_port_definition, to_port_definition) {
             return;
         }
 
@@ -336,7 +351,9 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
         } else {
             ui.label(&port.display_name);
         }
-        pin_info_for_kind(port.value_kind)
+        let inferred_kind = infer_node_output(&self.inferred_outputs, pin.id.node, &port.name)
+            .unwrap_or_else(|| OutputInference::Resolved(port.value_kind));
+        pin_info_for_inference(&inferred_kind)
     }
 
     /// Returns whether the graph canvas should expose a context menu at `pos`.
@@ -371,6 +388,113 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
     }
 }
 
+impl GraphSnarlViewer {
+    fn connection_kind_mismatch(
+        &self,
+        from_kind: ValueKind,
+        from_port: &shared::NodeOutputDefinition,
+        to_port: &shared::NodeInputDefinition,
+    ) -> bool {
+        if !to_port.accepts_kind(from_kind) {
+            return true;
+        }
+        if !from_port.accepts_kind(from_kind) {
+            return true;
+        }
+        false
+    }
+}
+
+fn infer_node_output(
+    inferred_outputs: &std::collections::HashMap<(NodeId, String), OutputInference>,
+    node_id: NodeId,
+    output_name: &str,
+) -> Option<OutputInference> {
+    inferred_outputs
+        .get(&(node_id, output_name.to_owned()))
+        .cloned()
+}
+
+fn infer_node_output_kind(
+    inferred_outputs: &std::collections::HashMap<(NodeId, String), OutputInference>,
+    node_id: NodeId,
+    output_name: &str,
+) -> Option<ValueKind> {
+    infer_node_output(inferred_outputs, node_id, output_name).and_then(|inference| inference.kind())
+}
+
+fn infer_connected_input_from_map(
+    inferred_outputs: &std::collections::HashMap<(NodeId, String), OutputInference>,
+    snarl: &Snarl<EditorSnarlNode>,
+    node_id: NodeId,
+    input_name: &str,
+) -> Option<OutputInference> {
+    for (out_pin, in_pin) in snarl.wires() {
+        if in_pin.node != node_id {
+            continue;
+        }
+        let target_node = snarl.get_node(in_pin.node)?;
+        let target_input = target_node.inputs.get(in_pin.input)?;
+        if target_input.name != input_name {
+            continue;
+        }
+
+        let source_node = snarl.get_node(out_pin.node)?;
+        let source_output = source_node.outputs.get(out_pin.output)?;
+        return infer_node_output(inferred_outputs, out_pin.node, &source_output.name);
+    }
+    None
+}
+
+fn propagate_inferred_outputs(
+    snarl: &Snarl<EditorSnarlNode>,
+    available_node_definitions: &[NodeSchema],
+) -> std::collections::HashMap<(NodeId, String), OutputInference> {
+    let mut inferred = std::collections::HashMap::<(NodeId, String), OutputInference>::new();
+
+    let max_iterations = snarl.nodes().count().saturating_mul(4).max(1);
+    for _ in 0..max_iterations {
+        let mut changed = false;
+
+        for (node_id, node) in snarl.nodes_ids_data() {
+            let Some(definition) =
+                find_node_definition(available_node_definitions, &node.value.node_type_id)
+            else {
+                continue;
+            };
+
+            let input_kinds = node
+                .value
+                .inputs
+                .iter()
+                .map(|input| {
+                    let kind =
+                        infer_connected_input_from_map(&inferred, snarl, node_id, &input.name)
+                            .and_then(|inference| inference.kind())
+                            .unwrap_or_else(|| input.value.value_kind());
+                    (input.name.as_str(), kind)
+                })
+                .collect::<Vec<_>>();
+
+            for output in &node.value.outputs {
+                let key = (node_id, output.name.clone());
+                let next_inference =
+                    definition.infer_output(&output.name, &input_kinds, &node.value.parameters);
+                let previous = inferred.insert(key, next_inference.clone());
+                if previous.as_ref() != Some(&next_inference) {
+                    changed = true;
+                }
+            }
+        }
+
+        if !changed {
+            break;
+        }
+    }
+
+    inferred
+}
+
 /// Renders the add-node context menu and inserts a selected node at `pos`.
 ///
 /// When a search term is active the menu is flattened into a single result list; otherwise nodes
@@ -378,7 +502,7 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
 fn render_graph_menu_contents(
     pos: egui::Pos2,
     node_menu_search: &mut String,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
     ui: &mut egui::Ui,
     snarl: &mut Snarl<EditorSnarlNode>,
 ) {
@@ -454,7 +578,7 @@ pub(super) fn show_snarl_canvas(
     ui: &mut egui::Ui,
     mut snarl: &mut Snarl<EditorSnarlNode>,
     document: &mut GraphDocument,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
     plot_history: &std::collections::HashMap<String, std::collections::VecDeque<f32>>,
     diagnostic_summaries: &std::collections::HashMap<String, NodeDiagnosticSummary>,
     wled_instances: &[WledInstance],
@@ -493,6 +617,7 @@ pub(super) fn show_snarl_canvas(
         wled_instances: wled_instances.to_vec(),
         mqtt_broker_configs: mqtt_broker_configs.to_vec(),
         available_node_definitions: available_node_definitions.to_vec(),
+        inferred_outputs: propagate_inferred_outputs(snarl, available_node_definitions),
         plot_history: plot_history
             .iter()
             .map(|(node_id, samples)| (node_id.clone(), samples.iter().copied().collect()))
@@ -627,21 +752,23 @@ fn center_viewport_on_nodes(document: &mut GraphDocument, canvas_size: egui::Vec
     document.viewport.pan.y = canvas_size.y * 0.5 - center_y * zoom;
 }
 
-/// Returns the pin styling used for a shared value kind.
-fn pin_info_for_kind(kind: ValueKind) -> PinInfo {
-    match kind {
-        ValueKind::Any => PinInfo::circle().with_fill(egui::Color32::from_rgb(171, 178, 191)),
-        ValueKind::Float => PinInfo::circle().with_fill(egui::Color32::from_rgb(97, 175, 239)),
-        ValueKind::String => PinInfo::circle().with_fill(egui::Color32::from_rgb(224, 196, 108)),
-        ValueKind::FloatTensor => {
-            PinInfo::circle().with_fill(egui::Color32::from_rgb(86, 182, 194))
-        }
-        ValueKind::Color => PinInfo::circle().with_fill(egui::Color32::from_rgb(198, 120, 221)),
-        ValueKind::LedLayout => PinInfo::circle().with_fill(egui::Color32::from_rgb(224, 108, 117)),
-        ValueKind::ColorFrame => {
-            PinInfo::circle().with_fill(egui::Color32::from_rgb(152, 195, 121))
-        }
-    }
+/// Returns the pin styling used for an inferred output state.
+fn pin_info_for_inference(inference: &OutputInference) -> PinInfo {
+    let color = match inference {
+        OutputInference::Invalid { .. } => egui::Color32::from_rgb(220, 70, 70),
+        OutputInference::Unavailable => egui::Color32::from_rgb(171, 178, 191),
+        OutputInference::Resolved(kind) => match kind {
+            ValueKind::Any => egui::Color32::from_rgb(171, 178, 191),
+            ValueKind::Float => egui::Color32::from_rgb(230, 146, 58),
+            ValueKind::String => egui::Color32::from_rgb(224, 196, 108),
+            ValueKind::FloatTensor => egui::Color32::from_rgb(86, 182, 194),
+            ValueKind::Color => egui::Color32::from_rgb(198, 120, 221),
+            ValueKind::LedLayout => egui::Color32::from_rgb(224, 108, 117),
+            ValueKind::ColorFrame => egui::Color32::from_rgb(152, 195, 121),
+        },
+    };
+
+    PinInfo::circle().with_fill(color).with_wire_color(color)
 }
 
 /// Returns the next graph-node ID for a node created from the context menu.
@@ -663,12 +790,12 @@ fn next_context_menu_node_id(snarl: &Snarl<EditorSnarlNode>, node_type_id: &str)
 
 struct NodeMenuCategory {
     label: &'static str,
-    definitions: Vec<NodeDefinition>,
+    definitions: Vec<NodeSchema>,
 }
 
 /// Groups node definitions into menu categories and filters them by the current search term.
 fn node_menu_categories(
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
     search: &str,
 ) -> Vec<NodeMenuCategory> {
     let normalized_search = search.trim().to_lowercase();
@@ -722,7 +849,7 @@ fn node_menu_categories(
 fn push_node_menu_category(
     categories: &mut Vec<NodeMenuCategory>,
     label: &'static str,
-    mut definitions: Vec<NodeDefinition>,
+    mut definitions: Vec<NodeSchema>,
 ) {
     if definitions.is_empty() {
         return;
@@ -733,14 +860,19 @@ fn push_node_menu_category(
 
 #[cfg(test)]
 mod tests {
-    use super::node_menu_categories;
+    use egui_snarl::Snarl;
+
+    use super::{
+        infer_node_output, infer_node_output_kind, node_menu_categories, propagate_inferred_outputs,
+    };
+    use crate::editor_view::model::editor_node_from_definition;
     use shared::{
-        NodeCategory, NodeConnectionDefinition, NodeDefinition, NodeInputDefinition,
-        NodeOutputDefinition, NodeTypeId, ValueKind,
+        NodeCategory, NodeConnectionDefinition, NodeInputDefinition, NodeOutputDefinition,
+        NodeSchema, NodeTypeId, OutputInference, ValueKind, node_definitions,
     };
 
-    fn test_node(id: &str, category: NodeCategory, display_name: &str) -> NodeDefinition {
-        NodeDefinition {
+    fn test_node(id: &str, category: NodeCategory, display_name: &str) -> NodeSchema {
+        NodeSchema {
             id: id.to_owned(),
             display_name: display_name.to_owned(),
             category,
@@ -795,5 +927,213 @@ mod tests {
         assert_eq!(categories[1].label, "Generators");
         assert_eq!(categories[1].definitions.len(), 1);
         assert_eq!(categories[1].definitions[0].id, "generators.plasma");
+    }
+
+    #[test]
+    fn infers_min_max_tensor_output_from_upstream_tensor_connection() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let extract_channels = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "extract".to_owned(),
+                "Extract Channels".to_owned(),
+                NodeTypeId::EXTRACT_CHANNELS.to_owned(),
+                &definitions,
+            ),
+        );
+        let min_max = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "min_max".to_owned(),
+                "Min/Max".to_owned(),
+                NodeTypeId::MIN_MAX.to_owned(),
+                &definitions,
+            ),
+        );
+
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: extract_channels,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: min_max,
+                input: 0,
+            },
+        );
+
+        let inferred_kinds = propagate_inferred_outputs(&snarl, &definitions);
+        let inferred = infer_node_output_kind(&inferred_kinds, min_max, "value");
+
+        assert_eq!(inferred, Some(ValueKind::FloatTensor));
+    }
+
+    #[test]
+    fn delay_output_follows_initial_type_parameter() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let delay = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "delay".to_owned(),
+                "Delay".to_owned(),
+                NodeTypeId::DELAY.to_owned(),
+                &definitions,
+            ),
+        );
+        snarl[delay]
+            .parameters
+            .iter_mut()
+            .find(|parameter| parameter.name == "initial_type")
+            .expect("delay initial_type parameter")
+            .value = serde_json::json!("tensor");
+
+        let inferred_kinds = propagate_inferred_outputs(&snarl, &definitions);
+        let inferred = infer_node_output_kind(&inferred_kinds, delay, "value");
+
+        assert_eq!(inferred, Some(ValueKind::FloatTensor));
+    }
+
+    #[test]
+    fn laplacian_output_infers_frame_or_tensor_from_input() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let solid_frame = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "solid".to_owned(),
+                "Solid Frame".to_owned(),
+                NodeTypeId::SOLID_FRAME.to_owned(),
+                &definitions,
+            ),
+        );
+        let laplacian = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "laplacian".to_owned(),
+                "Laplacian Filter".to_owned(),
+                NodeTypeId::LAPLACIAN_FILTER.to_owned(),
+                &definitions,
+            ),
+        );
+
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: solid_frame,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: laplacian,
+                input: 0,
+            },
+        );
+
+        let inferred_kinds = propagate_inferred_outputs(&snarl, &definitions);
+        let inferred = infer_node_output_kind(&inferred_kinds, laplacian, "value");
+
+        assert_eq!(inferred, Some(ValueKind::ColorFrame));
+    }
+
+    #[test]
+    fn laplacian_output_infers_tensor_for_tensor_input() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let extract_channels = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "extract".to_owned(),
+                "Extract Channels".to_owned(),
+                NodeTypeId::EXTRACT_CHANNELS.to_owned(),
+                &definitions,
+            ),
+        );
+        let laplacian = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "laplacian".to_owned(),
+                "Laplacian Filter".to_owned(),
+                NodeTypeId::LAPLACIAN_FILTER.to_owned(),
+                &definitions,
+            ),
+        );
+
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: extract_channels,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: laplacian,
+                input: 0,
+            },
+        );
+
+        let inferred_kinds = propagate_inferred_outputs(&snarl, &definitions);
+        let inferred = infer_node_output_kind(&inferred_kinds, laplacian, "value");
+
+        assert_eq!(inferred, Some(ValueKind::FloatTensor));
+    }
+
+    #[test]
+    fn binary_select_invalid_output_is_preserved_in_propagation() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let extract_channels = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "extract".to_owned(),
+                "Extract Channels".to_owned(),
+                NodeTypeId::EXTRACT_CHANNELS.to_owned(),
+                &definitions,
+            ),
+        );
+        let float_constant = snarl.insert_node(
+            egui::pos2(0.0, 100.0),
+            editor_node_from_definition(
+                "float".to_owned(),
+                "Float Constant".to_owned(),
+                NodeTypeId::FLOAT_CONSTANT.to_owned(),
+                &definitions,
+            ),
+        );
+        let select = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "select".to_owned(),
+                "Binary Select".to_owned(),
+                NodeTypeId::BINARY_SELECT.to_owned(),
+                &definitions,
+            ),
+        );
+
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: extract_channels,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: select,
+                input: 1,
+            },
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: float_constant,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: select,
+                input: 2,
+            },
+        );
+
+        let inferred = infer_node_output(
+            &propagate_inferred_outputs(&snarl, &definitions),
+            select,
+            "value",
+        );
+
+        assert!(matches!(inferred, Some(OutputInference::Invalid { .. })));
     }
 }

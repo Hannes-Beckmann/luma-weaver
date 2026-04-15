@@ -1,8 +1,9 @@
 use std::collections::HashSet;
 
 use shared::{
-    GraphDocument, GraphMetadata, GraphRuntimeStatus, InputValue, MqttBrokerConfig, NodeDefinition,
-    NodeDiagnosticEntry, NodeDiagnosticSummary, NodeRuntimeUpdateValue, ServerState, WledInstance,
+    GraphDocument, GraphMetadata, GraphRuntimeStatus, InputValue, MqttBrokerConfig,
+    NodeDiagnosticEntry, NodeDiagnosticSummary, NodeRuntimeUpdateValue, NodeSchema, ServerState,
+    WledInstance,
 };
 use tracing::{debug, info, trace, warn};
 
@@ -144,7 +145,7 @@ impl FrontendApp {
     }
 
     /// Replaces the set of node definitions available to the editor palette.
-    pub(crate) fn apply_node_definitions(&mut self, definitions: Vec<NodeDefinition>) {
+    pub(crate) fn apply_node_definitions(&mut self, definitions: Vec<NodeSchema>) {
         self.graphs.available_node_definitions = definitions;
         self.graphs.live_snarl_needs_rebuild = false;
         self.sync_live_snarl_from_loaded_document();

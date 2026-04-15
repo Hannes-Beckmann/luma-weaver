@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use serde_json::Value as JsonValue;
 use shared::NodeDiagnostic;
-use shared::{NodeDefinition, NodeExecutionTarget, NodeTypeId, node_definitions};
+use shared::{NodeExecutionTarget, NodeSchema, NodeTypeId, node_definitions};
 
 use crate::node_runtime::nodes;
 use crate::node_runtime::{
@@ -41,14 +41,14 @@ where
 }
 
 pub(crate) struct RegisteredNodeType {
-    pub(crate) definition: NodeDefinition,
+    pub(crate) definition: NodeSchema,
     evaluator_factory: FactoryFn,
     diagnostics_factory: DiagnosticsFn,
 }
 
 pub(crate) struct NodeRegistry {
     by_id: HashMap<String, RegisteredNodeType>,
-    ordered_definitions: Vec<NodeDefinition>,
+    ordered_definitions: Vec<NodeSchema>,
 }
 
 impl NodeRegistry {
@@ -80,7 +80,7 @@ impl NodeRegistry {
     ///
     /// This is the common path for nodes whose inputs, parameters, and outputs are all
     /// described by the shared node schema.
-    pub(crate) fn register_fast_node<T>(&mut self, definition: NodeDefinition) -> anyhow::Result<()>
+    pub(crate) fn register_fast_node<T>(&mut self, definition: NodeSchema) -> anyhow::Result<()>
     where
         T: RuntimeNodeFromParameters + RuntimeNode,
         T::Inputs: RuntimeInputs,
@@ -94,12 +94,12 @@ impl NodeRegistry {
     }
 
     /// Returns the node definition registered for `node_type_id`.
-    pub(crate) fn definition(&self, node_type_id: &str) -> Option<&NodeDefinition> {
+    pub(crate) fn definition(&self, node_type_id: &str) -> Option<&NodeSchema> {
         self.by_id.get(node_type_id).map(|entry| &entry.definition)
     }
 
     /// Returns all registered node definitions in registration order.
-    pub(crate) fn definitions(&self) -> &[NodeDefinition] {
+    pub(crate) fn definitions(&self) -> &[NodeSchema] {
         &self.ordered_definitions
     }
 
@@ -344,7 +344,7 @@ mod tests {
     use std::collections::HashMap;
 
     use serde_json::Value as JsonValue;
-    use shared::{NodeCategory, NodeDefinition, node_definition};
+    use shared::{NodeCategory, NodeSchema, node_definition};
 
     use super::{
         NodeRegistry, RegisteredNodeType, build_node_registry, build_portable_node_registry,
@@ -427,7 +427,7 @@ mod tests {
     fn custom_rust_nodes_register_through_same_api() {
         let mut registry = NodeRegistry::new();
         registry
-            .register_fast_node::<TestNode>(NodeDefinition {
+            .register_fast_node::<TestNode>(NodeSchema {
                 id: "custom.test".to_owned(),
                 display_name: "Custom Test".to_owned(),
                 category: NodeCategory::Debug,

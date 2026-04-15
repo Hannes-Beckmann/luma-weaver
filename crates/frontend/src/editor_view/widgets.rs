@@ -1,6 +1,6 @@
 use serde_json::Value as JsonValue;
 use shared::{
-    ColorGradient, ColorGradientStop, InputValue, MqttBrokerConfig, NodeDefinition, NodeParameter,
+    ColorGradient, ColorGradientStop, InputValue, MqttBrokerConfig, NodeParameter, NodeSchema,
     ParameterUiHint, RgbaColor, ValueKind, WledInstance,
 };
 
@@ -376,7 +376,7 @@ pub(super) fn draw_float_tensor_preview(ui: &mut egui::Ui, tensor: &shared::Floa
 pub(super) fn ensure_parameter_defaults(
     parameters: &mut Vec<NodeParameter>,
     node_type_id: &str,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
 ) {
     let merged = parameters_with_defaults(parameters, node_type_id, available_node_definitions);
     *parameters = merged;

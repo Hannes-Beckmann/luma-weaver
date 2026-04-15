@@ -6,7 +6,7 @@ use egui_snarl::Snarl;
 use futures_channel::mpsc;
 use shared::{
     EventSubscription, GraphDocument, GraphExchangeFile, GraphMetadata, GraphRuntimeMode,
-    InputValue, MqttBrokerConfig, NodeDefinition, NodeDiagnosticEntry, NodeDiagnosticSummary,
+    InputValue, MqttBrokerConfig, NodeDiagnosticEntry, NodeDiagnosticSummary, NodeSchema,
     ServerState, WledInstance,
 };
 
@@ -91,7 +91,7 @@ impl Default for UiState {
 /// Holds graph-centric frontend state such as metadata, the open document, runtime previews, and history.
 pub(crate) struct GraphState {
     pub(crate) graph_documents: Vec<GraphMetadata>,
-    pub(crate) available_node_definitions: Vec<NodeDefinition>,
+    pub(crate) available_node_definitions: Vec<NodeSchema>,
     pub(crate) loaded_graph_document: Option<GraphDocument>,
     pub(crate) history_committed_document: Option<GraphDocument>,
     pub(crate) undo_history: Vec<GraphDocument>,

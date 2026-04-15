@@ -37,18 +37,14 @@ crate::node_runtime::impl_runtime_inputs!(LaplacianFilterInputs {
 });
 
 pub(crate) struct LaplacianFilterOutputs {
-    frame: Option<InputValue>,
-    tensor: Option<FloatTensor>,
+    value: Option<InputValue>,
 }
 
 impl RuntimeOutputs for LaplacianFilterOutputs {
     fn into_runtime_outputs(self) -> anyhow::Result<std::collections::HashMap<String, InputValue>> {
         let mut outputs = std::collections::HashMap::new();
-        if let Some(frame) = self.frame {
-            outputs.insert("frame".to_owned(), frame);
-        }
-        if let Some(tensor) = self.tensor {
-            outputs.insert("tensor".to_owned(), InputValue::FloatTensor(tensor));
+        if let Some(value) = self.value {
+            outputs.insert("value".to_owned(), value);
         }
         Ok(outputs)
     }
@@ -65,21 +61,18 @@ impl RuntimeNode for LaplacianFilterNode {
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let Some(value) = inputs.frame else {
             return Ok(TypedNodeEvaluation::from_outputs(LaplacianFilterOutputs {
-                frame: None,
-                tensor: None,
+                value: None,
             }));
         };
 
         let outputs = match value.0 {
             InputValue::ColorFrame(frame) => LaplacianFilterOutputs {
-                frame: Some(InputValue::ColorFrame(self.filter_frame(frame))),
-                tensor: None,
+                value: Some(InputValue::ColorFrame(self.filter_frame(frame))),
             },
             InputValue::FloatTensor(tensor) => {
                 let filtered = self.filter_tensor(tensor)?;
                 LaplacianFilterOutputs {
-                    frame: Some(InputValue::FloatTensor(filtered.clone())),
-                    tensor: Some(filtered),
+                    value: Some(InputValue::FloatTensor(filtered)),
                 }
             }
             other => bail!(
@@ -278,8 +271,7 @@ mod tests {
             .evaluate(&context(), LaplacianFilterInputs { frame: None })
             .expect("laplacian filter evaluation should succeed");
 
-        assert!(evaluation.outputs.frame.is_none());
-        assert!(evaluation.outputs.tensor.is_none());
+        assert!(evaluation.outputs.value.is_none());
         assert!(evaluation.diagnostics.is_empty());
     }
 
@@ -300,7 +292,7 @@ mod tests {
             )
             .expect("laplacian filter evaluation should succeed");
 
-        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        let InputValue::ColorFrame(frame) = evaluation.outputs.value.expect("filtered frame")
         else {
             panic!("expected color frame output");
         };
@@ -334,7 +326,7 @@ mod tests {
             )
             .expect("laplacian filter evaluation should succeed");
 
-        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        let InputValue::ColorFrame(frame) = evaluation.outputs.value.expect("filtered frame")
         else {
             panic!("expected color frame output");
         };
@@ -362,7 +354,7 @@ mod tests {
             )
             .expect("laplacian filter evaluation should succeed");
 
-        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        let InputValue::ColorFrame(frame) = evaluation.outputs.value.expect("filtered frame")
         else {
             panic!("expected color frame output");
         };
@@ -402,7 +394,7 @@ mod tests {
             )
             .expect("laplacian filter evaluation should succeed");
 
-        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        let InputValue::ColorFrame(frame) = evaluation.outputs.value.expect("filtered frame")
         else {
             panic!("expected color frame output");
         };
@@ -450,7 +442,7 @@ mod tests {
             )
             .expect("laplacian filter evaluation should succeed");
 
-        let InputValue::ColorFrame(frame) = evaluation.outputs.frame.expect("filtered frame")
+        let InputValue::ColorFrame(frame) = evaluation.outputs.value.expect("filtered frame")
         else {
             panic!("expected color frame output");
         };
@@ -476,18 +468,11 @@ mod tests {
             .expect("laplacian filter evaluation should succeed");
 
         assert_eq!(
-            evaluation.outputs.frame,
+            evaluation.outputs.value,
             Some(InputValue::FloatTensor(FloatTensor {
                 shape: vec![3],
                 values: vec![1.0, 2.0, 1.0],
             }))
-        );
-        assert_eq!(
-            evaluation.outputs.tensor,
-            Some(FloatTensor {
-                shape: vec![3],
-                values: vec![1.0, 2.0, 1.0],
-            })
         );
     }
 
@@ -509,10 +494,13 @@ mod tests {
             )
             .expect("laplacian filter evaluation should succeed");
 
-        let tensor = evaluation
+        let InputValue::FloatTensor(tensor) = evaluation
             .outputs
-            .tensor
-            .expect("expected float tensor output");
+            .value
+            .expect("expected float tensor output")
+        else {
+            panic!("expected float tensor output");
+        };
         assert_eq!(tensor.shape, vec![2, 2]);
         assert!(tensor.values.iter().all(|value| value.abs() < 1e-6));
     }
@@ -535,10 +523,13 @@ mod tests {
             )
             .expect("laplacian filter evaluation should succeed");
 
-        let tensor = evaluation
+        let InputValue::FloatTensor(tensor) = evaluation
             .outputs
-            .tensor
-            .expect("expected float tensor output");
+            .value
+            .expect("expected float tensor output")
+        else {
+            panic!("expected float tensor output");
+        };
         assert_eq!(tensor.shape, vec![3]);
         assert_eq!(tensor.values, vec![1.0, -2.0, 1.0]);
     }

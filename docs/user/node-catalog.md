@@ -115,8 +115,9 @@ Examples:
 
 Use these to soften, sharpen, or otherwise filter generated frame output.
 
-`Laplacian Filter` also accepts `FloatTensor` input. Frame output stays display-oriented, while
-tensor output preserves signed numeric responses for simulation-style workflows.
+`Laplacian Filter` also accepts `FloatTensor` input. Its single output now resolves to either
+`ColorFrame` or `FloatTensor` based on the connected input, and tensor mode preserves signed
+numeric responses for simulation-style workflows.
 
 ## Outputs
 

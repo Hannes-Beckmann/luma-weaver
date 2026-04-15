@@ -9,7 +9,7 @@ use crate::{
     events::{EventMessage, EventSubscription, ServerState},
     graph::{
         GraphDocument, GraphExchangeFile, GraphImportCollisionPolicy, GraphImportMode,
-        GraphMetadata, InputValue, LedLayout, NodeDefinition,
+        GraphMetadata, InputValue, LedLayout, NodeSchema,
     },
 };
 
@@ -158,7 +158,7 @@ pub enum ServerMessage {
         documents: Vec<GraphMetadata>,
     },
     NodeDefinitions {
-        definitions: Vec<NodeDefinition>,
+        definitions: Vec<NodeSchema>,
     },
     GraphDocument {
         document: GraphDocument,

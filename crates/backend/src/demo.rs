@@ -6,10 +6,10 @@ use futures_channel::mpsc;
 use futures_channel::mpsc::TryRecvError;
 use shared::{
     ClientMessage, EventSubscription, GraphDocument, GraphExchangeFile, GraphMetadata,
-    GraphRuntimeMode, GraphRuntimeStatus, MqttBrokerConfig, NodeDefinition, NodeDiagnostic,
-    NodeDiagnosticEntry, NodeDiagnosticSeverity, NodeDiagnosticSummary, NodeExecutionTarget,
-    NodeRuntimeUpdateValue, NodeRuntimeValue, ServerMessage, ServerState, WledInstance,
-    node_definitions, validate_graph_document,
+    GraphRuntimeMode, GraphRuntimeStatus, MqttBrokerConfig, NodeDiagnostic, NodeDiagnosticEntry,
+    NodeDiagnosticSeverity, NodeDiagnosticSummary, NodeExecutionTarget, NodeRuntimeUpdateValue,
+    NodeRuntimeValue, NodeSchema, ServerMessage, ServerState, WledInstance, node_definitions,
+    validate_graph_document,
 };
 use uuid::Uuid;
 
@@ -37,7 +37,7 @@ pub fn connect_demo() -> anyhow::Result<(
 pub struct DemoTransport {
     request_rx: mpsc::UnboundedReceiver<ClientMessage>,
     response_tx: mpsc::UnboundedSender<ServerMessage>,
-    node_definitions: Vec<NodeDefinition>,
+    node_definitions: Vec<NodeSchema>,
     node_registry: Arc<crate::node_runtime::NodeRegistry>,
     graph_documents: Vec<GraphDocument>,
     event_subscriptions: HashSet<EventSubscription>,
