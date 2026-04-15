@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
-use shared::{GraphDocument, GraphNode, NodeTypeId};
+use shared::{GraphDocument, GraphNode, NodeTypeId, OutputInference, infer_graph_output};
 
 use crate::node_runtime::NodeRegistry;
 use crate::services::runtime::planner::plan_render_contexts;
@@ -15,6 +15,7 @@ pub(crate) fn compile_graph_document(
     document: GraphDocument,
     node_registry: Arc<NodeRegistry>,
 ) -> anyhow::Result<CompiledGraph> {
+    let graph_nodes = document.nodes.clone();
     let graph_id = document.metadata.id.clone();
     let graph_name = document.metadata.name.clone();
     tracing::debug!(
@@ -26,9 +27,14 @@ pub(crate) fn compile_graph_document(
         "compiling graph document"
     );
     let mut node_index_by_id = HashMap::<String, usize>::new();
+    let mut graph_nodes_by_id = HashMap::<String, GraphNode>::new();
     let mut nodes = Vec::new();
 
-    for (index, node) in document.nodes.into_iter().enumerate() {
+    for node in &graph_nodes {
+        graph_nodes_by_id.insert(node.id.clone(), node.clone());
+    }
+
+    for (index, node) in graph_nodes.into_iter().enumerate() {
         node_index_by_id.insert(node.id.clone(), index);
         nodes.push(compile_node(node, node_registry.as_ref())?);
     }
@@ -60,7 +66,21 @@ pub(crate) fn compile_graph_document(
         let Some(to_port) = to_definition.input_port(&edge.to_input_name) else {
             continue;
         };
-        if !to_definition.can_connect_ports(from_port, to_port) {
+        let resolved_output_kind = match infer_graph_output(
+            &document,
+            &graph_nodes_by_id,
+            &edge.from_node_id,
+            &edge.from_output_name,
+        )
+        {
+            OutputInference::Resolved(kind) => kind,
+            OutputInference::Unavailable => from_port.value_kind,
+            OutputInference::Invalid { .. } => continue,
+        };
+
+        if !to_port.accepts_kind(resolved_output_kind)
+            || !from_port.accepts_kind(resolved_output_kind)
+        {
             continue;
         }
 
@@ -393,5 +413,67 @@ mod tests {
             .map(|parameter| &parameter.default_value);
 
         assert_eq!(decay, Some(&ParameterDefaultValue::Float(8.0)));
+    }
+
+    #[test]
+    fn invalid_polymorphic_edges_are_skipped_during_compilation() {
+        let document: shared::GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "invalid-polymorphic-edge",
+                "name": "invalid polymorphic edge",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "extract",
+                    "metadata": { "name": "extract" },
+                    "node_type": shared::NodeTypeId::EXTRACT_CHANNELS
+                },
+                {
+                    "id": "float",
+                    "metadata": { "name": "float" },
+                    "node_type": shared::NodeTypeId::FLOAT_CONSTANT
+                },
+                {
+                    "id": "select",
+                    "metadata": { "name": "select" },
+                    "node_type": shared::NodeTypeId::BINARY_SELECT
+                },
+                {
+                    "id": "display",
+                    "metadata": { "name": "display" },
+                    "node_type": shared::NodeTypeId::DISPLAY
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "extract",
+                    "from_output_name": "tensor",
+                    "to_node_id": "select",
+                    "to_input_name": "a"
+                },
+                {
+                    "from_node_id": "float",
+                    "from_output_name": "value",
+                    "to_node_id": "select",
+                    "to_input_name": "b"
+                },
+                {
+                    "from_node_id": "select",
+                    "from_output_name": "value",
+                    "to_node_id": "display",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse invalid polymorphic graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let compiled = compile_graph_document(document, node_registry).expect("compile graph");
+
+        assert!(
+            compiled.incoming_edges_by_node[3].is_empty(),
+            "invalid binary select output edge should not be compiled"
+        );
     }
 }

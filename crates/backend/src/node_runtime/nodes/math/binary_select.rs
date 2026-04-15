@@ -47,31 +47,33 @@ impl RuntimeNode for BinarySelectNode {
         _context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
-        let selects_b = selects_b(inputs.selector);
         let a = inputs.a.0;
         let b = inputs.b.0;
         let a_kind = value_kind(&a);
         let b_kind = value_kind(&b);
 
-        let mut diagnostics = Vec::new();
         if a_kind != b_kind {
-            diagnostics.push(NodeDiagnostic {
-                severity: NodeDiagnosticSeverity::Warning,
-                code: Some("binary_select_kind_mismatch".to_owned()),
-                message: format!(
-                    "Binary Select received different branch kinds ({:?} and {:?}); using the selected branch value.",
-                    a_kind, b_kind
-                ),
+            return Ok(TypedNodeEvaluation {
+                outputs: BinarySelectOutputs {
+                    value: InputValue::Float(0.0),
+                },
+                frontend_updates: Vec::new(),
+                diagnostics: vec![NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Error,
+                    code: Some("binary_select_kind_mismatch".to_owned()),
+                    message: format!(
+                        "Binary Select inputs 'a' and 'b' must have the same kind, found {:?} and {:?}.",
+                        a_kind, b_kind
+                    ),
+                }],
             });
         }
 
-        let selected = if selects_b { b } else { a };
+        let selected = if selects_b(inputs.selector) { b } else { a };
 
-        Ok(TypedNodeEvaluation {
-            outputs: BinarySelectOutputs { value: selected },
-            frontend_updates: Vec::new(),
-            diagnostics,
-        })
+        Ok(TypedNodeEvaluation::from_outputs(BinarySelectOutputs {
+            value: selected,
+        }))
     }
 }
 
@@ -94,7 +96,9 @@ fn value_kind(value: &InputValue) -> ValueKind {
 mod tests {
     use std::collections::HashMap;
 
-    use shared::{ColorFrame, FloatTensor, InputValue, LedLayout, RgbaColor};
+    use shared::{
+        ColorFrame, FloatTensor, InputValue, LedLayout, NodeDiagnosticSeverity, RgbaColor,
+    };
 
     use super::{BinarySelectInputs, BinarySelectNode, selects_b};
     use crate::node_runtime::{AnyInputValue, NodeEvaluationContext, RuntimeInputs, RuntimeNode};
@@ -152,6 +156,28 @@ mod tests {
     #[test]
     fn preserves_selected_value_kind_for_frames() {
         let mut node = BinarySelectNode;
+        let other_frame = InputValue::ColorFrame(ColorFrame {
+            layout: LedLayout {
+                id: "frame".to_owned(),
+                pixel_count: 2,
+                width: Some(2),
+                height: Some(1),
+            },
+            pixels: vec![
+                RgbaColor {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 1.0,
+                    a: 1.0,
+                },
+                RgbaColor {
+                    r: 1.0,
+                    g: 1.0,
+                    b: 0.0,
+                    a: 1.0,
+                },
+            ],
+        });
         let frame = InputValue::ColorFrame(ColorFrame {
             layout: LedLayout {
                 id: "frame".to_owned(),
@@ -180,7 +206,7 @@ mod tests {
                 &evaluation_context(),
                 BinarySelectInputs {
                     selector: 1.0,
-                    a: AnyInputValue(InputValue::Float(0.0)),
+                    a: AnyInputValue(other_frame),
                     b: AnyInputValue(frame.clone()),
                 },
             )
@@ -192,6 +218,10 @@ mod tests {
     #[test]
     fn preserves_selected_value_kind_for_tensors() {
         let mut node = BinarySelectNode;
+        let other_tensor = InputValue::FloatTensor(FloatTensor {
+            shape: vec![3],
+            values: vec![1.0, 0.5, 0.25],
+        });
         let tensor = InputValue::FloatTensor(FloatTensor {
             shape: vec![3],
             values: vec![0.25, 0.5, 0.75],
@@ -202,7 +232,7 @@ mod tests {
                 &evaluation_context(),
                 BinarySelectInputs {
                     selector: 1.0,
-                    a: AnyInputValue(InputValue::Float(0.0)),
+                    a: AnyInputValue(other_tensor),
                     b: AnyInputValue(tensor.clone()),
                 },
             )
@@ -222,7 +252,7 @@ mod tests {
     }
 
     #[test]
-    fn mismatched_branch_kinds_emit_warning() {
+    fn mismatched_branch_kinds_emit_error_and_safe_fallback() {
         let mut node = BinarySelectNode;
         let evaluation = node
             .evaluate(
@@ -240,8 +270,10 @@ mod tests {
             )
             .expect("evaluate binary select");
 
+        assert_eq!(evaluation.outputs.value, InputValue::Float(0.0));
         assert!(evaluation.diagnostics.iter().any(|diagnostic| {
             diagnostic.code.as_deref() == Some("binary_select_kind_mismatch")
+                && diagnostic.severity == NodeDiagnosticSeverity::Error
         }));
     }
 }

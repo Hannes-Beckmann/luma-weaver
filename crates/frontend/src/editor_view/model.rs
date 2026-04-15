@@ -2,8 +2,8 @@ use std::collections::{HashMap, HashSet};
 
 use egui_snarl::{NodeId, Snarl};
 use shared::{
-    GraphClipboardFragment, GraphDocument, GraphEdge, GraphNode, InputValue, NodeDefinition,
-    NodeInputValue, NodeMetadata, NodeParameter, NodeParameterDefinition, NodePosition, NodeTypeId,
+    GraphClipboardFragment, GraphDocument, GraphEdge, GraphNode, InputValue, NodeInputValue,
+    NodeMetadata, NodeParameter, NodeParameterDefinition, NodePosition, NodeSchema, NodeTypeId,
     ValueKind,
 };
 use uuid::Uuid;
@@ -16,7 +16,7 @@ use super::{EditorInputPort, EditorOutputPort, EditorSnarlNode};
 /// all projected into the editor model used by `egui_snarl`.
 pub(crate) fn build_snarl_from_document(
     document: &GraphDocument,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
     runtime_node_values: &HashMap<String, HashMap<String, InputValue>>,
 ) -> Snarl<EditorSnarlNode> {
     let mut snarl = Snarl::new();
@@ -184,7 +184,7 @@ pub(super) fn editor_node_from_definition(
     graph_node_id: String,
     title: String,
     node_type_id: String,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
 ) -> EditorSnarlNode {
     let Some(definition) = find_node_definition(available_node_definitions, &node_type_id) else {
         return EditorSnarlNode {
@@ -241,7 +241,7 @@ pub(super) fn editor_node_from_definition(
 /// Unknown node types fall back to the persisted input values so the graph can still be edited.
 fn editor_node_from_graph_node(
     node: &GraphNode,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
     runtime_values: Option<&HashMap<String, InputValue>>,
 ) -> EditorSnarlNode {
     if let Some(definition) =
@@ -378,7 +378,7 @@ pub(super) fn coerce_input_value_kind(value: InputValue, kind: ValueKind) -> Inp
 pub(super) fn parameters_with_defaults(
     parameters: &[NodeParameter],
     node_type_id: &str,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
 ) -> Vec<NodeParameter> {
     let mut merged = parameters.to_vec();
     let Some(definition) = find_node_definition(available_node_definitions, node_type_id) else {
@@ -400,7 +400,7 @@ pub(super) fn parameters_with_defaults(
 
 /// Returns the subset of parameters that should currently be shown in the editor.
 pub(super) fn visible_parameter_definitions<'a>(
-    definition: &'a NodeDefinition,
+    definition: &'a NodeSchema,
     parameters: &[NodeParameter],
 ) -> Vec<&'a NodeParameterDefinition> {
     definition
@@ -425,7 +425,7 @@ fn graph_node_input_value_or_default(
     node: &GraphNode,
     input_name: &str,
     kind: ValueKind,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
 ) -> InputValue {
     let value = node
         .input_values
@@ -451,7 +451,7 @@ fn default_input_value_for_node_input(
     node_type_id: &str,
     input_name: &str,
     kind: ValueKind,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
 ) -> InputValue {
     find_node_definition(available_node_definitions, node_type_id)
         .and_then(|definition| definition.input_port(input_name))
@@ -461,9 +461,9 @@ fn default_input_value_for_node_input(
 
 /// Finds the shared node definition for `node_type_id`.
 pub(super) fn find_node_definition<'a>(
-    available_node_definitions: &'a [NodeDefinition],
+    available_node_definitions: &'a [NodeSchema],
     node_type_id: &str,
-) -> Option<&'a NodeDefinition> {
+) -> Option<&'a NodeSchema> {
     available_node_definitions
         .iter()
         .find(|definition| definition.id == node_type_id)
@@ -472,7 +472,7 @@ pub(super) fn find_node_definition<'a>(
 /// Refreshes live runtime values on an existing editor snarl without rebuilding node identities.
 pub(crate) fn refresh_snarl_runtime_values(
     snarl: &mut Snarl<EditorSnarlNode>,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
     runtime_node_values: &HashMap<String, HashMap<String, InputValue>>,
 ) {
     for (_node_id, editor_node) in snarl.nodes_ids_mut() {
@@ -506,7 +506,7 @@ pub(crate) fn refresh_snarl_runtime_values(
 pub(crate) fn patch_snarl_from_document(
     snarl: &mut Snarl<EditorSnarlNode>,
     document: &GraphDocument,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
     runtime_node_values: &HashMap<String, HashMap<String, InputValue>>,
 ) {
     let mut existing_node_ids = HashMap::<String, NodeId>::new();
@@ -660,7 +660,7 @@ pub(crate) fn clipboard_fragment_from_document(
 pub(crate) fn paste_clipboard_fragment_into_document(
     document: &mut GraphDocument,
     fragment: &GraphClipboardFragment,
-    available_node_definitions: &[NodeDefinition],
+    available_node_definitions: &[NodeSchema],
     paste_origin: Option<NodePosition>,
 ) -> PasteClipboardFragmentResult {
     let target_origin = paste_origin.unwrap_or_else(|| NodePosition {
@@ -760,8 +760,8 @@ mod tests {
         ParameterDefaultValue, ParameterUiHint, ParameterVisibilityCondition,
     };
 
-    fn sample_definition() -> NodeDefinition {
-        NodeDefinition {
+    fn sample_definition() -> NodeSchema {
+        NodeSchema {
             id: "test.visibility".to_owned(),
             display_name: "Test Visibility".to_owned(),
             category: NodeCategory::Debug,

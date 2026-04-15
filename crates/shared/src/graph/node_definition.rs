@@ -3,7 +3,10 @@
 //! These types describe what a node looks like to persistence, validation, the frontend editor,
 //! and the backend runtime registry.
 
-use super::{ColorGradient, ColorGradientStop, InputValue, NodeParameter, RgbaColor, ValueKind};
+use super::{
+    ColorGradient, ColorGradientStop, InputKindRef, InputValue, NodeParameter, RgbaColor,
+    ValueKind, node_definition_impl,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -126,9 +129,9 @@ pub enum NodeExecutionTarget {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes the shared schema for a single node type.
 ///
-/// A `NodeDefinition` is the canonical shared description of a node's ports, parameters,
+/// A `NodeSchema` is the canonical shared description of a node's ports, parameters,
 /// connection rules, and editor-visible runtime updates.
-pub struct NodeDefinition {
+pub struct NodeSchema {
     pub id: String,
     pub display_name: String,
     pub category: NodeCategory,
@@ -141,7 +144,46 @@ pub struct NodeDefinition {
     pub runtime_updates: Option<NodeRuntimeUpdateDefinition>,
 }
 
-impl NodeDefinition {
+pub trait NodeDefinition: Sync {
+    fn schema(&self) -> &'static NodeSchema;
+
+    fn infer_output(
+        &self,
+        output_name: &str,
+        _input_kinds: &[InputKindRef<'_>],
+        _parameters: &[NodeParameter],
+    ) -> OutputInference {
+        self.schema()
+            .output_port(output_name)
+            .map(|output| OutputInference::Resolved(output.value_kind))
+            .unwrap_or(OutputInference::Unavailable)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum OutputInference {
+    Resolved(ValueKind),
+    Unavailable,
+    Invalid { message: String },
+}
+
+impl OutputInference {
+    pub fn kind(&self) -> Option<ValueKind> {
+        match self {
+            Self::Resolved(kind) => Some(*kind),
+            Self::Unavailable | Self::Invalid { .. } => None,
+        }
+    }
+
+    pub fn message(&self) -> Option<&str> {
+        match self {
+            Self::Invalid { message } => Some(message.as_str()),
+            Self::Resolved(_) | Self::Unavailable => None,
+        }
+    }
+}
+
+impl NodeSchema {
     /// Returns whether this node definition supports the requested execution target.
     pub fn supports_execution_target(&self, target: NodeExecutionTarget) -> bool {
         match target {
@@ -177,6 +219,37 @@ impl NodeDefinition {
             return false;
         }
         true
+    }
+
+    /// Infers the concrete kind of a polymorphic output port from the currently resolved input kinds.
+    pub fn infer_output(
+        &self,
+        output_name: &str,
+        input_kinds: &[(impl AsRef<str>, ValueKind)],
+        parameters: &[NodeParameter],
+    ) -> OutputInference {
+        let input_kinds = input_kinds
+            .iter()
+            .map(|(name, kind)| InputKindRef {
+                name: name.as_ref(),
+                kind: *kind,
+            })
+            .collect::<Vec<_>>();
+
+        node_definition_impl(&self.id)
+            .map(|definition| definition.infer_output(output_name, &input_kinds, parameters))
+            .unwrap_or(OutputInference::Unavailable)
+    }
+
+    /// Infers the concrete kind of a polymorphic output port from the currently resolved input kinds.
+    pub fn infer_output_kind(
+        &self,
+        output_name: &str,
+        input_kinds: &[(impl AsRef<str>, ValueKind)],
+        parameters: &[NodeParameter],
+    ) -> Option<ValueKind> {
+        self.infer_output(output_name, input_kinds, parameters)
+            .kind()
     }
 
     /// Returns the named runtime-update value definition, if runtime updates are declared.
@@ -537,7 +610,7 @@ mod tests {
 
     #[test]
     fn supports_execution_target_uses_needs_io() {
-        let backend_only = NodeDefinition {
+        let backend_only = NodeSchema {
             id: "test.io".to_owned(),
             display_name: "Test IO".to_owned(),
             category: NodeCategory::Inputs,
@@ -551,7 +624,7 @@ mod tests {
             },
             runtime_updates: None,
         };
-        let portable = NodeDefinition {
+        let portable = NodeSchema {
             id: "test.portable".to_owned(),
             display_name: "Test Portable".to_owned(),
             category: NodeCategory::Inputs,
@@ -569,6 +642,146 @@ mod tests {
         assert!(backend_only.supports_execution_target(NodeExecutionTarget::Backend));
         assert!(!backend_only.supports_execution_target(NodeExecutionTarget::FrontendDemo));
         assert!(portable.supports_execution_target(NodeExecutionTarget::FrontendDemo));
+    }
+
+    #[test]
+    fn min_max_infers_tensor_output_from_tensor_inputs() {
+        let definition = node_definition(NodeTypeId::MIN_MAX).expect("min/max definition");
+
+        let inferred = definition.infer_output_kind(
+            "value",
+            &[("a", ValueKind::FloatTensor), ("b", ValueKind::Float)],
+            &[],
+        );
+
+        assert_eq!(inferred, Some(ValueKind::FloatTensor));
+    }
+
+    #[test]
+    fn add_prefers_color_frame_over_tensor_and_float_inputs() {
+        let definition = node_definition(NodeTypeId::ADD).expect("add definition");
+
+        let inferred = definition.infer_output_kind(
+            "sum",
+            &[("a", ValueKind::ColorFrame), ("b", ValueKind::FloatTensor)],
+            &[],
+        );
+
+        assert_eq!(inferred, Some(ValueKind::ColorFrame));
+    }
+
+    #[test]
+    fn clamp_prefers_tensor_over_float_bounds() {
+        let definition = node_definition(NodeTypeId::CLAMP).expect("clamp definition");
+
+        let inferred = definition.infer_output_kind(
+            "value",
+            &[
+                ("value", ValueKind::FloatTensor),
+                ("min", ValueKind::Float),
+                ("max", ValueKind::Float),
+            ],
+            &[],
+        );
+
+        assert_eq!(inferred, Some(ValueKind::FloatTensor));
+    }
+
+    #[test]
+    fn delay_uses_initial_type_when_input_kind_is_unresolved() {
+        let definition = node_definition(NodeTypeId::DELAY).expect("delay definition");
+
+        let inferred = definition.infer_output_kind(
+            "value",
+            &[("value", ValueKind::Any)],
+            &[NodeParameter {
+                name: "initial_type".to_owned(),
+                value: serde_json::json!("tensor"),
+            }],
+        );
+
+        assert_eq!(inferred, Some(ValueKind::FloatTensor));
+    }
+
+    #[test]
+    fn binary_select_infers_branch_kind() {
+        let definition =
+            node_definition(NodeTypeId::BINARY_SELECT).expect("binary select definition");
+
+        let inferred = definition.infer_output_kind(
+            "value",
+            &[("a", ValueKind::ColorFrame), ("b", ValueKind::ColorFrame)],
+            &[],
+        );
+
+        assert_eq!(inferred, Some(ValueKind::ColorFrame));
+    }
+
+    #[test]
+    fn binary_select_rejects_mismatched_branch_kinds() {
+        let definition =
+            node_definition(NodeTypeId::BINARY_SELECT).expect("binary select definition");
+
+        let inferred = definition.infer_output(
+            "value",
+            &[("a", ValueKind::ColorFrame), ("b", ValueKind::Float)],
+            &[],
+        );
+
+        assert!(matches!(inferred, OutputInference::Invalid { .. }));
+    }
+
+    #[test]
+    fn laplacian_infers_output_kind_from_input_kind() {
+        let definition =
+            node_definition(NodeTypeId::LAPLACIAN_FILTER).expect("laplacian definition");
+
+        let frame_inferred =
+            definition.infer_output_kind("value", &[("frame", ValueKind::ColorFrame)], &[]);
+        let tensor_inferred =
+            definition.infer_output_kind("value", &[("frame", ValueKind::FloatTensor)], &[]);
+
+        assert_eq!(frame_inferred, Some(ValueKind::ColorFrame));
+        assert_eq!(tensor_inferred, Some(ValueKind::FloatTensor));
+    }
+
+    #[test]
+    fn fade_rejects_non_color_inputs() {
+        let definition = node_definition(NodeTypeId::FADE).expect("fade definition");
+
+        let inferred = definition.infer_output("value", &[("value", ValueKind::Float)], &[]);
+
+        assert!(matches!(inferred, OutputInference::Invalid { .. }));
+    }
+
+    #[test]
+    fn integrate_infers_output_kind_from_rate() {
+        let definition = node_definition(NodeTypeId::INTEGRATE).expect("integrate definition");
+
+        let inferred =
+            definition.infer_output_kind("value", &[("rate", ValueKind::ColorFrame)], &[]);
+
+        assert_eq!(inferred, Some(ValueKind::ColorFrame));
+    }
+
+    #[test]
+    fn moving_average_infers_output_kind_from_value() {
+        let definition =
+            node_definition(NodeTypeId::MOVING_AVERAGE).expect("moving average definition");
+
+        let inferred = definition.infer_output_kind("value", &[("value", ValueKind::Color)], &[]);
+
+        assert_eq!(inferred, Some(ValueKind::Color));
+    }
+
+    #[test]
+    fn moving_median_rejects_non_numeric_inputs() {
+        let definition =
+            node_definition(NodeTypeId::MOVING_MEDIAN).expect("moving median definition");
+
+        let inferred = definition.infer_output("value", &[("value", ValueKind::Color)], &[]);
+
+        assert!(matches!(inferred, OutputInference::Invalid { .. }));
     }
 }
 
