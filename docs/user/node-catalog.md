@@ -36,14 +36,14 @@ Use these when you want to synthesize patterns rather than consume external fram
 
 ## Math
 
-These nodes transform scalar values and tensors.
+These nodes transform scalar values, tensors, and in some cases full frames.
 
 Examples:
 
-- Add Float
-- Subtract Float
-- Multiply Float
-- Divide Float
+- Add
+- Subtract
+- Multiply
+- Divide
 - Min/Max
 - Clamp
 - Power, Root, Exponential, Log
@@ -51,7 +51,11 @@ Examples:
 - Round
 - Signal Generator
 
-Use these to derive control signals and modulate animation parameters.
+`Add`, `Subtract`, `Multiply`, and `Clamp` now work across scalars,
+`FloatTensor`s, and `ColorFrame`s with element-wise behavior.
+
+Use these to derive control signals, modulate animation parameters, and build field-style
+workflows such as tensor or frame simulation steps.
 
 ## Frame Operations
 
@@ -60,6 +64,9 @@ These nodes manipulate frame or color data.
 Examples:
 
 - Tint Frame
+- Extract Channels
+- Set Channel
+- Colorize
 - Mask Frame
 - Mix Color
 - Alpha Over
@@ -67,6 +74,15 @@ Examples:
 - Scale Color
 
 Use these to combine, recolor, or reshape visual output.
+
+`Set Channel` replaces one `r`, `g`, `b`, `a`, `h`, `s`, or `v` channel in a frame from a
+matching `FloatTensor`.
+
+`Colorize` maps a `Float` or `FloatTensor` from `0..1` across a gradient and outputs a
+`ColorFrame`.
+
+`Mask Frame` accepts either a `ColorFrame` mask, using its alpha channel, or a `FloatTensor`
+mask that matches the target frame shape.
 
 ## Temporal Filters
 
@@ -83,6 +99,9 @@ Examples:
 
 Use these when you want smoothing, trailing, accumulation, or other history-aware behavior.
 
+`Delay` now lets you choose the zero-value type it emits before any input has arrived:
+`Float`, `FloatTensor`, or `ColorFrame`.
+
 ## Spatial Filters
 
 These nodes process frame data in image-like ways.
@@ -96,6 +115,9 @@ Examples:
 
 Use these to soften, sharpen, or otherwise filter generated frame output.
 
+`Laplacian Filter` also accepts `FloatTensor` input. Frame output stays display-oriented, while
+tensor output preserves signed numeric responses for simulation-style workflows.
+
 ## Outputs
 
 These nodes drive runtime targets or expose final values.
@@ -108,16 +130,23 @@ Examples:
 
 Use these when you want to inspect, visualize, or send graph output somewhere useful.
 
+`Display` also accepts `FloatTensor` when it has exactly two dimensions, rendering it as a
+grayscale preview.
+
 ## Debug
 
 These nodes help inspect graph state while building or testing.
 
 Examples:
 
+- Type Debug
 - WLED Dummy Display
 - runtime-oriented preview nodes such as Plot and Display, depending on how you use them
 
 Use these to understand what a graph is doing before wiring it into real hardware or integrations.
+
+`Type Debug` accepts any input and shows the concrete runtime type currently arriving at that pin
+directly in the node body.
 
 ## Notes About Availability
 

@@ -55,6 +55,7 @@ where
 fn input_value_to_json(value: &InputValue) -> JsonValue {
     match value {
         InputValue::Float(value) => JsonValue::from(*value as f64),
+        InputValue::String(value) => JsonValue::from(value.clone()),
         InputValue::FloatTensor(value) => {
             serde_json::to_value(value).expect("float tensor must serialize")
         }
@@ -72,6 +73,9 @@ fn json_to_input_value(value: JsonValue) -> Result<InputValue> {
 
     if let Ok(value) = serde_json::from_value::<f32>(value.clone()) {
         return Ok(InputValue::Float(value));
+    }
+    if let Ok(value) = serde_json::from_value::<String>(value.clone()) {
+        return Ok(InputValue::String(value));
     }
     if let Ok(value) = serde_json::from_value::<shared::ColorFrame>(value.clone()) {
         return Ok(InputValue::ColorFrame(value));
@@ -134,6 +138,7 @@ fn summarize_inputs(inputs: &HashMap<String, InputValue>) -> String {
 fn summarize_input_value(value: &InputValue) -> String {
     match value {
         InputValue::Float(_) => "Float".to_owned(),
+        InputValue::String(_) => "String".to_owned(),
         InputValue::FloatTensor(tensor) => format!("FloatTensor{:?}", tensor.shape),
         InputValue::Color(_) => "Color".to_owned(),
         InputValue::LedLayout(layout) => format!("LedLayout({})", layout.pixel_count),

@@ -55,6 +55,16 @@ impl FromInputValue for f32 {
     }
 }
 
+impl FromInputValue for String {
+    /// Extracts a string input.
+    fn from_input_value(value: &InputValue) -> Result<Self> {
+        match value {
+            InputValue::String(value) => Ok(value.clone()),
+            _ => anyhow::bail!("expected String input"),
+        }
+    }
+}
+
 impl FromInputValue for AnyInputValue {
     /// Preserves the original input value without type narrowing.
     fn from_input_value(value: &InputValue) -> Result<Self> {
@@ -123,6 +133,13 @@ impl IntoInputValue for f32 {
     /// Serializes a scalar float output.
     fn into_input_value(self) -> Result<InputValue> {
         Ok(InputValue::Float(self))
+    }
+}
+
+impl IntoInputValue for String {
+    /// Serializes a string output.
+    fn into_input_value(self) -> Result<InputValue> {
+        Ok(InputValue::String(self))
     }
 }
 

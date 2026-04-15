@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Instant;
 
 use serde_json::Value as JsonValue;
 use shared::{
@@ -36,7 +37,7 @@ pub(crate) struct CompiledGraph {
 pub(crate) struct GraphExecutionState {
     pub(crate) evaluators: HashMap<(usize, String), Box<dyn RuntimeNodeEvaluator>>,
     pub(crate) previous_outputs: HashMap<(usize, String, String), InputValue>,
-    pub(crate) last_runtime_update_seconds: HashMap<(usize, String), f64>,
+    pub(crate) last_runtime_update_instants: HashMap<(usize, String), Instant>,
 }
 
 /// Represents a compiled node together with the metadata needed to execute it.

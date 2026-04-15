@@ -124,6 +124,60 @@ static MIN_MAX_FLOAT_MODES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
     ]
 });
 
+static FRAME_CHANNEL_OPTIONS: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
+    vec![
+        EnumOption {
+            value: "r".to_owned(),
+            label: "Red".to_owned(),
+        },
+        EnumOption {
+            value: "g".to_owned(),
+            label: "Green".to_owned(),
+        },
+        EnumOption {
+            value: "b".to_owned(),
+            label: "Blue".to_owned(),
+        },
+        EnumOption {
+            value: "a".to_owned(),
+            label: "Alpha".to_owned(),
+        },
+    ]
+});
+
+static FRAME_SET_CHANNEL_OPTIONS: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
+    vec![
+        EnumOption {
+            value: "r".to_owned(),
+            label: "Red".to_owned(),
+        },
+        EnumOption {
+            value: "g".to_owned(),
+            label: "Green".to_owned(),
+        },
+        EnumOption {
+            value: "b".to_owned(),
+            label: "Blue".to_owned(),
+        },
+        EnumOption {
+            value: "a".to_owned(),
+            label: "Alpha".to_owned(),
+        },
+        EnumOption {
+            value: "h".to_owned(),
+            label: "Hue".to_owned(),
+        },
+        EnumOption {
+            value: "s".to_owned(),
+            label: "Saturation".to_owned(),
+        },
+        EnumOption {
+            value: "v".to_owned(),
+            label: "Value".to_owned(),
+        },
+    ]
+});
+
 static ROUND_FLOAT_MODES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
     vec![
         EnumOption {
@@ -245,6 +299,7 @@ static DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefini
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
         accepted_kinds: vec![
+            ValueKind::FloatTensor,
             ValueKind::Color,
             ValueKind::ColorFrame,
             ValueKind::LedLayout,
@@ -264,6 +319,7 @@ static DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefini
             display_name: title_case_name("value"),
             value_kind: ValueKind::Float,
             accepted_kinds: vec![
+                ValueKind::FloatTensor,
                 ValueKind::Color,
                 ValueKind::ColorFrame,
                 ValueKind::LedLayout,
@@ -319,16 +375,39 @@ static DELAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefiniti
         value_kind: ValueKind::Any,
         accepted_kinds: vec![],
     }],
-    parameters: vec![NodeParameterDefinition::new(
-        "ticks",
-        title_case_name("ticks"),
-        ParameterDefaultValue::Integer(1),
-        ParameterUiHint::IntegerDrag {
-            speed: 1.0,
-            min: 1,
-            max: 10_000,
-        },
-    )],
+    parameters: vec![
+        NodeParameterDefinition::new(
+            "ticks",
+            title_case_name("ticks"),
+            ParameterDefaultValue::Integer(1),
+            ParameterUiHint::IntegerDrag {
+                speed: 1.0,
+                min: 1,
+                max: 10_000,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "initial_type",
+            title_case_name("initial_type"),
+            ParameterDefaultValue::String("float".to_owned()),
+            ParameterUiHint::EnumSelect {
+                options: vec![
+                    EnumOption {
+                        value: "float".to_owned(),
+                        label: "Float".to_owned(),
+                    },
+                    EnumOption {
+                        value: "tensor".to_owned(),
+                        label: "Tensor".to_owned(),
+                    },
+                    EnumOption {
+                        value: "colorframe".to_owned(),
+                        label: "ColorFrame".to_owned(),
+                    },
+                ],
+            },
+        ),
+    ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -665,32 +744,44 @@ static BINARY_SELECT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     runtime_updates: None,
 });
 
-static ADD_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::ADD_FLOAT.to_owned(),
-    display_name: "Add Float".to_owned(),
+static ADD_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::ADD.to_owned(),
+    display_name: "Add".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
             display_name: title_case_name("a"),
-            value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "b".to_owned(),
             display_name: title_case_name("b"),
-            value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
             default_value: Some(InputValue::Float(0.0)),
         },
     ],
     outputs: vec![NodeOutputDefinition {
         name: "sum".to_owned(),
         display_name: title_case_name("sum"),
-        value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![
+            ValueKind::Float,
+            ValueKind::FloatTensor,
+            ValueKind::ColorFrame,
+        ],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -700,32 +791,44 @@ static ADD_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
     runtime_updates: None,
 });
 
-static SUBTRACT_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::SUBTRACT_FLOAT.to_owned(),
-    display_name: "Subtract Float".to_owned(),
+static SUBTRACT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::SUBTRACT.to_owned(),
+    display_name: "Subtract".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
             display_name: title_case_name("a"),
-            value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "b".to_owned(),
             display_name: title_case_name("b"),
-            value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
             default_value: Some(InputValue::Float(0.0)),
         },
     ],
     outputs: vec![NodeOutputDefinition {
         name: "difference".to_owned(),
         display_name: title_case_name("difference"),
-        value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![
+            ValueKind::Float,
+            ValueKind::FloatTensor,
+            ValueKind::ColorFrame,
+        ],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -795,8 +898,8 @@ static SIGNAL_GENERATOR_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
 });
 
 static DIVIDE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::DIVIDE_FLOAT.to_owned(),
-    display_name: "Divide Float".to_owned(),
+    id: NodeTypeId::DIVIDE.to_owned(),
+    display_name: "Divide".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
@@ -804,14 +907,14 @@ static DIVIDE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeD
             name: "a".to_owned(),
             display_name: title_case_name("a"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "b".to_owned(),
             display_name: title_case_name("b"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(1.0)),
         },
     ],
@@ -819,7 +922,7 @@ static DIVIDE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeD
         name: "quotient".to_owned(),
         display_name: title_case_name("quotient"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -830,8 +933,8 @@ static DIVIDE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeD
 });
 
 static MIN_MAX_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::MIN_MAX_FLOAT.to_owned(),
-    display_name: "Min/Max Float".to_owned(),
+    id: NodeTypeId::MIN_MAX.to_owned(),
+    display_name: "Min/Max".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
@@ -839,22 +942,22 @@ static MIN_MAX_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
             name: "a".to_owned(),
             display_name: title_case_name("a"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "b".to_owned(),
             display_name: title_case_name("b"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(0.0)),
         },
     ],
     outputs: vec![NodeOutputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
-        value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![ValueKind::Float, ValueKind::FloatTensor],
     }],
     parameters: vec![NodeParameterDefinition::new(
         "mode",
@@ -871,32 +974,44 @@ static MIN_MAX_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Node
     runtime_updates: None,
 });
 
-static MULTIPLY_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::MULTIPLY_FLOAT.to_owned(),
-    display_name: "Multiply Float".to_owned(),
+static MULTIPLY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::MULTIPLY.to_owned(),
+    display_name: "Multiply".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "a".to_owned(),
             display_name: title_case_name("a"),
-            value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
             default_value: Some(InputValue::Float(1.0)),
         },
         NodeInputDefinition {
             name: "b".to_owned(),
             display_name: title_case_name("b"),
-            value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
             default_value: Some(InputValue::Float(1.0)),
         },
     ],
     outputs: vec![NodeOutputDefinition {
         name: "product".to_owned(),
         display_name: title_case_name("product"),
-        value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![
+            ValueKind::Float,
+            ValueKind::FloatTensor,
+            ValueKind::ColorFrame,
+        ],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -907,22 +1022,22 @@ static MULTIPLY_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| Nod
 });
 
 static ABS_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::ABS_FLOAT.to_owned(),
-    display_name: "Abs Float".to_owned(),
+    id: NodeTypeId::ABS.to_owned(),
+    display_name: "Abs".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
         default_value: Some(InputValue::Float(0.0)),
     }],
     outputs: vec![NodeOutputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -932,39 +1047,47 @@ static ABS_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
     runtime_updates: None,
 });
 
-static CLAMP_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::CLAMP_FLOAT.to_owned(),
-    display_name: "Clamp Float".to_owned(),
+static CLAMP_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::CLAMP.to_owned(),
+    display_name: "Clamp".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
         NodeInputDefinition {
             name: "value".to_owned(),
             display_name: title_case_name("value"),
-            value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![
+                ValueKind::Float,
+                ValueKind::FloatTensor,
+                ValueKind::ColorFrame,
+            ],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "min".to_owned(),
             display_name: title_case_name("min"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "max".to_owned(),
             display_name: title_case_name("max"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(1.0)),
         },
     ],
     outputs: vec![NodeOutputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
-        value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![
+            ValueKind::Float,
+            ValueKind::FloatTensor,
+            ValueKind::ColorFrame,
+        ],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -975,8 +1098,8 @@ static CLAMP_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
 });
 
 static POWER_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::POWER_FLOAT.to_owned(),
-    display_name: "Power Float".to_owned(),
+    id: NodeTypeId::POWER.to_owned(),
+    display_name: "Power".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
@@ -984,14 +1107,14 @@ static POWER_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
             name: "base".to_owned(),
             display_name: title_case_name("base"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(1.0)),
         },
         NodeInputDefinition {
             name: "exponent".to_owned(),
             display_name: title_case_name("exponent"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(1.0)),
         },
     ],
@@ -999,7 +1122,7 @@ static POWER_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -1010,8 +1133,8 @@ static POWER_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDe
 });
 
 static ROOT_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::ROOT_FLOAT.to_owned(),
-    display_name: "Root Float".to_owned(),
+    id: NodeTypeId::ROOT.to_owned(),
+    display_name: "Root".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
@@ -1019,14 +1142,14 @@ static ROOT_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
             name: "value".to_owned(),
             display_name: title_case_name("value"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "degree".to_owned(),
             display_name: title_case_name("degree"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(2.0)),
         },
     ],
@@ -1034,7 +1157,7 @@ static ROOT_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -1045,22 +1168,22 @@ static ROOT_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
 });
 
 static EXPONENTIAL_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::EXPONENTIAL_FLOAT.to_owned(),
-    display_name: "Exponential Float".to_owned(),
+    id: NodeTypeId::EXPONENTIAL.to_owned(),
+    display_name: "Exponential".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
         default_value: Some(InputValue::Float(0.0)),
     }],
     outputs: vec![NodeOutputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -1071,8 +1194,8 @@ static EXPONENTIAL_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| 
 });
 
 static LOG_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::LOG_FLOAT.to_owned(),
-    display_name: "Log Float".to_owned(),
+    id: NodeTypeId::LOG.to_owned(),
+    display_name: "Log".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
@@ -1080,14 +1203,14 @@ static LOG_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
             name: "value".to_owned(),
             display_name: title_case_name("value"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(1.0)),
         },
         NodeInputDefinition {
             name: "base".to_owned(),
             display_name: title_case_name("base"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(std::f32::consts::E)),
         },
     ],
@@ -1095,7 +1218,7 @@ static LOG_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -1106,8 +1229,8 @@ static LOG_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefi
 });
 
 static MAP_RANGE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::MAP_RANGE_FLOAT.to_owned(),
-    display_name: "Map Range Float".to_owned(),
+    id: NodeTypeId::MAP_RANGE.to_owned(),
+    display_name: "Map Range".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![
@@ -1115,35 +1238,35 @@ static MAP_RANGE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| No
             name: "value".to_owned(),
             display_name: title_case_name("value"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "source_min".to_owned(),
             display_name: title_case_name("source_min"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "source_max".to_owned(),
             display_name: title_case_name("source_max"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(1.0)),
         },
         NodeInputDefinition {
             name: "target_min".to_owned(),
             display_name: title_case_name("target_min"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(0.0)),
         },
         NodeInputDefinition {
             name: "target_max".to_owned(),
             display_name: title_case_name("target_max"),
             value_kind: ValueKind::Float,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: Some(InputValue::Float(1.0)),
         },
     ],
@@ -1151,7 +1274,7 @@ static MAP_RANGE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| No
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -1162,22 +1285,22 @@ static MAP_RANGE_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| No
 });
 
 static ROUND_FLOAT_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
-    id: NodeTypeId::ROUND_FLOAT.to_owned(),
-    display_name: "Round Float".to_owned(),
+    id: NodeTypeId::ROUND.to_owned(),
+    display_name: "Round".to_owned(),
     category: NodeCategory::Math,
     needs_io: false,
     inputs: vec![NodeInputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
         default_value: Some(InputValue::Float(0.0)),
     }],
     outputs: vec![NodeOutputDefinition {
         name: "value".to_owned(),
         display_name: title_case_name("value"),
         value_kind: ValueKind::Float,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![NodeParameterDefinition::new(
         "mode",
@@ -1334,6 +1457,39 @@ static TINT_FRAME_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
     runtime_updates: None,
 });
 
+static EXTRACT_CHANNELS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::EXTRACT_CHANNELS.to_owned(),
+    display_name: "Extract Channels".to_owned(),
+    category: NodeCategory::FrameOperations,
+    needs_io: false,
+    inputs: vec![NodeInputDefinition {
+        name: "frame".to_owned(),
+        display_name: title_case_name("frame"),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![],
+        default_value: None,
+    }],
+    outputs: vec![NodeOutputDefinition {
+        name: "tensor".to_owned(),
+        display_name: title_case_name("tensor"),
+        value_kind: ValueKind::FloatTensor,
+        accepted_kinds: vec![],
+    }],
+    parameters: vec![NodeParameterDefinition::new(
+        "channel",
+        title_case_name("channel"),
+        ParameterDefaultValue::String("r".to_owned()),
+        ParameterUiHint::EnumSelect {
+            options: FRAME_CHANNEL_OPTIONS.clone(),
+        },
+    )],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
 static MASK_FRAME_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
     id: NodeTypeId::MASK_FRAME.to_owned(),
     display_name: "Mask Frame".to_owned(),
@@ -1351,7 +1507,7 @@ static MASK_FRAME_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
             name: "mask".to_owned(),
             display_name: title_case_name("mask"),
             value_kind: ValueKind::ColorFrame,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: None,
         },
     ],
@@ -1362,6 +1518,79 @@ static MASK_FRAME_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDef
         accepted_kinds: vec![],
     }],
     parameters: vec![],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
+static SET_CHANNEL_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::SET_CHANNEL.to_owned(),
+    display_name: "Set Channel".to_owned(),
+    category: NodeCategory::FrameOperations,
+    needs_io: false,
+    inputs: vec![
+        NodeInputDefinition {
+            name: "frame".to_owned(),
+            display_name: title_case_name("frame"),
+            value_kind: ValueKind::ColorFrame,
+            accepted_kinds: vec![],
+            default_value: None,
+        },
+        NodeInputDefinition {
+            name: "tensor".to_owned(),
+            display_name: title_case_name("tensor"),
+            value_kind: ValueKind::FloatTensor,
+            accepted_kinds: vec![],
+            default_value: Some(default_tensor_input()),
+        },
+    ],
+    outputs: vec![NodeOutputDefinition {
+        name: "frame".to_owned(),
+        display_name: title_case_name("frame"),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![],
+    }],
+    parameters: vec![NodeParameterDefinition::new(
+        "channel",
+        title_case_name("channel"),
+        ParameterDefaultValue::String("r".to_owned()),
+        ParameterUiHint::EnumSelect {
+            options: FRAME_SET_CHANNEL_OPTIONS.clone(),
+        },
+    )],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
+static COLORIZE_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::COLORIZE.to_owned(),
+    display_name: "Colorize".to_owned(),
+    category: NodeCategory::FrameOperations,
+    needs_io: false,
+    inputs: vec![NodeInputDefinition {
+        name: "value".to_owned(),
+        display_name: title_case_name("value"),
+        value_kind: ValueKind::Float,
+        accepted_kinds: vec![ValueKind::FloatTensor],
+        default_value: Some(InputValue::Float(0.0)),
+    }],
+    outputs: vec![NodeOutputDefinition {
+        name: "frame".to_owned(),
+        display_name: title_case_name("frame"),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![],
+    }],
+    parameters: vec![NodeParameterDefinition::new(
+        "gradient",
+        title_case_name("gradient"),
+        ParameterDefaultValue::Gradient(DEFAULT_RAINBOW_GRADIENT_STOPS.to_vec()),
+        ParameterUiHint::ColorGradient,
+    )],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -1763,15 +1992,23 @@ static LAPLACIAN_FILTER_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| N
         name: "frame".to_owned(),
         display_name: title_case_name("frame"),
         value_kind: ValueKind::ColorFrame,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
         default_value: None,
     }],
-    outputs: vec![NodeOutputDefinition {
-        name: "frame".to_owned(),
-        display_name: title_case_name("frame"),
-        value_kind: ValueKind::ColorFrame,
-        accepted_kinds: vec![],
-    }],
+    outputs: vec![
+        NodeOutputDefinition {
+            name: "frame".to_owned(),
+            display_name: title_case_name("frame"),
+            value_kind: ValueKind::Any,
+            accepted_kinds: vec![ValueKind::ColorFrame, ValueKind::FloatTensor],
+        },
+        NodeOutputDefinition {
+            name: "tensor".to_owned(),
+            display_name: title_case_name("tensor"),
+            value_kind: ValueKind::FloatTensor,
+            accepted_kinds: vec![],
+        },
+    ],
     parameters: vec![
         NodeParameterDefinition::new(
             "strength",
@@ -2267,6 +2504,35 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(||
     }),
 });
 
+static TYPE_DEBUG_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
+    id: NodeTypeId::TYPE_DEBUG.to_owned(),
+    display_name: "Type Debug".to_owned(),
+    category: NodeCategory::Debug,
+    needs_io: false,
+    inputs: vec![NodeInputDefinition {
+        name: "value".to_owned(),
+        display_name: title_case_name("value"),
+        value_kind: ValueKind::Any,
+        accepted_kinds: vec![],
+        default_value: None,
+    }],
+    outputs: vec![],
+    parameters: vec![],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: Some(NodeRuntimeUpdateDefinition {
+        auto_subscribe_in_editor: true,
+        values: vec![NodeRuntimeValueDefinition {
+            name: "type".to_owned(),
+            display_name: title_case_name("type"),
+            value_kind: ValueKind::String,
+            accepted_kinds: vec![],
+        }],
+    }),
+});
+
 static FRAME_BRIGHTNESS_NODE_TYPE: LazyLock<NodeDefinition> = LazyLock::new(|| NodeDefinition {
     id: NodeTypeId::FRAME_BRIGHTNESS.to_owned(),
     display_name: "Frame Brightness".to_owned(),
@@ -2320,14 +2586,14 @@ pub fn node_definitions() -> Vec<NodeDefinition> {
         (*AUDIO_FFT_RECEIVER_NODE_TYPE).clone(),
         (*HA_MQTT_NUMBER_NODE_TYPE).clone(),
         (*BINARY_SELECT_NODE_TYPE).clone(),
-        (*ADD_FLOAT_NODE_TYPE).clone(),
-        (*SUBTRACT_FLOAT_NODE_TYPE).clone(),
+        (*ADD_NODE_TYPE).clone(),
+        (*SUBTRACT_NODE_TYPE).clone(),
         (*SIGNAL_GENERATOR_NODE_TYPE).clone(),
         (*DIVIDE_FLOAT_NODE_TYPE).clone(),
         (*MIN_MAX_FLOAT_NODE_TYPE).clone(),
-        (*MULTIPLY_FLOAT_NODE_TYPE).clone(),
+        (*MULTIPLY_NODE_TYPE).clone(),
         (*ABS_FLOAT_NODE_TYPE).clone(),
-        (*CLAMP_FLOAT_NODE_TYPE).clone(),
+        (*CLAMP_NODE_TYPE).clone(),
         (*POWER_FLOAT_NODE_TYPE).clone(),
         (*ROOT_FLOAT_NODE_TYPE).clone(),
         (*EXPONENTIAL_FLOAT_NODE_TYPE).clone(),
@@ -2338,6 +2604,9 @@ pub fn node_definitions() -> Vec<NodeDefinition> {
         (*SCALE_COLOR_NODE_TYPE).clone(),
         (*MULTIPLY_COLOR_NODE_TYPE).clone(),
         (*TINT_FRAME_NODE_TYPE).clone(),
+        (*EXTRACT_CHANNELS_NODE_TYPE).clone(),
+        (*SET_CHANNEL_NODE_TYPE).clone(),
+        (*COLORIZE_NODE_TYPE).clone(),
         (*MASK_FRAME_NODE_TYPE).clone(),
         (*MIX_COLOR_NODE_TYPE).clone(),
         (*ALPHA_OVER_NODE_TYPE).clone(),
@@ -2358,6 +2627,7 @@ pub fn node_definitions() -> Vec<NodeDefinition> {
         (*PLASMA_NODE_TYPE).clone(),
         (*BOUNCING_BALLS_NODE_TYPE).clone(),
         (*WLED_DUMMY_DISPLAY_NODE_TYPE).clone(),
+        (*TYPE_DEBUG_NODE_TYPE).clone(),
         (*FRAME_BRIGHTNESS_NODE_TYPE).clone(),
     ]
 }
