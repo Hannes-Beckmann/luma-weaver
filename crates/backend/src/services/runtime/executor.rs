@@ -830,7 +830,7 @@ mod tests {
     }
 
     #[test]
-    fn delay_previous_output_honors_tensor_initial_type_in_render_contexts() {
+    fn delay_tensor_seed_stays_layoutless_when_downstream_edge_is_incompatible() {
         let document: GraphDocument = serde_json::from_value(serde_json::json!({
             "metadata": {
                 "id": "delay-tensor-seed",
@@ -883,7 +883,7 @@ mod tests {
             })
             .expect("seeded tensor delay output");
 
-        assert_eq!(seeded_tensor.shape, vec![4]);
-        assert_eq!(seeded_tensor.values, vec![0.0; 4]);
+        assert_eq!(seeded_tensor.shape, vec![0]);
+        assert!(seeded_tensor.values.is_empty());
     }
 }
