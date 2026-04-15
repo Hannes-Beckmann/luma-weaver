@@ -16,6 +16,7 @@ pub mod demo;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod messaging;
 pub mod node_runtime;
+mod platform_time;
 pub mod services;
 
 #[cfg(not(target_arch = "wasm32"))]

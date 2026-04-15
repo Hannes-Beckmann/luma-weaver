@@ -1,12 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
-use std::time::Instant;
 
 use serde_json::Value as JsonValue;
 use shared::{
     GraphRuntimeStatus, InputValue, LedLayout, NodeDiagnostic, NodeRuntimeValue, NodeTypeId,
 };
 
+use crate::platform_time::Instant;
 use crate::node_runtime::NodeRegistry;
 use crate::node_runtime::RuntimeNodeEvaluator;
 

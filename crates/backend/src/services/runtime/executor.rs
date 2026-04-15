@@ -1,11 +1,11 @@
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use shared::{InputValue, NodeDiagnostic, NodeDiagnosticSeverity, NodeRuntimeValue};
 
 use crate::node_runtime::nodes::temporal_filters::delay::seeded_initial_value_for_layout;
 use crate::node_runtime::{NodeEvaluation, NodeEvaluationContext, RuntimeNodeEvaluator};
+use crate::platform_time::{Duration, Instant};
 use crate::services::runtime::types::{CompiledGraph, GraphExecutionState, RuntimeEventPublisher};
 
 impl CompiledGraph {
