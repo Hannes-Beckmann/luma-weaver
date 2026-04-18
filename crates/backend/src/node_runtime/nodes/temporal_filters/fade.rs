@@ -54,13 +54,16 @@ impl RuntimeNode for FadeNode {
                 color.a = (color.a * scalar_decay_multiplier(&decay, dt)?).clamp(0.0, 1.0);
                 InputValue::Color(color)
             }
+            InputValue::FloatTensor(tensor) => {
+                InputValue::FloatTensor(apply_tensor_fade(&tensor, &decay, dt)?)
+            }
             InputValue::ColorFrame(mut frame) => {
                 let tensor = coerce_float_tensor(&decay, &shape_from_layout(&frame.layout))?;
                 apply_frame_fade(&mut frame, &tensor, dt)?;
                 InputValue::ColorFrame(frame)
             }
             other => bail!(
-                "fade expects Color or ColorFrame input, got {:?}",
+                "fade expects Color, ColorFrame, or FloatTensor input, got {:?}",
                 other.value_kind()
             ),
         };
@@ -105,6 +108,21 @@ fn apply_frame_fade(frame: &mut ColorFrame, decay: &FloatTensor, dt: f32) -> Res
     Ok(())
 }
 
+fn apply_tensor_fade(value: &FloatTensor, decay: &InputValue, dt: f32) -> Result<FloatTensor> {
+    let value = coerce_float_tensor(&InputValue::FloatTensor(value.clone()), &value.shape)?;
+    let decay = coerce_float_tensor(decay, &value.shape)?;
+
+    Ok(FloatTensor {
+        shape: value.shape,
+        values: value
+            .values
+            .iter()
+            .zip(&decay.values)
+            .map(|(sample, decay)| sample * (-(decay.max(0.0) * dt)).exp())
+            .collect(),
+    })
+}
+
 fn shape_from_layout(layout: &LedLayout) -> Vec<usize> {
     match (layout.width, layout.height) {
         (Some(width), Some(height)) => vec![height, width],
@@ -115,7 +133,7 @@ fn shape_from_layout(layout: &LedLayout) -> Vec<usize> {
 
 #[cfg(test)]
 mod tests {
-    use shared::{InputValue, RgbaColor};
+    use shared::{FloatTensor, InputValue, RgbaColor};
 
     use crate::node_runtime::{AnyInputValue, NodeEvaluationContext, RuntimeNode};
 
@@ -181,6 +199,55 @@ mod tests {
                 g: 0.5,
                 b: 0.6,
                 a: 0.5,
+            })
+        );
+    }
+
+    #[test]
+    fn applies_exponential_decay_to_tensor_values() {
+        let mut node = FadeNode::default();
+
+        let _ = RuntimeNode::evaluate(
+            &mut node,
+            &NodeEvaluationContext {
+                graph_id: "test-graph".to_owned(),
+                graph_name: "Test Graph".to_owned(),
+                elapsed_seconds: 0.0,
+                render_layout: None,
+            },
+            FadeInputs {
+                value: AnyInputValue(InputValue::FloatTensor(FloatTensor {
+                    shape: vec![2],
+                    values: vec![1.0, 0.5],
+                })),
+                decay: AnyInputValue(InputValue::Float(std::f32::consts::LN_2)),
+            },
+        )
+        .expect("prime fade");
+
+        let second = RuntimeNode::evaluate(
+            &mut node,
+            &NodeEvaluationContext {
+                graph_id: "test-graph".to_owned(),
+                graph_name: "Test Graph".to_owned(),
+                elapsed_seconds: 1.0,
+                render_layout: None,
+            },
+            FadeInputs {
+                value: AnyInputValue(InputValue::FloatTensor(FloatTensor {
+                    shape: vec![2],
+                    values: vec![1.0, 0.5],
+                })),
+                decay: AnyInputValue(InputValue::Float(std::f32::consts::LN_2)),
+            },
+        )
+        .expect("evaluate fade");
+
+        assert_eq!(
+            second.outputs.value,
+            InputValue::FloatTensor(FloatTensor {
+                shape: vec![2],
+                values: vec![0.5, 0.25],
             })
         );
     }

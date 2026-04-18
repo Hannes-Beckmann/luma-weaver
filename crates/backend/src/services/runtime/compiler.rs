@@ -71,8 +71,7 @@ pub(crate) fn compile_graph_document(
             &graph_nodes_by_id,
             &edge.from_node_id,
             &edge.from_output_name,
-        )
-        {
+        ) {
             OutputInference::Resolved(kind) => kind,
             OutputInference::Unavailable => from_port.value_kind,
             OutputInference::Invalid { .. } => continue,
