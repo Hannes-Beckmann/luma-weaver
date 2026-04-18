@@ -1925,7 +1925,7 @@ static GAUSSIAN_BLUR_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
             name: "frame".to_owned(),
             display_name: title_case_name("frame"),
             value_kind: ValueKind::ColorFrame,
-            accepted_kinds: vec![],
+            accepted_kinds: vec![ValueKind::FloatTensor],
             default_value: None,
         },
         NodeInputDefinition {
@@ -1940,7 +1940,7 @@ static GAUSSIAN_BLUR_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
         name: "frame".to_owned(),
         display_name: title_case_name("frame"),
         value_kind: ValueKind::ColorFrame,
-        accepted_kinds: vec![],
+        accepted_kinds: vec![ValueKind::FloatTensor],
     }],
     parameters: vec![],
     connection: NodeConnectionDefinition {
@@ -2707,11 +2707,31 @@ default_node_definition!(
     BoxBlurNodeDefinition,
     BOX_BLUR_NODE_TYPE
 );
-default_node_definition!(
-    GAUSSIAN_BLUR_NODE_DEFINITION,
-    GaussianBlurNodeDefinition,
-    GAUSSIAN_BLUR_NODE_TYPE
-);
+struct GaussianBlurNodeDefinition;
+
+impl NodeDefinition for GaussianBlurNodeDefinition {
+    fn schema(&self) -> &'static NodeSchema {
+        &GAUSSIAN_BLUR_NODE_TYPE
+    }
+
+    fn infer_output(
+        &self,
+        output_name: &str,
+        input_kinds: &[InputKindRef<'_>],
+        _parameters: &[NodeParameter],
+    ) -> OutputInference {
+        let Some(output) = self.schema().output_port(output_name) else {
+            return OutputInference::Unavailable;
+        };
+
+        OutputInference::Resolved(infer_preferred_kind(
+            output,
+            &[input_kind(input_kinds, "frame")],
+        ))
+    }
+}
+
+static GAUSSIAN_BLUR_NODE_DEFINITION: GaussianBlurNodeDefinition = GaussianBlurNodeDefinition;
 default_node_definition!(
     MEDIAN_FILTER_NODE_DEFINITION,
     MedianFilterNodeDefinition,
@@ -2909,12 +2929,15 @@ impl NodeDefinition for FadeNodeDefinition {
         };
 
         match input_kind(input_kinds, "value") {
-            Some(ValueKind::Color) | Some(ValueKind::ColorFrame) => OutputInference::Resolved(
-                infer_preferred_kind(output, &[input_kind(input_kinds, "value")]),
-            ),
+            Some(ValueKind::Color) | Some(ValueKind::ColorFrame) | Some(ValueKind::FloatTensor) => {
+                OutputInference::Resolved(infer_preferred_kind(
+                    output,
+                    &[input_kind(input_kinds, "value")],
+                ))
+            }
             Some(kind) => OutputInference::Invalid {
                 message: format!(
-                    "fade input 'value' must resolve to Color or ColorFrame, found {:?}",
+                    "fade input 'value' must resolve to Color, ColorFrame, or FloatTensor, found {:?}",
                     kind
                 ),
             },

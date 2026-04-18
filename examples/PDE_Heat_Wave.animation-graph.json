@@ -1,0 +1,1672 @@
+{
+  "format": "luma_weaver_graph",
+  "version": 1,
+  "document": {
+    "metadata": {
+      "id": "f37e2c6f-b9f4-4f69-b0d9-0f7ab8d7f95c",
+      "name": "PDE Heat Wave",
+      "execution_frequency_hz": 60
+    },
+    "viewport": {
+      "zoom": 0.26945585,
+      "pan": {
+        "x": 676.53937,
+        "y": 498.32434
+      }
+    },
+    "nodes": [
+      {
+        "id": "math_add_2",
+        "metadata": {
+          "name": "Add"
+        },
+        "node_type": "math.add",
+        "viewport": {
+          "position": {
+            "x": 638.08685,
+            "y": -718.4544
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "spatial_filters_laplacian_filter_1",
+        "metadata": {
+          "name": "Laplacian"
+        },
+        "node_type": "spatial_filters.laplacian_filter",
+        "viewport": {
+          "position": {
+            "x": 977.7529,
+            "y": -529.1091
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "frame",
+            "value": {
+              "kind": "ColorFrame",
+              "value": {
+                "layout": {
+                  "id": "default",
+                  "pixel_count": 0,
+                  "width": null,
+                  "height": null
+                },
+                "pixels": []
+              }
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "strength",
+            "value": 0.1
+          },
+          {
+            "name": "absolute_value",
+            "value": false
+          },
+          {
+            "name": "filter_alpha",
+            "value": false
+          }
+        ]
+      },
+      {
+        "id": "math_abs_1",
+        "metadata": {
+          "name": "Abs"
+        },
+        "node_type": "math.abs",
+        "viewport": {
+          "position": {
+            "x": -1033.0571,
+            "y": -49.42912
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "math_multiply_4",
+        "metadata": {
+          "name": "Multiply"
+        },
+        "node_type": "math.multiply",
+        "viewport": {
+          "position": {
+            "x": 299.78,
+            "y": -814.64557
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "math_subtract_1",
+        "metadata": {
+          "name": "Subtract"
+        },
+        "node_type": "math.subtract",
+        "viewport": {
+          "position": {
+            "x": -665.79376,
+            "y": -62.85967
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "math_subtract_2",
+        "metadata": {
+          "name": "Subtract"
+        },
+        "node_type": "math.subtract",
+        "viewport": {
+          "position": {
+            "x": 1333.7031,
+            "y": -648.85675
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "math_clamp_potential",
+        "metadata": {
+          "name": "Clamp Potential"
+        },
+        "node_type": "math.clamp",
+        "viewport": {
+          "position": {
+            "x": 1706.6228,
+            "y": -576.4016
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "min",
+            "value": {
+              "kind": "Float",
+              "value": -1.0
+            }
+          },
+          {
+            "name": "max",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "math_map_range_potential",
+        "metadata": {
+          "name": "Signed To Gradient"
+        },
+        "node_type": "math.map_range",
+        "viewport": {
+          "position": {
+            "x": 2057.9119,
+            "y": -573.5448
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "source_min",
+            "value": {
+              "kind": "Float",
+              "value": -1.0
+            }
+          },
+          {
+            "name": "source_max",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          },
+          {
+            "name": "target_min",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "target_max",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "frame_operations_colorize_potential",
+        "metadata": {
+          "name": "Colorize Potential"
+        },
+        "node_type": "frame_operations.colorize",
+        "viewport": {
+          "position": {
+            "x": 2412.738,
+            "y": -568.46313
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "gradient",
+            "value": {
+              "stops": [
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 1.0,
+                    "g": 0.06545499712228775,
+                    "r": 0.792701005935669
+                  },
+                  "position": 0.0
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.5799999833106995,
+                    "g": 0.15302400290966034,
+                    "r": 0.15923500061035156
+                  },
+                  "position": 0.2800000011920929
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.0005629999795928597,
+                    "g": 0.0,
+                    "r": 7.999999979801942e-6
+                  },
+                  "position": 0.4900000095367432
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.0,
+                    "g": 0.0,
+                    "r": 0.0002809999859891832
+                  },
+                  "position": 0.5099999904632568
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.07093500345945358,
+                    "g": 0.07093500345945358,
+                    "r": 0.97536301612854
+                  },
+                  "position": 0.7200000286102295
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.07093500345945358,
+                    "g": 0.8602499961853027,
+                    "r": 0.97536301612854
+                  },
+                  "position": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "generators_bouncing_balls_1",
+        "metadata": {
+          "name": "Bouncing Balls"
+        },
+        "node_type": "generators.bouncing_balls",
+        "viewport": {
+          "position": {
+            "x": -2243.7385,
+            "y": 188.46454
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "speed",
+            "value": {
+              "kind": "Float",
+              "value": 3.0
+            }
+          },
+          {
+            "name": "radius",
+            "value": {
+              "kind": "Float",
+              "value": 1.16
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "circle_count",
+            "value": 6
+          },
+          {
+            "name": "radius_variance",
+            "value": 0.35
+          },
+          {
+            "name": "gradient",
+            "value": {
+              "stops": [
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.0,
+                    "g": 0.0,
+                    "r": 1.0
+                  },
+                  "position": 0.0
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.0,
+                    "g": 1.0,
+                    "r": 0.0
+                  },
+                  "position": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "frame_operations_extract_channels_1",
+        "metadata": {
+          "name": "Extract Channels"
+        },
+        "node_type": "frame_operations.extract_channels",
+        "viewport": {
+          "position": {
+            "x": -1857.3882,
+            "y": 424.23126
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "frame",
+            "value": {
+              "kind": "ColorFrame",
+              "value": {
+                "layout": {
+                  "id": "default",
+                  "pixel_count": 0,
+                  "width": null,
+                  "height": null
+                },
+                "pixels": []
+              }
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "value": "a"
+          }
+        ]
+      },
+      {
+        "id": "outputs_display_1",
+        "metadata": {
+          "name": "Display"
+        },
+        "node_type": "outputs.display",
+        "viewport": {
+          "position": {
+            "x": -390.83783,
+            "y": 575.6744
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "frame_operations_extract_channels_2",
+        "metadata": {
+          "name": "Extract Channels"
+        },
+        "node_type": "frame_operations.extract_channels",
+        "viewport": {
+          "position": {
+            "x": -1858.4873,
+            "y": 196.98239
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "frame",
+            "value": {
+              "kind": "ColorFrame",
+              "value": {
+                "layout": {
+                  "id": "default",
+                  "pixel_count": 0,
+                  "width": null,
+                  "height": null
+                },
+                "pixels": []
+              }
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "value": "r"
+          }
+        ]
+      },
+      {
+        "id": "math_multiply_2",
+        "metadata": {
+          "name": "Multiply"
+        },
+        "node_type": "math.multiply",
+        "viewport": {
+          "position": {
+            "x": -1134.9032,
+            "y": 493.1502
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "frame_operations_extract_channels_3",
+        "metadata": {
+          "name": "Extract Channels"
+        },
+        "node_type": "frame_operations.extract_channels",
+        "viewport": {
+          "position": {
+            "x": -1852.2733,
+            "y": 645.6131
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "frame",
+            "value": {
+              "kind": "ColorFrame",
+              "value": {
+                "layout": {
+                  "id": "default",
+                  "pixel_count": 0,
+                  "width": null,
+                  "height": null
+                },
+                "pixels": []
+              }
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "channel",
+            "value": "g"
+          }
+        ]
+      },
+      {
+        "id": "outputs_display_3",
+        "metadata": {
+          "name": "Display"
+        },
+        "node_type": "outputs.display",
+        "viewport": {
+          "position": {
+            "x": 1696.6525,
+            "y": -1139.3141
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "math_multiply_1",
+        "metadata": {
+          "name": "Multiply"
+        },
+        "node_type": "math.multiply",
+        "viewport": {
+          "position": {
+            "x": -1477.8293,
+            "y": 221.467
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": -1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "temporal_filters_delay_1",
+        "metadata": {
+          "name": "Delay"
+        },
+        "node_type": "temporal_filters.delay",
+        "viewport": {
+          "position": {
+            "x": 582.8037,
+            "y": -1180.119
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticks",
+            "value": 1
+          },
+          {
+            "name": "initial_type",
+            "value": "tensor"
+          }
+        ]
+      },
+      {
+        "id": "math_multiply_3",
+        "metadata": {
+          "name": "Multiply"
+        },
+        "node_type": "math.multiply",
+        "viewport": {
+          "position": {
+            "x": -1133.4738,
+            "y": 303.20123
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "math_add_1",
+        "metadata": {
+          "name": "Add"
+        },
+        "node_type": "math.add",
+        "viewport": {
+          "position": {
+            "x": -793.2094,
+            "y": 396.50778
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "outputs_display_2",
+        "metadata": {
+          "name": "Display"
+        },
+        "node_type": "outputs.display",
+        "viewport": {
+          "position": {
+            "x": 1353.8807,
+            "y": -386.41562
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "b7d7bea1-7f18-411c-82ae-e8703561f9df",
+        "metadata": {
+          "name": "Add"
+        },
+        "node_type": "math.add",
+        "viewport": {
+          "position": {
+            "x": 386.37964,
+            "y": 285.6084
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "7ad0023d-9b37-40e4-b11d-220758ee768a",
+        "metadata": {
+          "name": "Laplacian"
+        },
+        "node_type": "spatial_filters.laplacian_filter",
+        "viewport": {
+          "position": {
+            "x": 728.5443,
+            "y": 464.9755
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "frame",
+            "value": {
+              "kind": "ColorFrame",
+              "value": {
+                "layout": {
+                  "id": "default",
+                  "pixel_count": 0,
+                  "width": null,
+                  "height": null
+                },
+                "pixels": []
+              }
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "strength",
+            "value": 0.01
+          },
+          {
+            "name": "absolute_value",
+            "value": false
+          },
+          {
+            "name": "filter_alpha",
+            "value": false
+          }
+        ]
+      },
+      {
+        "id": "7733defb-dba5-45d3-a754-0641c81ef4a9",
+        "metadata": {
+          "name": "Multiply"
+        },
+        "node_type": "math.multiply",
+        "viewport": {
+          "position": {
+            "x": 19.729355,
+            "y": 188.0397
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "math_add_3",
+        "metadata": {
+          "name": "Add"
+        },
+        "node_type": "math.add",
+        "viewport": {
+          "position": {
+            "x": 1475.857,
+            "y": 354.96747
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "8d36b984-1c01-4ed7-9817-b1a4a462b14c",
+        "metadata": {
+          "name": "Clamp"
+        },
+        "node_type": "math.clamp",
+        "viewport": {
+          "position": {
+            "x": 1856.4755,
+            "y": 430.29163
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "min",
+            "value": {
+              "kind": "Float",
+              "value": -1.0
+            }
+          },
+          {
+            "name": "max",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "a433a98e-9a3c-4479-9a64-d814c3de989e",
+        "metadata": {
+          "name": "Map Range"
+        },
+        "node_type": "math.map_range",
+        "viewport": {
+          "position": {
+            "x": 2202.329,
+            "y": 430.43005
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "source_min",
+            "value": {
+              "kind": "Float",
+              "value": -1.0
+            }
+          },
+          {
+            "name": "source_max",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          },
+          {
+            "name": "target_min",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "target_max",
+            "value": {
+              "kind": "Float",
+              "value": 1.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "2e188f75-49f9-4800-bf2a-0a24cf4cb144",
+        "metadata": {
+          "name": "Colorize"
+        },
+        "node_type": "frame_operations.colorize",
+        "viewport": {
+          "position": {
+            "x": 2539.2751,
+            "y": 431.00986
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "gradient",
+            "value": {
+              "stops": [
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 1.0,
+                    "g": 0.06545499712228775,
+                    "r": 0.792701005935669
+                  },
+                  "position": 0.0
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.5799999833106995,
+                    "g": 0.15302400290966034,
+                    "r": 0.15923500061035156
+                  },
+                  "position": 0.2800000011920929
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.0005629999795928597,
+                    "g": 0.0,
+                    "r": 7.999999979801942e-6
+                  },
+                  "position": 0.4900000095367432
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.0,
+                    "g": 0.0,
+                    "r": 0.0002809999859891832
+                  },
+                  "position": 0.5099999904632568
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.07093500345945358,
+                    "g": 0.07093500345945358,
+                    "r": 0.97536301612854
+                  },
+                  "position": 0.7200000286102295
+                },
+                {
+                  "color": {
+                    "a": 1.0,
+                    "b": 0.07093500345945358,
+                    "g": 0.8602499961853027,
+                    "r": 0.97536301612854
+                  },
+                  "position": 1.0
+                }
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "88703132-dc21-4f3e-92f4-76b9b9735a4b",
+        "metadata": {
+          "name": "Wled Dummy Display"
+        },
+        "node_type": "debug.wled_dummy_display",
+        "viewport": {
+          "position": {
+            "x": 2761.8003,
+            "y": -565.99854
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "ColorFrame",
+              "value": {
+                "layout": {
+                  "id": "default",
+                  "pixel_count": 0,
+                  "width": null,
+                  "height": null
+                },
+                "pixels": []
+              }
+            }
+          },
+          {
+            "name": "disable",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "width",
+            "value": 25
+          },
+          {
+            "name": "height",
+            "value": 25
+          }
+        ]
+      },
+      {
+        "id": "f36d4c58-b275-4bfa-9fa9-e482768f9cf4",
+        "metadata": {
+          "name": "Display"
+        },
+        "node_type": "outputs.display",
+        "viewport": {
+          "position": {
+            "x": 1820.9697,
+            "y": 700.8637
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "d9d98cc9-9496-4562-a18e-6732faa21b75",
+        "metadata": {
+          "name": "Delay"
+        },
+        "node_type": "temporal_filters.delay",
+        "viewport": {
+          "position": {
+            "x": 716.9807,
+            "y": -120.8155
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticks",
+            "value": 1
+          },
+          {
+            "name": "initial_type",
+            "value": "tensor"
+          }
+        ]
+      },
+      {
+        "id": "math_subtract_3",
+        "metadata": {
+          "name": "Subtract"
+        },
+        "node_type": "math.subtract",
+        "viewport": {
+          "position": {
+            "x": 1089.143,
+            "y": 480.45932
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "a",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          },
+          {
+            "name": "b",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "temporal_filters_fade_1",
+        "metadata": {
+          "name": "Fade"
+        },
+        "node_type": "temporal_filters.fade",
+        "viewport": {
+          "position": {
+            "x": 1324.7994,
+            "y": 957.923
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Color",
+              "value": {
+                "r": 1.0,
+                "g": 1.0,
+                "b": 1.0,
+                "a": 1.0
+              }
+            }
+          },
+          {
+            "name": "decay",
+            "value": {
+              "kind": "Float",
+              "value": 0.58
+            }
+          }
+        ],
+        "parameters": []
+      },
+      {
+        "id": "temporal_filters_delay_2",
+        "metadata": {
+          "name": "Delay"
+        },
+        "node_type": "temporal_filters.delay",
+        "viewport": {
+          "position": {
+            "x": 924.5314,
+            "y": 855.38043
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ticks",
+            "value": 1
+          },
+          {
+            "name": "initial_type",
+            "value": "tensor"
+          }
+        ]
+      },
+      {
+        "id": "debug_wled_dummy_display_1",
+        "metadata": {
+          "name": "Wled Dummy Display"
+        },
+        "node_type": "debug.wled_dummy_display",
+        "viewport": {
+          "position": {
+            "x": 3223.3276,
+            "y": 438.6607
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "value",
+            "value": {
+              "kind": "ColorFrame",
+              "value": {
+                "layout": {
+                  "id": "default",
+                  "pixel_count": 0,
+                  "width": null,
+                  "height": null
+                },
+                "pixels": []
+              }
+            }
+          },
+          {
+            "name": "disable",
+            "value": {
+              "kind": "Float",
+              "value": 0.0
+            }
+          }
+        ],
+        "parameters": [
+          {
+            "name": "width",
+            "value": 25
+          },
+          {
+            "name": "height",
+            "value": 25
+          }
+        ]
+      },
+      {
+        "id": "spatial_filters_gaussian_blur_2",
+        "metadata": {
+          "name": "Gaussian Blur"
+        },
+        "node_type": "spatial_filters.gaussian_blur",
+        "viewport": {
+          "position": {
+            "x": 2881.4136,
+            "y": 435.77332
+          },
+          "collapsed": false
+        },
+        "input_values": [
+          {
+            "name": "frame",
+            "value": {
+              "kind": "ColorFrame",
+              "value": {
+                "layout": {
+                  "id": "default",
+                  "pixel_count": 0,
+                  "width": null,
+                  "height": null
+                },
+                "pixels": []
+              }
+            }
+          },
+          {
+            "name": "radius",
+            "value": {
+              "kind": "Float",
+              "value": 2.0
+            }
+          }
+        ],
+        "parameters": []
+      }
+    ],
+    "edges": [
+      {
+        "from_node_id": "2e188f75-49f9-4800-bf2a-0a24cf4cb144",
+        "from_output_name": "frame",
+        "to_node_id": "spatial_filters_gaussian_blur_2",
+        "to_input_name": "frame"
+      },
+      {
+        "from_node_id": "7733defb-dba5-45d3-a754-0641c81ef4a9",
+        "from_output_name": "product",
+        "to_node_id": "b7d7bea1-7f18-411c-82ae-e8703561f9df",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "7ad0023d-9b37-40e4-b11d-220758ee768a",
+        "from_output_name": "value",
+        "to_node_id": "math_subtract_3",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "8d36b984-1c01-4ed7-9817-b1a4a462b14c",
+        "from_output_name": "value",
+        "to_node_id": "a433a98e-9a3c-4479-9a64-d814c3de989e",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "a433a98e-9a3c-4479-9a64-d814c3de989e",
+        "from_output_name": "value",
+        "to_node_id": "2e188f75-49f9-4800-bf2a-0a24cf4cb144",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "b7d7bea1-7f18-411c-82ae-e8703561f9df",
+        "from_output_name": "sum",
+        "to_node_id": "7ad0023d-9b37-40e4-b11d-220758ee768a",
+        "to_input_name": "frame"
+      },
+      {
+        "from_node_id": "b7d7bea1-7f18-411c-82ae-e8703561f9df",
+        "from_output_name": "sum",
+        "to_node_id": "math_add_3",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "d9d98cc9-9496-4562-a18e-6732faa21b75",
+        "from_output_name": "value",
+        "to_node_id": "7733defb-dba5-45d3-a754-0641c81ef4a9",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "frame_operations_colorize_potential",
+        "from_output_name": "frame",
+        "to_node_id": "88703132-dc21-4f3e-92f4-76b9b9735a4b",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "frame_operations_extract_channels_1",
+        "from_output_name": "tensor",
+        "to_node_id": "math_multiply_2",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "frame_operations_extract_channels_1",
+        "from_output_name": "tensor",
+        "to_node_id": "math_multiply_3",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "frame_operations_extract_channels_2",
+        "from_output_name": "tensor",
+        "to_node_id": "math_multiply_1",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "frame_operations_extract_channels_3",
+        "from_output_name": "tensor",
+        "to_node_id": "math_multiply_2",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "generators_bouncing_balls_1",
+        "from_output_name": "frame",
+        "to_node_id": "frame_operations_extract_channels_1",
+        "to_input_name": "frame"
+      },
+      {
+        "from_node_id": "generators_bouncing_balls_1",
+        "from_output_name": "frame",
+        "to_node_id": "frame_operations_extract_channels_2",
+        "to_input_name": "frame"
+      },
+      {
+        "from_node_id": "generators_bouncing_balls_1",
+        "from_output_name": "frame",
+        "to_node_id": "frame_operations_extract_channels_3",
+        "to_input_name": "frame"
+      },
+      {
+        "from_node_id": "math_abs_1",
+        "from_output_name": "value",
+        "to_node_id": "math_subtract_1",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "math_add_1",
+        "from_output_name": "sum",
+        "to_node_id": "b7d7bea1-7f18-411c-82ae-e8703561f9df",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "math_add_1",
+        "from_output_name": "sum",
+        "to_node_id": "math_abs_1",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_add_1",
+        "from_output_name": "sum",
+        "to_node_id": "math_add_2",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "math_add_1",
+        "from_output_name": "sum",
+        "to_node_id": "outputs_display_1",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_add_2",
+        "from_output_name": "sum",
+        "to_node_id": "math_subtract_2",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "math_add_2",
+        "from_output_name": "sum",
+        "to_node_id": "spatial_filters_laplacian_filter_1",
+        "to_input_name": "frame"
+      },
+      {
+        "from_node_id": "math_add_3",
+        "from_output_name": "sum",
+        "to_node_id": "8d36b984-1c01-4ed7-9817-b1a4a462b14c",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_add_3",
+        "from_output_name": "sum",
+        "to_node_id": "d9d98cc9-9496-4562-a18e-6732faa21b75",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_add_3",
+        "from_output_name": "sum",
+        "to_node_id": "f36d4c58-b275-4bfa-9fa9-e482768f9cf4",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_clamp_potential",
+        "from_output_name": "value",
+        "to_node_id": "math_map_range_potential",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_map_range_potential",
+        "from_output_name": "value",
+        "to_node_id": "frame_operations_colorize_potential",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_multiply_1",
+        "from_output_name": "product",
+        "to_node_id": "math_multiply_3",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "math_multiply_2",
+        "from_output_name": "product",
+        "to_node_id": "math_add_1",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "math_multiply_3",
+        "from_output_name": "product",
+        "to_node_id": "math_add_1",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "math_multiply_4",
+        "from_output_name": "product",
+        "to_node_id": "math_add_2",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "math_subtract_1",
+        "from_output_name": "difference",
+        "to_node_id": "7733defb-dba5-45d3-a754-0641c81ef4a9",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "math_subtract_1",
+        "from_output_name": "difference",
+        "to_node_id": "math_multiply_4",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "math_subtract_2",
+        "from_output_name": "difference",
+        "to_node_id": "math_clamp_potential",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_subtract_2",
+        "from_output_name": "difference",
+        "to_node_id": "outputs_display_3",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_subtract_2",
+        "from_output_name": "difference",
+        "to_node_id": "temporal_filters_delay_1",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "math_subtract_3",
+        "from_output_name": "difference",
+        "to_node_id": "math_add_3",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "math_subtract_3",
+        "from_output_name": "difference",
+        "to_node_id": "temporal_filters_delay_2",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "spatial_filters_gaussian_blur_2",
+        "from_output_name": "frame",
+        "to_node_id": "debug_wled_dummy_display_1",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "spatial_filters_laplacian_filter_1",
+        "from_output_name": "value",
+        "to_node_id": "math_subtract_2",
+        "to_input_name": "b"
+      },
+      {
+        "from_node_id": "spatial_filters_laplacian_filter_1",
+        "from_output_name": "value",
+        "to_node_id": "outputs_display_2",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "temporal_filters_delay_1",
+        "from_output_name": "value",
+        "to_node_id": "math_multiply_4",
+        "to_input_name": "a"
+      },
+      {
+        "from_node_id": "temporal_filters_delay_2",
+        "from_output_name": "value",
+        "to_node_id": "temporal_filters_fade_1",
+        "to_input_name": "value"
+      },
+      {
+        "from_node_id": "temporal_filters_fade_1",
+        "from_output_name": "value",
+        "to_node_id": "math_subtract_3",
+        "to_input_name": "a"
+      }
+    ]
+  }
+}

@@ -746,12 +746,35 @@ mod tests {
     }
 
     #[test]
-    fn fade_rejects_non_color_inputs() {
+    fn gaussian_blur_infers_output_kind_from_input_kind() {
+        let definition = node_definition(NodeTypeId::GAUSSIAN_BLUR).expect("gaussian definition");
+
+        let frame_inferred =
+            definition.infer_output_kind("frame", &[("frame", ValueKind::ColorFrame)], &[]);
+        let tensor_inferred =
+            definition.infer_output_kind("frame", &[("frame", ValueKind::FloatTensor)], &[]);
+
+        assert_eq!(frame_inferred, Some(ValueKind::ColorFrame));
+        assert_eq!(tensor_inferred, Some(ValueKind::FloatTensor));
+    }
+
+    #[test]
+    fn fade_rejects_non_supported_inputs() {
         let definition = node_definition(NodeTypeId::FADE).expect("fade definition");
 
         let inferred = definition.infer_output("value", &[("value", ValueKind::Float)], &[]);
 
         assert!(matches!(inferred, OutputInference::Invalid { .. }));
+    }
+
+    #[test]
+    fn fade_infers_tensor_output_kind_from_value() {
+        let definition = node_definition(NodeTypeId::FADE).expect("fade definition");
+
+        let inferred =
+            definition.infer_output_kind("value", &[("value", ValueKind::FloatTensor)], &[]);
+
+        assert_eq!(inferred, Some(ValueKind::FloatTensor));
     }
 
     #[test]
