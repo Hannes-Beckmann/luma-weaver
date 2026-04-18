@@ -760,58 +760,13 @@ fn seeded_demo_graphs() -> anyhow::Result<Vec<GraphDocument>> {
     .context("parse seeded example graph")?
     .document;
 
-    let signal_playground = serde_json::from_value::<GraphDocument>(serde_json::json!({
-        "metadata": {
-            "id": "demo-signal-playground",
-            "name": "Signal Playground",
-            "execution_frequency_hz": 60
-        },
-        "viewport": {
-            "zoom": 1.0,
-            "pan": { "x": 420.0, "y": 160.0 }
-        },
-        "nodes": [
-            {
-                "id": "signal_1",
-                "metadata": { "name": "Signal Generator" },
-                "node_type": "inputs.signal_generator",
-                "viewport": {
-                    "position": { "x": -540.0, "y": 80.0 },
-                    "collapsed": false
-                },
-                "input_values": [],
-                "parameters": [
-                    { "name": "waveform", "value": "sinus" },
-                    { "name": "frequency", "value": 0.35 },
-                    { "name": "amplitude", "value": 0.8 },
-                    { "name": "phase", "value": 0.0 },
-                    { "name": "offset", "value": 0.0 }
-                ]
-            },
-            {
-                "id": "plot_1",
-                "metadata": { "name": "Plot" },
-                "node_type": "outputs.plot",
-                "viewport": {
-                    "position": { "x": -20.0, "y": -10.0 },
-                    "collapsed": false
-                },
-                "input_values": [{ "name": "value", "value": { "kind": "Float", "value": 0.0 } }],
-                "parameters": []
-            }
-        ],
-        "edges": [
-            {
-                "from_node_id": "signal_1",
-                "from_output_name": "value",
-                "to_node_id": "plot_1",
-                "to_input_name": "value"
-            }
-        ]
-    }))
-    .context("build seeded signal playground graph")?;
+    let pde_heat_wave = serde_json::from_str::<GraphExchangeFile>(include_str!(
+        "../../../examples/PDE_Heat_Wave.animation-graph.json"
+    ))
+    .context("parse seeded PDE heat wave graph")?
+    .document;
 
-    Ok(vec![example, signal_playground])
+    Ok(vec![example, pde_heat_wave])
 }
 
 #[cfg(test)]
