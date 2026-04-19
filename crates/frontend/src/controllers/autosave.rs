@@ -91,7 +91,7 @@ impl FrontendApp {
 /// Normalizes a graph document for persistence comparisons.
 ///
 /// This currently canonicalizes gradient-valued parameters so autosave and equality checks are not
-/// sensitive to stop ordering or tiny float jitter.
+/// sensitive to tiny float jitter.
 pub(crate) fn canonicalize_graph_document(document: &GraphDocument) -> GraphDocument {
     let mut document = document.clone();
     for node in &mut document.nodes {
@@ -112,7 +112,7 @@ pub(crate) fn canonicalize_graph_document_for_history(document: &GraphDocument) 
     document
 }
 
-/// Normalizes a gradient by quantizing colors and positions, sorting stops, and merging duplicates.
+/// Normalizes a gradient by quantizing colors and positions without reordering stops.
 fn canonicalize_gradient(mut gradient: ColorGradient) -> ColorGradient {
     for stop in &mut gradient.stops {
         stop.position = quantize_unit_float(stop.position);
@@ -122,14 +122,41 @@ fn canonicalize_gradient(mut gradient: ColorGradient) -> ColorGradient {
         stop.color.a = quantize_unit_float(stop.color.a);
     }
     gradient
-        .stops
-        .sort_by(|a, b| a.position.total_cmp(&b.position));
-    gradient.stops.dedup_by(|a, b| a.position == b.position);
-    gradient
 }
 
 /// Quantizes a unit float into a stable six-decimal representation in the inclusive `0..=1` range.
 fn quantize_unit_float(value: f32) -> f32 {
     const STEP: f32 = 1_000_000.0;
     ((value.clamp(0.0, 1.0) * STEP).round() / STEP).clamp(0.0, 1.0)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::canonicalize_gradient;
+    use shared::{ColorGradient, ColorGradientStop, RgbaColor};
+
+    #[test]
+    fn canonicalize_gradient_preserves_stop_order_and_duplicate_positions() {
+        let gradient = ColorGradient {
+            stops: vec![
+                stop(1.0, 0.0, 0.0, 1.0),
+                stop(0.5, 1.0, 0.0, 0.0),
+                stop(0.5, 0.0, 1.0, 0.0),
+            ],
+        };
+
+        let canonical = canonicalize_gradient(gradient);
+
+        assert_eq!(canonical.stops.len(), 3);
+        assert_eq!(canonical.stops[0].position, 1.0);
+        assert_eq!(canonical.stops[1].position, 0.5);
+        assert_eq!(canonical.stops[2].position, 0.5);
+    }
+
+    fn stop(position: f32, r: f32, g: f32, b: f32) -> ColorGradientStop {
+        ColorGradientStop {
+            position,
+            color: RgbaColor { r, g, b, a: 1.0 },
+        }
+    }
 }

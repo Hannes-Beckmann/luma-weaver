@@ -748,12 +748,35 @@ fn edit_color_gradient_contents(ui: &mut egui::Ui, gradient: &mut ColorGradient)
             gradient.stops.remove(index);
         }
 
-        if ui.small_button("Add Stop").clicked() {
-            let position = 0.5;
-            let color = sample_gradient(gradient, position);
-            gradient.stops.push(ColorGradientStop { position, color });
-        }
+        ui.horizontal(|ui| {
+            if ui.small_button("Add Stop").clicked() {
+                let stop = color_stop_between_last_two(gradient);
+                gradient.stops.push(stop);
+            }
+
+            if ui.small_button("Sort Stops").clicked() {
+                sort_gradient_stops(gradient);
+            }
+        });
     });
+}
+
+/// Returns a new stop halfway between the last two stops in the editor's visible order.
+fn color_stop_between_last_two(gradient: &ColorGradient) -> ColorGradientStop {
+    let normalized = normalize_gradient(gradient.clone());
+    let right_index = normalized.stops.len() - 1;
+    let left = normalized.stops[right_index - 1];
+    let right = normalized.stops[right_index];
+    let position = ((left.position + right.position) * 0.5).clamp(0.0, 1.0);
+    let color = sample_gradient(&normalized, position);
+    ColorGradientStop { position, color }
+}
+
+/// Sorts stops by position when the user explicitly asks for it.
+fn sort_gradient_stops(gradient: &mut ColorGradient) {
+    gradient
+        .stops
+        .sort_by(|a, b| a.position.total_cmp(&b.position));
 }
 
 /// Paints a horizontal gradient preview into `rect`.
@@ -823,7 +846,7 @@ fn sample_gradient(gradient: &ColorGradient, position: f32) -> RgbaColor {
 
 /// Normalizes a gradient into the editor's canonical form.
 ///
-/// Stop positions and color channels are quantized into the unit range, stops are sorted, and an
+/// Stop positions and color channels are quantized into the unit range, and an
 /// empty or single-stop gradient is expanded into a valid two-stop gradient.
 fn normalize_gradient(mut gradient: ColorGradient) -> ColorGradient {
     if gradient.stops.is_empty() {
@@ -837,11 +860,6 @@ fn normalize_gradient(mut gradient: ColorGradient) -> ColorGradient {
         stop.color.b = quantize_unit_float(stop.color.b);
         stop.color.a = quantize_unit_float(stop.color.a);
     }
-    gradient
-        .stops
-        .sort_by(|a, b| a.position.total_cmp(&b.position));
-    gradient.stops.dedup_by(|a, b| a.position == b.position);
-
     if gradient.stops.len() == 1 {
         let only = gradient.stops[0];
         gradient.stops.push(ColorGradientStop {
@@ -982,8 +1000,11 @@ pub(super) fn max_input_label_width(ui: &egui::Ui, node: &EditorSnarlNode) -> f3
 
 #[cfg(test)]
 mod tests {
-    use super::{frame_preview_dimensions, supports_disconnected_inline_editor};
-    use shared::{ColorFrame, LedLayout, RgbaColor, ValueKind};
+    use super::{
+        color_stop_between_last_two, frame_preview_dimensions, normalize_gradient,
+        sort_gradient_stops, supports_disconnected_inline_editor,
+    };
+    use shared::{ColorFrame, ColorGradient, ColorGradientStop, LedLayout, RgbaColor, ValueKind};
 
     #[test]
     fn one_dimensional_layout_is_rendered_as_horizontal_strip() {
@@ -1034,5 +1055,77 @@ mod tests {
     #[test]
     fn color_frame_inputs_do_not_render_disconnected_inline_editors() {
         assert!(!supports_disconnected_inline_editor(ValueKind::ColorFrame));
+    }
+
+    #[test]
+    fn new_gradient_stop_is_inserted_between_last_two_stops() {
+        let gradient = ColorGradient {
+            stops: vec![
+                stop(0.0, 1.0, 0.0, 0.0),
+                stop(0.25, 0.0, 1.0, 0.0),
+                stop(1.0, 0.0, 0.0, 1.0),
+            ],
+        };
+
+        let new_stop = color_stop_between_last_two(&gradient);
+
+        assert_eq!(new_stop.position, 0.625);
+    }
+
+    #[test]
+    fn new_gradient_stop_uses_visible_stop_order() {
+        let gradient = ColorGradient {
+            stops: vec![
+                stop(1.0, 0.0, 0.0, 1.0),
+                stop(0.0, 1.0, 0.0, 0.0),
+                stop(0.4, 0.0, 1.0, 0.0),
+            ],
+        };
+
+        let new_stop = color_stop_between_last_two(&gradient);
+
+        assert_eq!(new_stop.position, 0.2);
+    }
+
+    #[test]
+    fn normalize_gradient_preserves_stop_order_and_duplicate_positions() {
+        let gradient = ColorGradient {
+            stops: vec![
+                stop(1.0, 0.0, 0.0, 1.0),
+                stop(0.5, 1.0, 0.0, 0.0),
+                stop(0.5, 0.0, 1.0, 0.0),
+            ],
+        };
+
+        let normalized = normalize_gradient(gradient);
+
+        assert_eq!(normalized.stops.len(), 3);
+        assert_eq!(normalized.stops[0].position, 1.0);
+        assert_eq!(normalized.stops[1].position, 0.5);
+        assert_eq!(normalized.stops[2].position, 0.5);
+    }
+
+    #[test]
+    fn sort_gradient_stops_orders_stops_by_position_when_requested() {
+        let mut gradient = ColorGradient {
+            stops: vec![
+                stop(1.0, 0.0, 0.0, 1.0),
+                stop(0.0, 1.0, 0.0, 0.0),
+                stop(0.4, 0.0, 1.0, 0.0),
+            ],
+        };
+
+        sort_gradient_stops(&mut gradient);
+
+        assert_eq!(gradient.stops[0].position, 0.0);
+        assert_eq!(gradient.stops[1].position, 0.4);
+        assert_eq!(gradient.stops[2].position, 1.0);
+    }
+
+    fn stop(position: f32, r: f32, g: f32, b: f32) -> ColorGradientStop {
+        ColorGradientStop {
+            position,
+            color: RgbaColor { r, g, b, a: 1.0 },
+        }
     }
 }
