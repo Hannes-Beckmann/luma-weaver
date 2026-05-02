@@ -51,6 +51,7 @@ impl GraphStore {
             id: Uuid::new_v4().to_string(),
             name,
             execution_frequency_hz: 60,
+            home_assistant_broker_id: String::new(),
         };
         {
             let _guard = self.lock.lock().await;
@@ -199,6 +200,44 @@ impl GraphStore {
             let mut document = serde_json::from_str::<GraphDocument>(&payload)
                 .with_context(|| format!("parse graph document {}", path.display()))?;
             document.metadata.execution_frequency_hz = execution_frequency_hz.max(1);
+            let payload =
+                serde_json::to_vec_pretty(&document).context("serialize graph document")?;
+            tokio::fs::write(&path, payload)
+                .await
+                .with_context(|| format!("write graph document to {}", path.display()))?;
+            true
+        };
+
+        if found {
+            self.emit_metadata_changed().await?;
+        }
+        Ok(found)
+    }
+
+    /// Updates the Home Assistant MQTT broker selected for graph-level controls.
+    ///
+    /// Returns `Ok(false)` when the graph does not exist. An empty broker id disables graph-level
+    /// Home Assistant controls for the graph.
+    pub(crate) async fn update_home_assistant_broker(
+        &self,
+        id: &str,
+        broker_id: String,
+    ) -> anyhow::Result<bool> {
+        let broker_id = broker_id.trim().to_owned();
+        let found = {
+            let _guard = self.lock.lock().await;
+            self.ensure_dir().await?;
+            let path = self.document_path(id);
+            let payload = match tokio::fs::read_to_string(&path).await {
+                Ok(payload) => payload,
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+                Err(error) => {
+                    return Err(error).with_context(|| format!("read {}", path.display()));
+                }
+            };
+            let mut document = serde_json::from_str::<GraphDocument>(&payload)
+                .with_context(|| format!("parse graph document {}", path.display()))?;
+            document.metadata.home_assistant_broker_id = broker_id;
             let payload =
                 serde_json::to_vec_pretty(&document).context("serialize graph document")?;
             tokio::fs::write(&path, payload)
@@ -425,6 +464,7 @@ mod tests {
                 id: id.to_owned(),
                 name: name.to_owned(),
                 execution_frequency_hz: 60,
+                home_assistant_broker_id: String::new(),
             },
             viewport: shared::GraphViewport::default(),
             nodes: Vec::new(),
@@ -528,6 +568,7 @@ mod tests {
                 id: "graph-1".to_owned(),
                 name: "Broken".to_owned(),
                 execution_frequency_hz: 60,
+                home_assistant_broker_id: String::new(),
             },
             viewport: shared::GraphViewport::default(),
             nodes: vec![GraphNode {

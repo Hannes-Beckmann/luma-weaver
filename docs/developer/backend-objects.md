@@ -166,6 +166,7 @@ Main responsibilities:
 
 - keep the configured broker set in memory
 - spawn and stop per-broker runtime tasks
+- expose graph-level execution switch and execution status entities
 - expose graph-backed MQTT number entities
 - publish discovery payloads
 - mirror command/state messages

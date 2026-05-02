@@ -878,6 +878,7 @@ mod tests {
                 id: "graph-a".to_owned(),
                 name: "Graph A".to_owned(),
                 execution_frequency_hz: 60,
+                home_assistant_broker_id: String::new(),
             },
             viewport: shared::GraphViewport::default(),
             nodes: vec![
@@ -926,6 +927,7 @@ mod tests {
                 id: "graph-b".to_owned(),
                 name: "Graph B".to_owned(),
                 execution_frequency_hz: 60,
+                home_assistant_broker_id: String::new(),
             },
             ..GraphDocument::default()
         };
