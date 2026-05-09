@@ -1,6 +1,6 @@
 use eframe::egui;
 use eframe::egui::{Color32, RichText};
-use shared::{GraphRuntimeMode, InputValue, NodeParameter, ValueKind};
+use shared::{GraphRuntimeMode, InputValue, NodeParameter, RgbaColor, SinkPreviewFrame, ValueKind};
 
 use crate::app::FrontendApp;
 
@@ -176,6 +176,10 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                             app.request_graph_export(graph.id.clone());
                         }
 
+                        if ui.add(secondary_action_button("3D Preview")).clicked() {
+                            app.ui.sink_preview_window_open = true;
+                        }
+
                         if ui.add(secondary_action_button("Focus")).clicked() {
                             focus_clicked = true;
                         }
@@ -283,6 +287,7 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
             }
 
             crate::diagnostics_view::render_node_diagnostics_window(ui.ctx(), app);
+            render_sink_preview_window(ui.ctx(), app, &graph.id);
 
             if app.ui.rename_graph_dialog_open {
                 let mut open = app.ui.rename_graph_dialog_open;
@@ -327,6 +332,275 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 app.return_to_dashboard();
             }
         }
+    }
+}
+
+/// Renders the live spatial sink preview window for the selected graph.
+fn render_sink_preview_window(ctx: &egui::Context, app: &mut FrontendApp, graph_id: &str) {
+    if !app.ui.sink_preview_window_open {
+        return;
+    }
+
+    let mut open = app.ui.sink_preview_window_open;
+    egui::Window::new("3D Sink Preview")
+        .default_size(egui::vec2(760.0, 560.0))
+        .open(&mut open)
+        .show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new("LED Size").color(Color32::from_gray(150)));
+                ui.add(
+                    egui::DragValue::new(&mut app.ui.sink_preview_led_size)
+                        .speed(0.1)
+                        .range(1.0..=24.0),
+                );
+                if ui.add(secondary_action_button("Reset View")).clicked() {
+                    app.ui.sink_preview_yaw = 0.5;
+                    app.ui.sink_preview_pitch = -0.35;
+                    app.ui.sink_preview_zoom = 1.0;
+                    app.ui.sink_preview_pan_x = 0.0;
+                    app.ui.sink_preview_pan_y = 0.0;
+                }
+            });
+
+            let frames = app
+                .graphs
+                .sink_preview_frames_by_graph
+                .get(graph_id)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            let mut camera = PreviewCamera {
+                yaw: app.ui.sink_preview_yaw,
+                pitch: app.ui.sink_preview_pitch,
+                zoom: app.ui.sink_preview_zoom,
+                pan: egui::vec2(app.ui.sink_preview_pan_x, app.ui.sink_preview_pan_y),
+                led_size: app.ui.sink_preview_led_size,
+            };
+            draw_sink_preview_scene(ui, frames, &mut camera);
+            app.ui.sink_preview_yaw = camera.yaw;
+            app.ui.sink_preview_pitch = camera.pitch;
+            app.ui.sink_preview_zoom = camera.zoom;
+            app.ui.sink_preview_pan_x = camera.pan.x;
+            app.ui.sink_preview_pan_y = camera.pan.y;
+            app.ui.sink_preview_led_size = camera.led_size;
+        });
+    app.ui.sink_preview_window_open = open;
+}
+
+#[derive(Clone, Copy)]
+struct PreviewCamera {
+    yaw: f32,
+    pitch: f32,
+    zoom: f32,
+    pan: egui::Vec2,
+    led_size: f32,
+}
+
+fn draw_sink_preview_scene(
+    ui: &mut egui::Ui,
+    frames: &[SinkPreviewFrame],
+    camera: &mut PreviewCamera,
+) {
+    let available = ui.available_size();
+    let desired_size = egui::vec2(available.x.max(320.0), available.y.max(320.0));
+    let (rect, response) = ui.allocate_exact_size(desired_size, egui::Sense::drag());
+    let painter = ui.painter_at(rect);
+    painter.rect_filled(rect, 4.0, Color32::from_rgb(18, 20, 23));
+    painter.rect_stroke(
+        rect,
+        4.0,
+        egui::Stroke::new(1.0, Color32::from_gray(58)),
+        egui::StrokeKind::Inside,
+    );
+
+    let pointer_delta = ui.input(|input| input.pointer.delta());
+    if response.dragged_by(egui::PointerButton::Primary) {
+        camera.yaw += pointer_delta.x * 0.01;
+        camera.pitch = (camera.pitch + pointer_delta.y * 0.01).clamp(-3.124, 3.124);
+        ui.ctx().request_repaint();
+    }
+    if response.dragged_by(egui::PointerButton::Secondary)
+        || response.dragged_by(egui::PointerButton::Middle)
+    {
+        camera.pan += pointer_delta;
+        ui.ctx().request_repaint();
+    }
+    if response.hovered() {
+        let scroll_y = ui.input(|input| input.smooth_scroll_delta.y);
+        if scroll_y != 0.0 {
+            camera.zoom = (camera.zoom * (scroll_y * 0.0015).exp()).clamp(0.1, 20.0);
+            ui.ctx().request_repaint();
+        }
+    }
+
+    let points = collect_spatial_preview_points(frames);
+    if points.is_empty() {
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "No spatial sink frames received.",
+            egui::FontId::proportional(15.0),
+            Color32::from_gray(155),
+        );
+        return;
+    }
+
+    let bounds = world_bounds(&points);
+    let target = bounds.center();
+    let radius = bounds.radius(&points).max(0.001);
+    let scale = rect.width().min(rect.height()) * 0.42 / radius * camera.zoom.max(0.1);
+    let mut sorted_samples = project_preview_points(&points, target, camera);
+    sorted_samples.sort_by(|a, b| a.z.total_cmp(&b.z));
+    for sample in sorted_samples {
+        let pos = egui::pos2(
+            rect.center().x + camera.pan.x + sample.x * scale,
+            rect.center().y + camera.pan.y - sample.y * scale,
+        );
+        let depth = (0.65 + sample.z / (radius * 2.0).max(0.001) * 0.35).clamp(0.4, 1.0);
+        let point_radius = (camera.led_size * depth * camera.zoom.sqrt()).clamp(1.0, 32.0);
+        painter.circle_filled(pos, point_radius, sample.color);
+    }
+}
+
+#[derive(Clone)]
+struct PreviewPoint {
+    x: f32,
+    y: f32,
+    z: f32,
+    color: Color32,
+}
+
+#[derive(Clone)]
+struct PreviewSample {
+    x: f32,
+    y: f32,
+    z: f32,
+    color: Color32,
+}
+
+#[derive(Clone, Copy)]
+struct PreviewBounds {
+    min_x: f32,
+    max_x: f32,
+    min_y: f32,
+    max_y: f32,
+    min_z: f32,
+    max_z: f32,
+}
+
+impl PreviewBounds {
+    fn center(self) -> (f32, f32, f32) {
+        (
+            (self.min_x + self.max_x) * 0.5,
+            (self.min_y + self.max_y) * 0.5,
+            (self.min_z + self.max_z) * 0.5,
+        )
+    }
+
+    fn radius(self, points: &[PreviewPoint]) -> f32 {
+        let center = self.center();
+        points
+            .iter()
+            .map(|point| {
+                let dx = point.x - center.0;
+                let dy = point.y - center.1;
+                let dz = point.z - center.2;
+                (dx * dx + dy * dy + dz * dz).sqrt()
+            })
+            .fold(0.0, f32::max)
+    }
+}
+
+fn collect_spatial_preview_points(frames: &[SinkPreviewFrame]) -> Vec<PreviewPoint> {
+    let mut points = Vec::new();
+    for frame in frames {
+        let Some(layout_points) = frame.layout.points_3d.as_ref() else {
+            continue;
+        };
+        if layout_points.len() != frame.layout.pixel_count {
+            continue;
+        }
+        for (index, point) in layout_points.iter().enumerate() {
+            let color = frame.pixels.get(index).copied().unwrap_or_else(black_color);
+            points.push(PreviewPoint {
+                x: point.x,
+                y: point.y,
+                z: point.z,
+                color: rgba_to_color32(color),
+            });
+        }
+    }
+    points
+}
+
+fn world_bounds(points: &[PreviewPoint]) -> PreviewBounds {
+    points.iter().fold(
+        PreviewBounds {
+            min_x: f32::INFINITY,
+            max_x: f32::NEG_INFINITY,
+            min_y: f32::INFINITY,
+            max_y: f32::NEG_INFINITY,
+            min_z: f32::INFINITY,
+            max_z: f32::NEG_INFINITY,
+        },
+        |mut bounds, point| {
+            bounds.min_x = bounds.min_x.min(point.x);
+            bounds.max_x = bounds.max_x.max(point.x);
+            bounds.min_y = bounds.min_y.min(point.y);
+            bounds.max_y = bounds.max_y.max(point.y);
+            bounds.min_z = bounds.min_z.min(point.z);
+            bounds.max_z = bounds.max_z.max(point.z);
+            bounds
+        },
+    )
+}
+
+fn project_preview_points(
+    points: &[PreviewPoint],
+    target: (f32, f32, f32),
+    camera: &PreviewCamera,
+) -> Vec<PreviewSample> {
+    let (sin_yaw, cos_yaw) = camera.yaw.sin_cos();
+    let (sin_pitch, cos_pitch) = camera.pitch.sin_cos();
+
+    points
+        .iter()
+        .map(|point| {
+            let x = point.x - target.0;
+            let y = point.y - target.1;
+            let z = point.z - target.2;
+            let yawed_x = x * cos_yaw - y * sin_yaw;
+            let yawed_y = x * sin_yaw + y * cos_yaw;
+            let pitched_y = yawed_y * cos_pitch - z * sin_pitch;
+            let pitched_z = yawed_y * sin_pitch + z * cos_pitch;
+            PreviewSample {
+                x: yawed_x,
+                y: pitched_y,
+                z: pitched_z,
+                color: point.color,
+            }
+        })
+        .collect()
+}
+
+fn rgba_to_color32(color: RgbaColor) -> Color32 {
+    Color32::from_rgba_premultiplied(
+        unit_to_u8(color.r),
+        unit_to_u8(color.g),
+        unit_to_u8(color.b),
+        unit_to_u8(color.a),
+    )
+}
+
+fn unit_to_u8(value: f32) -> u8 {
+    (value.clamp(0.0, 1.0) * 255.0).round() as u8
+}
+
+fn black_color() -> RgbaColor {
+    RgbaColor {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
     }
 }
 

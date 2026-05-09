@@ -108,6 +108,12 @@ pub enum ClientMessage {
     UnsubscribeGraphRuntime {
         graph_id: String,
     },
+    SubscribeSinkPreview {
+        graph_id: String,
+    },
+    UnsubscribeSinkPreview {
+        graph_id: String,
+    },
     SubscribeGraphDiagnostics {
         graph_id: String,
     },
@@ -178,6 +184,10 @@ pub enum ServerMessage {
         node_id: String,
         values: Vec<NodeRuntimeUpdateValue>,
     },
+    SinkPreviewUpdate {
+        graph_id: String,
+        sinks: Vec<SinkPreviewFrame>,
+    },
     GraphDiagnosticsSummary {
         graph_id: String,
         nodes: Vec<NodeDiagnosticSummary>,
@@ -193,6 +203,15 @@ pub enum ServerMessage {
     MqttBrokerConfigs {
         brokers: Vec<MqttBrokerConfig>,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Represents one spatial sink frame for the live all-sink 3D preview.
+pub struct SinkPreviewFrame {
+    pub sink_node_id: String,
+    pub sink_node_name: String,
+    pub layout: LedLayout,
+    pub pixels: Vec<crate::RgbaColor>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]

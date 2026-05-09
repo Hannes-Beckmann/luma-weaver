@@ -41,6 +41,7 @@ Current building blocks include:
 - temporal nodes such as delay, differentiate, integrate, fade, moving average, and moving median
 - runtime/debug nodes such as plot, display, and a WLED dummy display
 - network nodes for WLED output, WLED frame input, audio FFT receive, and Home Assistant MQTT numbers
+- optional spatial render layouts on LED sinks, with compatibility checks so legacy frame nodes remain protected from unsupported 3D layouts
 
 The editor also supports multi-select graph editing with node-group dragging plus clipboard copy and paste via `Ctrl/Cmd+C` and `Ctrl/Cmd+V`.
 

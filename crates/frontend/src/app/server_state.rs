@@ -3,7 +3,7 @@ use std::collections::HashSet;
 use shared::{
     GraphDocument, GraphMetadata, GraphRuntimeStatus, InputValue, MqttBrokerConfig,
     NodeDiagnosticEntry, NodeDiagnosticSummary, NodeRuntimeUpdateValue, NodeSchema, ServerState,
-    WledInstance,
+    SinkPreviewFrame, WledInstance,
 };
 use tracing::{debug, info, trace, warn};
 
@@ -71,6 +71,9 @@ impl FrontendApp {
         self.graphs
             .node_diagnostic_details_by_graph
             .retain(|graph_id, _| known_graph_ids.contains(graph_id.as_str()));
+        self.graphs
+            .sink_preview_frames_by_graph
+            .retain(|graph_id, _| known_graph_ids.contains(graph_id.as_str()));
         self.ui.status = format!(
             "Loaded {} graph documents",
             self.graphs.graph_documents.len()
@@ -107,6 +110,7 @@ impl FrontendApp {
             self.graphs.snarl_viewport_initialized_graph_id = None;
             self.graphs.runtime_node_values.clear();
             self.graphs.plot_history.clear();
+            self.graphs.sink_preview_frames_by_graph.remove(&graph_id);
         }
 
         self.sync_live_snarl_from_loaded_document();
@@ -225,6 +229,26 @@ impl FrontendApp {
         }
     }
 
+    /// Stores the latest live spatial sink preview frame for the currently open graph.
+    pub(crate) fn apply_sink_preview_update(
+        &mut self,
+        graph_id: String,
+        sinks: Vec<SinkPreviewFrame>,
+    ) {
+        let loaded_graph_id = self
+            .graphs
+            .loaded_graph_document
+            .as_ref()
+            .map(|document| document.metadata.id.as_str());
+        if loaded_graph_id != Some(graph_id.as_str()) {
+            return;
+        }
+
+        self.graphs
+            .sink_preview_frames_by_graph
+            .insert(graph_id, sinks);
+    }
+
     /// Replaces the node-level diagnostic summary list for the selected graph.
     pub(crate) fn apply_graph_diagnostics_summary(
         &mut self,
@@ -292,6 +316,7 @@ impl FrontendApp {
         self.graphs.live_snarl_needs_rebuild = false;
         self.graphs.runtime_node_values.clear();
         self.graphs.plot_history.clear();
+        self.graphs.sink_preview_frames_by_graph.clear();
         self.ui.diagnostics_window_graph_id = None;
         self.ui.diagnostics_window_node_id = None;
         #[cfg(target_arch = "wasm32")]
@@ -315,6 +340,7 @@ impl FrontendApp {
         self.subscriptions.node_definitions_requested_once = false;
         self.subscriptions.running_graphs_requested_once = false;
         self.subscriptions.runtime_graph_subscription = None;
+        self.subscriptions.sink_preview_graph_subscription = None;
         self.subscriptions.diagnostics_graph_subscriptions.clear();
         self.subscriptions.diagnostics_node_subscription = None;
         self.subscriptions.wled_instances_requested_once = false;
@@ -333,8 +359,9 @@ fn decode_runtime_update_value(value: NodeRuntimeUpdateValue) -> (String, InputV
 #[cfg(test)]
 mod tests {
     use shared::{
-        GraphDocument, GraphNode, NodeDiagnosticEntry, NodeDiagnosticSeverity,
-        NodeDiagnosticSummary, NodeMetadata, NodeTypeId, NodeViewport,
+        GraphDocument, GraphNode, LedLayout, NodeDiagnosticEntry, NodeDiagnosticSeverity,
+        NodeDiagnosticSummary, NodeMetadata, NodeTypeId, NodeViewport, RgbaColor, SinkPreviewFrame,
+        Vec3,
     };
 
     use crate::app::FrontendApp;
@@ -405,5 +432,53 @@ mod tests {
         let live_snarl = app.graphs.live_snarl.as_ref().expect("live snarl");
         let node_titles = crate::editor_view::snarl_node_titles(live_snarl);
         assert_eq!(node_titles, vec!["Backend Title".to_owned()]);
+    }
+
+    #[test]
+    fn sink_preview_updates_replace_previous_frames() {
+        let mut app = FrontendApp::default();
+        app.graphs.loaded_graph_document = Some(graph_document_with_node_title("Sink Graph"));
+
+        app.apply_sink_preview_update(
+            "graph-a".to_owned(),
+            vec![SinkPreviewFrame {
+                sink_node_id: "sink-1".to_owned(),
+                sink_node_name: "Sink 1".to_owned(),
+                layout: LedLayout {
+                    id: "sink-1".to_owned(),
+                    pixel_count: 1,
+                    width: Some(1),
+                    height: Some(1),
+                    points_3d: Some(vec![Vec3 {
+                        x: 1.0,
+                        y: 2.0,
+                        z: 3.0,
+                    }]),
+                },
+                pixels: vec![RgbaColor {
+                    r: 1.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.0,
+                }],
+            }],
+        );
+        assert_eq!(
+            app.graphs
+                .sink_preview_frames_by_graph
+                .get("graph-a")
+                .map(Vec::len),
+            Some(1)
+        );
+
+        app.apply_sink_preview_update("graph-a".to_owned(), Vec::new());
+
+        assert_eq!(
+            app.graphs
+                .sink_preview_frames_by_graph
+                .get("graph-a")
+                .map(Vec::len),
+            Some(0)
+        );
     }
 }

@@ -121,6 +121,24 @@ The planner:
 - deduplicates contexts per node
 - forward-fills contexts into observer-style branches that were not reached by the backward pass
 
+Render layouts also carry a compatibility kind:
+
+- `Index1d`
+- `Matrix2d`
+- `Spatial3d`
+
+Sink nodes can opt into spatial mode. In spatial mode they still consume and emit ordered
+`ColorFrame` pixels, but the render layout includes `points_3d` and requires upstream nodes to
+declare `Spatial3d` support in their shared node schema. Legacy frame nodes can remain
+`Index1d`/`Matrix2d` only and will be rejected when connected to a spatial sink branch.
+WLED target and dummy-display spatial layouts are generated procedurally from the sink's origin,
+roll/pitch/yaw rotation, and LED spacing parameters, so the graph stores compact placement values
+instead of a large point array.
+
+The frontend's 3D sink preview subscribes through `SubscribeSinkPreview`. During each tick the
+backend publishes `SinkPreviewUpdate` frames for spatial WLED target and dummy display sinks only.
+Empty updates are intentional and clear stale previews when a graph no longer has spatial sinks.
+
 This is how upstream render nodes learn the layout they should produce for.
 
 ## Multiple LED Layouts In One Graph

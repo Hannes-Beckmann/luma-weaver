@@ -115,6 +115,7 @@ fn server_message_kind(message: &ServerMessage) -> &'static str {
         ServerMessage::GraphImported { .. } => "graph_imported",
         ServerMessage::RuntimeStatuses { .. } => "runtime_statuses",
         ServerMessage::NodeRuntimeUpdate { .. } => "node_runtime_update",
+        ServerMessage::SinkPreviewUpdate { .. } => "sink_preview_update",
         ServerMessage::GraphDiagnosticsSummary { .. } => "graph_diagnostics_summary",
         ServerMessage::NodeDiagnosticsDetail { .. } => "node_diagnostics_detail",
         ServerMessage::WledInstances { .. } => "wled_instances",

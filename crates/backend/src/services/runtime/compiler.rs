@@ -249,6 +249,7 @@ fn compile_node(node: GraphNode, node_registry: &NodeRegistry) -> anyhow::Result
 
     Ok(CompiledNode {
         id: node.id,
+        display_name: node.metadata.name,
         node_type: node.node_type,
         input_defaults,
         parameters,

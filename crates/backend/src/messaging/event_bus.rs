@@ -3,7 +3,8 @@ use std::sync::{Arc, RwLock};
 
 use shared::{
     EventMessage, GraphMetadata, GraphRuntimeStatus, NodeDiagnostic, NodeDiagnosticEntry,
-    NodeDiagnosticSeverity, NodeDiagnosticSummary, NodeRuntimeValue, WledInstance,
+    NodeDiagnosticSeverity, NodeDiagnosticSummary, NodeRuntimeValue, SinkPreviewFrame,
+    WledInstance,
 };
 use tokio::sync::broadcast;
 
@@ -35,6 +36,10 @@ pub(crate) enum BackendEvent {
         graph_id: String,
         node_id: String,
         values: Vec<NodeRuntimeValue>,
+    },
+    SinkPreviewUpdate {
+        graph_id: String,
+        sinks: Vec<SinkPreviewFrame>,
     },
     GraphDiagnosticsSummaryChanged {
         graph_id: String,
@@ -112,6 +117,13 @@ impl EventBus {
             node_id,
             values,
         });
+    }
+
+    /// Broadcasts live preview frames for spatial sinks, including empty sets that clear stale UI.
+    pub(crate) fn emit_sink_preview_update(&self, graph_id: String, sinks: Vec<SinkPreviewFrame>) {
+        let _ = self
+            .sender
+            .send(BackendEvent::SinkPreviewUpdate { graph_id, sinks });
     }
 
     /// Records node diagnostics, merges repeated entries, and broadcasts fresh summary and detail views.
@@ -249,6 +261,11 @@ impl RuntimeEventPublisher for EventBus {
         values: Vec<NodeRuntimeValue>,
     ) {
         self.emit_node_runtime_update(graph_id, node_id, values);
+    }
+
+    /// Publishes live spatial sink preview frames through the event bus.
+    fn sink_preview_update(&self, graph_id: String, sinks: Vec<SinkPreviewFrame>) {
+        self.emit_sink_preview_update(graph_id, sinks);
     }
 
     /// Publishes node diagnostics through the event bus's persistent diagnostic store.

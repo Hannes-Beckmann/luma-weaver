@@ -37,7 +37,7 @@ fn default_tensor_input() -> InputValue {
     })
 }
 
-fn legacy_render_layouts() -> Vec<RenderLayoutKind> {
+fn non_spatial_render_layouts() -> Vec<RenderLayoutKind> {
     vec![RenderLayoutKind::Index1d, RenderLayoutKind::Matrix2d]
 }
 
@@ -307,7 +307,7 @@ static IMAGE_SOURCE_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchem
     display_name: "Image Source".to_owned(),
     category: NodeCategory::Inputs,
     needs_io: true,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![],
     outputs: vec![NodeOutputDefinition {
         name: "frame".to_owned(),
@@ -1979,7 +1979,7 @@ static BOX_BLUR_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
     display_name: "Box Blur".to_owned(),
     category: NodeCategory::SpatialFilters,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
@@ -2015,7 +2015,7 @@ static GAUSSIAN_BLUR_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
     display_name: "Gaussian Blur".to_owned(),
     category: NodeCategory::SpatialFilters,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
@@ -2051,7 +2051,7 @@ static MEDIAN_FILTER_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
     display_name: "Median Filter".to_owned(),
     category: NodeCategory::SpatialFilters,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![
         NodeInputDefinition {
             name: "frame".to_owned(),
@@ -2087,7 +2087,7 @@ static LAPLACIAN_FILTER_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeS
     display_name: "Laplacian Filter".to_owned(),
     category: NodeCategory::SpatialFilters,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![NodeInputDefinition {
         name: "frame".to_owned(),
         display_name: title_case_name("frame"),
@@ -2137,7 +2137,7 @@ static SPECTRUM_ANALYZER_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| Node
     display_name: "Spectrum Analyzer".to_owned(),
     category: NodeCategory::Generators,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![NodeInputDefinition {
         name: "spectrum".to_owned(),
         display_name: title_case_name("spectrum"),
@@ -2242,7 +2242,7 @@ static RAINBOW_SWEEP_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
     display_name: "Linear Sweep".to_owned(),
     category: NodeCategory::Generators,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),
@@ -2338,7 +2338,7 @@ static LEVEL_BAR_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
     display_name: "Level Bar".to_owned(),
     category: NodeCategory::Generators,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![NodeInputDefinition {
         name: "loudness".to_owned(),
         display_name: title_case_name("loudness"),
@@ -2370,7 +2370,7 @@ static TWINKLE_STARS_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
     display_name: "Twinkle Stars".to_owned(),
     category: NodeCategory::Generators,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),
@@ -2425,7 +2425,7 @@ static PLASMA_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
     display_name: "Plasma".to_owned(),
     category: NodeCategory::Generators,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),
@@ -2487,7 +2487,7 @@ static BOUNCING_BALLS_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSch
     display_name: "Bouncing Balls".to_owned(),
     category: NodeCategory::Generators,
     needs_io: false,
-    render_layouts: legacy_render_layouts(),
+    render_layouts: non_spatial_render_layouts(),
     inputs: vec![
         NodeInputDefinition {
             name: "speed".to_owned(),

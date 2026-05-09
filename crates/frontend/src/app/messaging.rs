@@ -71,6 +71,8 @@ fn client_message_kind(message: &ClientMessage) -> &'static str {
         ClientMessage::GetRuntimeStatuses => "get_runtime_statuses",
         ClientMessage::SubscribeGraphRuntime { .. } => "subscribe_graph_runtime",
         ClientMessage::UnsubscribeGraphRuntime { .. } => "unsubscribe_graph_runtime",
+        ClientMessage::SubscribeSinkPreview { .. } => "subscribe_sink_preview",
+        ClientMessage::UnsubscribeSinkPreview { .. } => "unsubscribe_sink_preview",
         ClientMessage::SubscribeGraphDiagnostics { .. } => "subscribe_graph_diagnostics",
         ClientMessage::UnsubscribeGraphDiagnostics { .. } => "unsubscribe_graph_diagnostics",
         ClientMessage::SubscribeNodeDiagnostics { .. } => "subscribe_node_diagnostics",

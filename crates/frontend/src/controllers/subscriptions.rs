@@ -105,6 +105,28 @@ impl FrontendApp {
             }
         }
 
+        let desired_sink_preview =
+            if self.ui.active_view == AppView::Editor && self.ui.sink_preview_window_open {
+                self.ui.selected_graph_id.clone()
+            } else {
+                None
+            };
+        if self.subscriptions.sink_preview_graph_subscription != desired_sink_preview {
+            if let Some(previous) = self.subscriptions.sink_preview_graph_subscription.take() {
+                self.send(ClientMessage::UnsubscribeSinkPreview {
+                    graph_id: previous.clone(),
+                });
+                self.graphs.sink_preview_frames_by_graph.remove(&previous);
+            }
+
+            if let Some(graph_id) = desired_sink_preview.clone() {
+                self.send(ClientMessage::SubscribeSinkPreview {
+                    graph_id: graph_id.clone(),
+                });
+                self.subscriptions.sink_preview_graph_subscription = Some(graph_id);
+            }
+        }
+
         let desired_diagnostics_graphs = self
             .graphs
             .graph_documents

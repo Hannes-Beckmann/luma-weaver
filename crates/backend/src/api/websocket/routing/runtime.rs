@@ -112,6 +112,38 @@ pub(super) async fn handle(
             );
             None
         }
+        ClientMessage::SubscribeSinkPreview { graph_id } if graph_id.trim().is_empty() => {
+            Some(ServerMessage::Error {
+                message: "Graph document id must not be empty".to_owned(),
+            })
+        }
+        ClientMessage::SubscribeSinkPreview { graph_id } => {
+            let graph_id = graph_id.trim().to_owned();
+            context
+                .sink_preview_graph_subscriptions
+                .insert(graph_id.clone());
+            tracing::trace!(
+                client_id = context.client_id,
+                graph_id,
+                "subscribed to sink preview stream"
+            );
+            None
+        }
+        ClientMessage::UnsubscribeSinkPreview { graph_id } if graph_id.trim().is_empty() => {
+            Some(ServerMessage::Error {
+                message: "Graph document id must not be empty".to_owned(),
+            })
+        }
+        ClientMessage::UnsubscribeSinkPreview { graph_id } => {
+            let graph_id = graph_id.trim().to_owned();
+            context.sink_preview_graph_subscriptions.remove(&graph_id);
+            tracing::trace!(
+                client_id = context.client_id,
+                graph_id,
+                "unsubscribed from sink preview stream"
+            );
+            None
+        }
         _ => unreachable!("runtime handler received unsupported message"),
     }
 }

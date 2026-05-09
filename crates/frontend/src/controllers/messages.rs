@@ -122,6 +122,9 @@ impl FrontendApp {
                 node_id,
                 values,
             } => self.apply_runtime_update(graph_id, node_id, values),
+            ServerMessage::SinkPreviewUpdate { graph_id, sinks } => {
+                self.apply_sink_preview_update(graph_id, sinks);
+            }
             ServerMessage::GraphDiagnosticsSummary { graph_id, nodes } => {
                 self.apply_graph_diagnostics_summary(graph_id, nodes);
             }

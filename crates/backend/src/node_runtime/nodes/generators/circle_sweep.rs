@@ -120,10 +120,19 @@ impl RuntimeNode for CircleSweepNode {
 
         let phase = self.advance_phase(context.elapsed_seconds, inputs.speed);
         self.ensure_radial_basis(&layout, aspect);
+        let uses_spatial_basis = layout
+            .points_3d
+            .as_ref()
+            .is_some_and(|points| points.len() >= layout.pixel_count);
 
         let mut pixels = Vec::with_capacity(layout.pixel_count);
         for i in 0..layout.pixel_count {
-            let gradient_position = fract01(phase + scale * self.radial_basis[i]);
+            let basis_position = if uses_spatial_basis {
+                self.radial_basis[i] / (scale * 100.0)
+            } else {
+                scale * self.radial_basis[i]
+            };
+            let gradient_position = fract01(phase + basis_position);
             pixels.push(sample_gradient_hsv(&self.gradient, gradient_position));
         }
 
@@ -235,21 +244,14 @@ fn pixel_xy(index: usize, layout: &LedLayout, width: usize) -> (f32, f32) {
     (index.min(width.saturating_sub(1)) as f32, 0.0)
 }
 
-/// Computes normalized radial distances from the spatial origin in 3D space.
+/// Computes raw radial distances from the spatial origin in 3D space.
 fn spatial_radial_basis(points: &[Vec3], pixel_count: usize, aspect: f32) -> Vec<f32> {
     let mut radii = Vec::with_capacity(pixel_count);
-    let mut max_radius = 0.0_f32;
     for point in points.iter().take(pixel_count) {
         let radius = ((point.x / aspect).powi(2) + point.y.powi(2) + point.z.powi(2)).sqrt();
-        max_radius = max_radius.max(radius);
         radii.push(radius);
     }
-
-    let max_radius = max_radius.max(f32::EPSILON);
     radii
-        .into_iter()
-        .map(|radius| (radius / max_radius).clamp(0.0, 1.0))
-        .collect()
 }
 
 /// Wraps a float into the `[0, 1)` interval.
@@ -275,9 +277,9 @@ mod tests {
         assert!((node.advance_phase(3.0, 1.0) - 0.25).abs() < 1e-6);
     }
 
-    /// Tests that spatial layouts measure the sphere from the origin instead of matrix center.
+    /// Tests that spatial layouts preserve absolute world distance from the origin.
     #[test]
-    fn spatial_layout_uses_origin_radial_basis() {
+    fn spatial_layout_uses_world_distance_radial_basis() {
         let mut node = CircleSweepNode::default();
         let layout = LedLayout {
             id: "spatial".to_owned(),
@@ -309,5 +311,35 @@ mod tests {
         assert!((node.radial_basis[0] - 0.0).abs() < 1e-6);
         assert!((node.radial_basis[1] - 0.5).abs() < 1e-6);
         assert!((node.radial_basis[2] - 1.0).abs() < 1e-6);
+    }
+
+    /// Tests that spatial radial distances are not normalized per sink layout.
+    #[test]
+    fn spatial_layout_does_not_normalize_to_local_max_radius() {
+        let mut node = CircleSweepNode::default();
+        let layout = LedLayout {
+            id: "spatial".to_owned(),
+            pixel_count: 2,
+            width: Some(2),
+            height: Some(1),
+            points_3d: Some(vec![
+                Vec3 {
+                    x: 2.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                Vec3 {
+                    x: 4.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+            ]),
+        };
+
+        node.ensure_radial_basis(&layout, 1.0);
+
+        assert_eq!(node.radial_basis.len(), 2);
+        assert!((node.radial_basis[0] - 2.0).abs() < 1e-6);
+        assert!((node.radial_basis[1] - 4.0).abs() < 1e-6);
     }
 }

@@ -143,6 +143,8 @@ impl DemoTransport {
                 self.runtime_graph_subscriptions.remove(graph_id.trim());
                 None
             }
+            ClientMessage::SubscribeSinkPreview { .. }
+            | ClientMessage::UnsubscribeSinkPreview { .. } => None,
             ClientMessage::SubscribeGraphDiagnostics { graph_id } => {
                 let graph_id = graph_id.trim().to_owned();
                 self.diagnostics_graph_subscriptions
@@ -669,6 +671,8 @@ impl RuntimeEventPublisher for Mutex<DemoEventCollector> {
                     .collect(),
             });
     }
+
+    fn sink_preview_update(&self, _graph_id: String, _sinks: Vec<shared::SinkPreviewFrame>) {}
 
     fn node_diagnostics(
         &self,

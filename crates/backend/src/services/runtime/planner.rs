@@ -267,6 +267,7 @@ mod tests {
     fn compiled_node(id: &str, node_type: &str, parameters: &[(&str, JsonValue)]) -> CompiledNode {
         CompiledNode {
             id: id.to_owned(),
+            display_name: id.to_owned(),
             node_type: shared::NodeTypeId::new(node_type),
             input_defaults: HashMap::<String, InputValue>::new(),
             parameters: parameters

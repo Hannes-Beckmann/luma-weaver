@@ -18,6 +18,7 @@ pub(crate) struct RoutingContext<'a> {
     pub(crate) client_id: usize,
     pub(crate) subscriptions: &'a mut HashSet<EventSubscription>,
     pub(crate) runtime_graph_subscriptions: &'a mut HashSet<String>,
+    pub(crate) sink_preview_graph_subscriptions: &'a mut HashSet<String>,
     pub(crate) diagnostics_graph_subscriptions: &'a mut HashSet<String>,
     pub(crate) node_diagnostics_subscriptions: &'a mut HashSet<(String, String)>,
 }
@@ -33,6 +34,7 @@ pub(crate) async fn handle_client_message(
     client_id: usize,
     subscriptions: &mut HashSet<EventSubscription>,
     runtime_graph_subscriptions: &mut HashSet<String>,
+    sink_preview_graph_subscriptions: &mut HashSet<String>,
     diagnostics_graph_subscriptions: &mut HashSet<String>,
     node_diagnostics_subscriptions: &mut HashSet<(String, String)>,
     text: &str,
@@ -50,6 +52,7 @@ pub(crate) async fn handle_client_message(
                 client_id,
                 subscriptions,
                 runtime_graph_subscriptions,
+                sink_preview_graph_subscriptions,
                 diagnostics_graph_subscriptions,
                 node_diagnostics_subscriptions,
             };
@@ -79,7 +82,9 @@ pub(crate) async fn handle_client_message(
                 | ClientMessage::StopGraph { .. }
                 | ClientMessage::GetRuntimeStatuses
                 | ClientMessage::SubscribeGraphRuntime { .. }
-                | ClientMessage::UnsubscribeGraphRuntime { .. } => {
+                | ClientMessage::UnsubscribeGraphRuntime { .. }
+                | ClientMessage::SubscribeSinkPreview { .. }
+                | ClientMessage::UnsubscribeSinkPreview { .. } => {
                     runtime::handle(&mut context, client_message).await
                 }
                 ClientMessage::SubscribeGraphDiagnostics { .. }
@@ -136,6 +141,8 @@ fn client_message_kind(message: &ClientMessage) -> &'static str {
         ClientMessage::GetRuntimeStatuses => "get_runtime_statuses",
         ClientMessage::SubscribeGraphRuntime { .. } => "subscribe_graph_runtime",
         ClientMessage::UnsubscribeGraphRuntime { .. } => "unsubscribe_graph_runtime",
+        ClientMessage::SubscribeSinkPreview { .. } => "subscribe_sink_preview",
+        ClientMessage::UnsubscribeSinkPreview { .. } => "unsubscribe_sink_preview",
         ClientMessage::SubscribeGraphDiagnostics { .. } => "subscribe_graph_diagnostics",
         ClientMessage::UnsubscribeGraphDiagnostics { .. } => "unsubscribe_graph_diagnostics",
         ClientMessage::SubscribeNodeDiagnostics { .. } => "subscribe_node_diagnostics",

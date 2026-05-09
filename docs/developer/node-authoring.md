@@ -57,11 +57,16 @@ Review all of these before finishing:
 - node ID stability
 - parameter names and defaults
 - accepted input/output kinds
+- render layout compatibility (`Index1d`, `Matrix2d`, `Spatial3d`) for nodes that produce or consume frames
 - category/menu placement
 - runtime diagnostics
 - persisted graph compatibility
 
 If the node is renamed, removed, or materially reworked, also review unknown-node and graph migration implications.
+
+Frame-producing or frame-consuming nodes must declare the render layout kinds they support in the
+shared node schema. Keep legacy-only nodes on `Index1d`/`Matrix2d`; only add `Spatial3d` when the
+runtime implementation is safe under layouts with explicit 3D points.
 
 Node IDs should use the same category prefix as the add-menu taxonomy and backend module
 layout, for example:
