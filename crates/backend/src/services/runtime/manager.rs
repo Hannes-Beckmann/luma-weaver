@@ -14,7 +14,7 @@ use tokio::time::MissedTickBehavior;
 
 use crate::node_runtime::NodeRegistry;
 use crate::services::graph_store::GraphStore;
-use crate::services::runtime::compiler::compile_graph_document;
+use crate::services::runtime::compiler::{GraphCompileDiagnosticError, compile_graph_document};
 use crate::services::runtime::types::{CompiledGraph, GraphExecutionState, RuntimeEventPublisher};
 
 /// Wraps the latest runtime status snapshot returned by manager control operations.
@@ -112,6 +112,7 @@ impl GraphRuntimeManager {
                         boot_started.push(graph_id.clone());
                     }
                     Err(error) => {
+                        emit_compile_error_diagnostics(&graph_id, &error, self.events.as_ref());
                         tracing::error!(graph_id, %error, "failed to compile graph on boot");
                     }
                 }
@@ -259,7 +260,13 @@ impl GraphRuntimeManager {
             self.node_registry.as_ref(),
             self.events.as_ref(),
         );
-        let compiled = compile_graph_document(document, self.node_registry.clone())?;
+        let compiled = match compile_graph_document(document, self.node_registry.clone()) {
+            Ok(compiled) => compiled,
+            Err(error) => {
+                emit_compile_error_diagnostics(graph_id, &error, self.events.as_ref());
+                return Err(error);
+            }
+        };
         emit_construction_diagnostics(graph_id, &compiled, self.events.as_ref());
         self.spawn_execution_task(graph_id.to_owned(), compiled, initial_mode)
             .await;
@@ -506,6 +513,25 @@ fn emit_construction_diagnostics(
     }
 }
 
+/// Emits structured diagnostics from compile errors that carry node-specific detail.
+fn emit_compile_error_diagnostics(
+    graph_id: &str,
+    error: &anyhow::Error,
+    events: &dyn RuntimeEventPublisher,
+) {
+    let Some(error) = error.downcast_ref::<GraphCompileDiagnosticError>() else {
+        return;
+    };
+
+    for diagnostic in &error.diagnostics {
+        events.node_diagnostics(
+            graph_id.to_owned(),
+            diagnostic.node_id.clone(),
+            vec![diagnostic.diagnostic.clone()],
+        );
+    }
+}
+
 /// Emits startup diagnostics for compile failures that can be traced to specific nodes.
 fn emit_startup_compile_diagnostics(
     document: &GraphDocument,
@@ -582,10 +608,11 @@ fn sorted_statuses(tasks: &HashMap<String, RuntimeTask>) -> Vec<GraphRuntimeStat
 mod tests {
     use std::sync::Mutex as StdMutex;
 
-    use shared::{GraphRuntimeStatus, NodeDiagnostic, NodeRuntimeValue};
+    use shared::{GraphRuntimeStatus, NodeDiagnostic, NodeDiagnosticSeverity, NodeRuntimeValue};
 
-    use super::emit_startup_compile_diagnostics;
+    use super::{emit_compile_error_diagnostics, emit_startup_compile_diagnostics};
     use crate::node_runtime::build_node_registry;
+    use crate::services::runtime::compiler::{CompileNodeDiagnostic, GraphCompileDiagnosticError};
     use crate::services::runtime::types::RuntimeEventPublisher;
 
     #[derive(Default)]
@@ -648,6 +675,32 @@ mod tests {
         assert_eq!(
             diagnostics[0].2[0].code.as_deref(),
             Some("runtime.unknown_node_type")
+        );
+    }
+
+    #[test]
+    fn compile_error_diagnostics_are_published_to_nodes() {
+        let events = RecordingEvents::default();
+        let error = anyhow::Error::new(GraphCompileDiagnosticError {
+            diagnostics: vec![CompileNodeDiagnostic {
+                node_id: "rainbow".to_owned(),
+                diagnostic: NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Error,
+                    code: Some("runtime.render_layout_unsupported".to_owned()),
+                    message: "Node type does not support Spatial3d.".to_owned(),
+                },
+            }],
+        });
+
+        emit_compile_error_diagnostics("graph-a", &error, &events);
+
+        let diagnostics = events.diagnostics.lock().expect("diagnostics lock");
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].0, "graph-a");
+        assert_eq!(diagnostics[0].1, "rainbow");
+        assert_eq!(
+            diagnostics[0].2[0].code.as_deref(),
+            Some("runtime.render_layout_unsupported")
         );
     }
 }

@@ -155,6 +155,7 @@ mod tests {
                         pixel_count: 4,
                         width: Some(2),
                         height: Some(2),
+                        points_3d: None,
                     }),
                     ..context()
                 },

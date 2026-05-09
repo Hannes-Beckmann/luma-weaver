@@ -1,7 +1,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt;
 use std::sync::Arc;
 
-use shared::{GraphDocument, GraphNode, NodeTypeId, OutputInference, infer_graph_output};
+use shared::{
+    GraphDocument, GraphNode, NodeDiagnostic, NodeDiagnosticSeverity, NodeTypeId, OutputInference,
+    infer_graph_output,
+};
 
 use crate::node_runtime::NodeRegistry;
 use crate::services::runtime::planner::plan_render_contexts;
@@ -97,6 +101,8 @@ pub(crate) fn compile_graph_document(
 
     let topological_order = topological_order(&adjacency, &in_degree)?;
     let render_contexts_by_node = plan_render_contexts(&nodes, &incoming_edges_by_node);
+    validate_render_layout_capabilities(&nodes, &render_contexts_by_node, node_registry.as_ref())
+        .map_err(anyhow::Error::new)?;
 
     tracing::debug!(
         graph_id = %document.metadata.id,
@@ -115,6 +121,65 @@ pub(crate) fn compile_graph_document(
         topological_order,
         render_contexts_by_node,
     })
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CompileNodeDiagnostic {
+    pub(crate) node_id: String,
+    pub(crate) diagnostic: NodeDiagnostic,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GraphCompileDiagnosticError {
+    pub(crate) diagnostics: Vec<CompileNodeDiagnostic>,
+}
+
+impl fmt::Display for GraphCompileDiagnosticError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "graph compile failed with {} diagnostic(s)",
+            self.diagnostics.len()
+        )
+    }
+}
+
+impl std::error::Error for GraphCompileDiagnosticError {}
+
+fn validate_render_layout_capabilities(
+    nodes: &[CompiledNode],
+    render_contexts_by_node: &[Vec<crate::services::runtime::types::RenderContext>],
+    node_registry: &NodeRegistry,
+) -> Result<(), GraphCompileDiagnosticError> {
+    let mut diagnostics = Vec::new();
+    for (node_index, contexts) in render_contexts_by_node.iter().enumerate() {
+        let node = &nodes[node_index];
+        let Some(definition) = node_registry.definition(node.node_type.as_str()) else {
+            continue;
+        };
+        for context in contexts {
+            if !definition.supports_render_layout(context.kind) {
+                diagnostics.push(CompileNodeDiagnostic {
+                    node_id: node.id.clone(),
+                    diagnostic: NodeDiagnostic {
+                        severity: NodeDiagnosticSeverity::Error,
+                        code: Some("runtime.render_layout_unsupported".to_owned()),
+                        message: format!(
+                            "Node type '{}' does not support {:?} render layouts required by sink context '{}'.",
+                            node.node_type.as_str(),
+                            context.kind,
+                            context.id
+                        ),
+                    },
+                });
+            }
+        }
+    }
+    if diagnostics.is_empty() {
+        Ok(())
+    } else {
+        Err(GraphCompileDiagnosticError { diagnostics })
+    }
 }
 
 /// Compiles a single persisted graph node into its runtime form.
@@ -226,7 +291,7 @@ fn topological_order(adjacency: &[Vec<usize>], in_degree: &[usize]) -> anyhow::R
 #[cfg(test)]
 mod tests {
     use crate::node_runtime::{NodeEvaluationContext, build_node_registry};
-    use crate::services::runtime::compiler::compile_graph_document;
+    use crate::services::runtime::compiler::{GraphCompileDiagnosticError, compile_graph_document};
     use shared::{
         GraphDocument, GraphMetadata, GraphNode, LedLayout, NodeMetadata, NodeTypeId,
         ParameterDefaultValue, node_definition,
@@ -320,6 +385,7 @@ mod tests {
                 pixel_count: 64,
                 width: Some(8),
                 height: Some(8),
+                points_3d: None,
             }),
         };
         let mut clamp_findings = Vec::new();
@@ -473,6 +539,118 @@ mod tests {
         assert!(
             compiled.incoming_edges_by_node[3].is_empty(),
             "invalid binary select output edge should not be compiled"
+        );
+    }
+
+    #[test]
+    fn spatial_sink_accepts_spatial_capable_branch() {
+        let document: shared::GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "spatial-compatible",
+                "name": "spatial compatible",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "solid",
+                    "metadata": { "name": "solid" },
+                    "node_type": shared::NodeTypeId::SOLID_FRAME
+                },
+                {
+                    "id": "dummy",
+                    "metadata": { "name": "dummy" },
+                    "node_type": shared::NodeTypeId::WLED_DUMMY_DISPLAY,
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 },
+                        { "name": "use_spatial", "value": true }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "solid",
+                    "from_output_name": "frame",
+                    "to_node_id": "dummy",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse spatial compatible graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let compiled = compile_graph_document(document, node_registry).expect("compile graph");
+
+        assert_eq!(
+            compiled.render_contexts_by_node[0][0].kind,
+            shared::RenderLayoutKind::Spatial3d
+        );
+        assert_eq!(
+            compiled.render_contexts_by_node[0][0]
+                .layout
+                .points_3d
+                .as_ref()
+                .map(Vec::len),
+            Some(16)
+        );
+    }
+
+    #[test]
+    fn spatial_sink_rejects_legacy_only_branch() {
+        let document: shared::GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "spatial-incompatible",
+                "name": "spatial incompatible",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "rainbow",
+                    "metadata": { "name": "rainbow" },
+                    "node_type": shared::NodeTypeId::RAINBOW_SWEEP
+                },
+                {
+                    "id": "dummy",
+                    "metadata": { "name": "dummy" },
+                    "node_type": shared::NodeTypeId::WLED_DUMMY_DISPLAY,
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 },
+                        { "name": "use_spatial", "value": true }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "rainbow",
+                    "from_output_name": "frame",
+                    "to_node_id": "dummy",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse spatial incompatible graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let error = match compile_graph_document(document, node_registry) {
+            Ok(_) => panic!("legacy-only branch should not compile under spatial sink"),
+            Err(error) => error,
+        };
+
+        let diagnostic_error = error
+            .downcast_ref::<GraphCompileDiagnosticError>()
+            .expect("structured compile diagnostics");
+        assert_eq!(diagnostic_error.diagnostics.len(), 1);
+        assert_eq!(diagnostic_error.diagnostics[0].node_id, "rainbow");
+        assert_eq!(
+            diagnostic_error.diagnostics[0].diagnostic.code.as_deref(),
+            Some("runtime.render_layout_unsupported")
+        );
+        assert!(
+            diagnostic_error.diagnostics[0]
+                .diagnostic
+                .message
+                .contains("Spatial3d")
         );
     }
 }

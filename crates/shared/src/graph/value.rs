@@ -60,7 +60,7 @@ impl FloatTensor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes a concrete LED layout used for frame-producing nodes and sinks.
 pub struct LedLayout {
     pub id: String,
@@ -69,6 +69,8 @@ pub struct LedLayout {
     pub width: Option<usize>,
     #[serde(default)]
     pub height: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points_3d: Option<Vec<Vec3>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -98,4 +100,12 @@ pub struct RgbaColor {
     pub g: f32,
     pub b: f32,
     pub a: f32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+/// Represents one LED position in a spatial render layout.
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }

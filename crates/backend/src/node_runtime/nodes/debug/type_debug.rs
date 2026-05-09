@@ -121,6 +121,7 @@ mod tests {
                             pixel_count: 6,
                             width: Some(3),
                             height: Some(2),
+                            points_3d: None,
                         },
                         pixels: vec![
                             shared::RgbaColor {

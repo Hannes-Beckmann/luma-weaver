@@ -178,6 +178,7 @@ fn zero_like(value: &InputValue) -> InputValue {
             pixel_count: layout.pixel_count,
             width: layout.width,
             height: layout.height,
+            points_3d: layout.points_3d.clone(),
         }),
         InputValue::ColorFrame(frame) => InputValue::ColorFrame(ColorFrame {
             layout: frame.layout.clone(),
@@ -200,6 +201,7 @@ fn initial_layout(layout: Option<&LedLayout>) -> LedLayout {
         pixel_count: 0,
         width: None,
         height: None,
+        points_3d: None,
     })
 }
 
@@ -245,6 +247,7 @@ mod tests {
             pixel_count: 2,
             width: None,
             height: None,
+            points_3d: None,
         };
         let input = InputValue::ColorFrame(shared::ColorFrame {
             layout: layout.clone(),
@@ -292,6 +295,7 @@ mod tests {
             pixel_count: 6,
             width: Some(3),
             height: Some(2),
+            points_3d: None,
         }));
 
         assert_eq!(
@@ -310,6 +314,7 @@ mod tests {
             pixel_count: 4,
             width: None,
             height: None,
+            points_3d: None,
         }));
 
         assert_eq!(
@@ -320,6 +325,7 @@ mod tests {
                     pixel_count: 4,
                     width: None,
                     height: None,
+                    points_3d: None,
                 },
                 pixels: vec![
                     RgbaColor {

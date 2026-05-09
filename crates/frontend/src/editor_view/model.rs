@@ -344,6 +344,7 @@ pub(super) fn default_input_value(kind: ValueKind) -> InputValue {
             pixel_count: 60,
             width: None,
             height: None,
+            points_3d: None,
         }),
         ValueKind::ColorFrame => InputValue::ColorFrame(shared::ColorFrame {
             layout: shared::LedLayout {
@@ -351,6 +352,7 @@ pub(super) fn default_input_value(kind: ValueKind) -> InputValue {
                 pixel_count: 0,
                 width: None,
                 height: None,
+                points_3d: None,
             },
             pixels: Vec::new(),
         }),
@@ -406,7 +408,10 @@ pub(super) fn visible_parameter_definitions<'a>(
     definition
         .parameters
         .iter()
-        .filter(|parameter_definition| parameter_definition.is_visible(parameters))
+        .filter(|parameter_definition| {
+            parameter_definition.ui_hint != shared::ParameterUiHint::Hidden
+                && parameter_definition.is_visible(parameters)
+        })
         .collect()
 }
 
@@ -766,6 +771,10 @@ mod tests {
             display_name: "Test Visibility".to_owned(),
             category: NodeCategory::Debug,
             needs_io: false,
+            render_layouts: vec![
+                shared::RenderLayoutKind::Index1d,
+                shared::RenderLayoutKind::Matrix2d,
+            ],
             inputs: vec![],
             outputs: vec![],
             parameters: vec![

@@ -384,6 +384,7 @@ impl BinaryRuntimeFrameMessage {
                 } else {
                     Some(height as usize)
                 },
+                points_3d: None,
             },
             rgba,
         })
@@ -467,6 +468,7 @@ mod tests {
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
+                points_3d: None,
             },
             rgba: vec![255, 128, 0, 255, 0, 64, 255, 128],
         };
@@ -488,6 +490,7 @@ mod tests {
                 pixel_count: 1,
                 width: Some(1),
                 height: Some(1),
+                points_3d: None,
             },
             rgba: vec![255, 128, 0, 255],
         };

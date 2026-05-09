@@ -95,6 +95,7 @@ mod tests {
             pixel_count,
             width: Some(width),
             height: Some(height),
+            points_3d: None,
         };
 
         let foreground = shared::ColorFrame {

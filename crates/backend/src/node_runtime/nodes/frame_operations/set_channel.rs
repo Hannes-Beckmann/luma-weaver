@@ -193,6 +193,7 @@ mod tests {
             pixel_count: 2,
             width: Some(2),
             height: Some(1),
+            points_3d: None,
         };
         let evaluation = node
             .evaluate(
@@ -261,6 +262,7 @@ mod tests {
                             pixel_count: 1,
                             width: Some(1),
                             height: Some(1),
+                            points_3d: None,
                         },
                         pixels: vec![RgbaColor {
                             r: 1.0,

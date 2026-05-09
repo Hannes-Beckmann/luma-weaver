@@ -18,6 +18,7 @@ pub mod messaging;
 pub mod node_runtime;
 mod platform_time;
 pub mod services;
+pub(crate) mod spatial_layout;
 
 #[cfg(not(target_arch = "wasm32"))]
 use api::http::{frontend_dist_dir, router};

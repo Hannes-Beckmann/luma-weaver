@@ -1,6 +1,6 @@
 use anyhow::Result;
 use shared::{
-    ColorFrame, ColorGradient, LedLayout, NodeDiagnostic, NodeDiagnosticSeverity, RgbaColor,
+    ColorFrame, ColorGradient, LedLayout, NodeDiagnostic, NodeDiagnosticSeverity, RgbaColor, Vec3,
 };
 
 use crate::color_math::sample_gradient_hsv;
@@ -15,11 +15,12 @@ pub(crate) struct CircleSweepNode {
     gradient: ColorGradient,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, PartialEq)]
 struct CachedLayout {
     pixel_count: usize,
     width: Option<usize>,
     height: Option<usize>,
+    points_3d: Option<Vec<Vec3>>,
 }
 
 impl Default for CircleSweepNode {
@@ -78,6 +79,7 @@ impl RuntimeNode for CircleSweepNode {
                             pixel_count: 0,
                             width: None,
                             height: None,
+                            points_3d: None,
                         },
                         pixels: Vec::new(),
                     },
@@ -155,25 +157,35 @@ impl CircleSweepNode {
             pixel_count: layout.pixel_count,
             width: layout.width,
             height: layout.height,
+            points_3d: layout.points_3d.clone(),
         };
-        if self.cached_layout == Some(cached_layout) && self.cached_aspect == aspect {
+        if self.cached_layout.as_ref() == Some(&cached_layout) && self.cached_aspect == aspect {
             return;
         }
 
         self.radial_basis.clear();
         self.radial_basis.reserve(layout.pixel_count);
-        let (width, height) = layout_dims(layout);
-        let center_x = (width.saturating_sub(1)) as f32 * 0.5;
-        let center_y = (height.saturating_sub(1)) as f32 * 0.5;
-        let max_radius = ((center_x / aspect).powi(2) + center_y.powi(2))
-            .sqrt()
-            .max(f32::EPSILON);
-        for i in 0..layout.pixel_count {
-            let (x, y) = pixel_xy(i, layout, width);
-            let dx = (x - center_x) / aspect;
-            let dy = y - center_y;
-            self.radial_basis
-                .push(((dx * dx + dy * dy).sqrt() / max_radius).clamp(0.0, 1.0));
+
+        if let Some(points) = layout
+            .points_3d
+            .as_ref()
+            .filter(|points| points.len() >= layout.pixel_count)
+        {
+            self.radial_basis = spatial_radial_basis(points, layout.pixel_count, aspect);
+        } else {
+            let (width, height) = layout_dims(layout);
+            let center_x = (width.saturating_sub(1)) as f32 * 0.5;
+            let center_y = (height.saturating_sub(1)) as f32 * 0.5;
+            let max_radius = ((center_x / aspect).powi(2) + center_y.powi(2))
+                .sqrt()
+                .max(f32::EPSILON);
+            for i in 0..layout.pixel_count {
+                let (x, y) = pixel_xy(i, layout, width);
+                let dx = (x - center_x) / aspect;
+                let dy = y - center_y;
+                self.radial_basis
+                    .push(((dx * dx + dy * dy).sqrt() / max_radius).clamp(0.0, 1.0));
+            }
         }
         self.cached_layout = Some(cached_layout);
         self.cached_aspect = aspect;
@@ -223,8 +235,79 @@ fn pixel_xy(index: usize, layout: &LedLayout, width: usize) -> (f32, f32) {
     (index.min(width.saturating_sub(1)) as f32, 0.0)
 }
 
+/// Computes normalized radial distances from the spatial origin in 3D space.
+fn spatial_radial_basis(points: &[Vec3], pixel_count: usize, aspect: f32) -> Vec<f32> {
+    let mut radii = Vec::with_capacity(pixel_count);
+    let mut max_radius = 0.0_f32;
+    for point in points.iter().take(pixel_count) {
+        let radius = ((point.x / aspect).powi(2) + point.y.powi(2) + point.z.powi(2)).sqrt();
+        max_radius = max_radius.max(radius);
+        radii.push(radius);
+    }
+
+    let max_radius = max_radius.max(f32::EPSILON);
+    radii
+        .into_iter()
+        .map(|radius| (radius / max_radius).clamp(0.0, 1.0))
+        .collect()
+}
+
 /// Wraps a float into the `[0, 1)` interval.
 fn fract01(v: f32) -> f32 {
     let f = v.fract();
     if f < 0.0 { f + 1.0 } else { f }
+}
+
+#[cfg(test)]
+mod tests {
+    use shared::{LedLayout, Vec3};
+
+    use super::CircleSweepNode;
+
+    /// Tests that the circle-sweep phase accumulates elapsed time scaled by speed.
+    #[test]
+    fn phase_integrates_speed_over_time() {
+        let mut node = CircleSweepNode::default();
+
+        assert_eq!(node.advance_phase(0.0, 0.25), 0.0);
+        assert!((node.advance_phase(1.0, 0.25) - 0.25).abs() < 1e-6);
+        assert!((node.advance_phase(2.0, 1.0) - 0.25).abs() < 1e-6);
+        assert!((node.advance_phase(3.0, 1.0) - 0.25).abs() < 1e-6);
+    }
+
+    /// Tests that spatial layouts measure the sphere from the origin instead of matrix center.
+    #[test]
+    fn spatial_layout_uses_origin_radial_basis() {
+        let mut node = CircleSweepNode::default();
+        let layout = LedLayout {
+            id: "spatial".to_owned(),
+            pixel_count: 3,
+            width: Some(3),
+            height: Some(1),
+            points_3d: Some(vec![
+                Vec3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                Vec3 {
+                    x: 0.5,
+                    y: 0.0,
+                    z: 0.0,
+                },
+                Vec3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 1.0,
+                },
+            ]),
+        };
+
+        node.ensure_radial_basis(&layout, 1.0);
+
+        assert_eq!(node.radial_basis.len(), 3);
+        assert!((node.radial_basis[0] - 0.0).abs() < 1e-6);
+        assert!((node.radial_basis[1] - 0.5).abs() < 1e-6);
+        assert!((node.radial_basis[2] - 1.0).abs() < 1e-6);
+    }
 }

@@ -406,6 +406,7 @@ mod tests {
             pixel_count: 1,
             width: Some(1),
             height: Some(1),
+            points_3d: None,
         };
 
         node.evaluate(

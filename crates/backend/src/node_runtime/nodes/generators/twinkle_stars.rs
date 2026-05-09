@@ -67,6 +67,7 @@ impl RuntimeNode for TwinkleStarsNode {
                             pixel_count: 0,
                             width: None,
                             height: None,
+                            points_3d: None,
                         },
                         pixels: Vec::new(),
                     },

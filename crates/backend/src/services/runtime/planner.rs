@@ -1,8 +1,9 @@
 use std::collections::VecDeque;
 
-use shared::{LedLayout, NodeTypeId};
+use shared::{LedLayout, NodeTypeId, RenderLayoutKind};
 
 use crate::services::runtime::types::{CompiledIncomingEdge, CompiledNode, RenderContext};
+use crate::spatial_layout::{SpatialPlacement, matrix_points, strip_points};
 
 /// Plans the render contexts that each compiled node should evaluate in.
 ///
@@ -184,6 +185,8 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 .and_then(|value| value.as_u64())
                 .unwrap_or(60)
                 .max(1) as usize;
+            let use_spatial = bool_parameter(node, "use_spatial");
+            let placement = SpatialPlacement::from_parameters(&node.parameters);
             let id = if target.is_empty() {
                 format!("sink:wled:{}", node.id)
             } else {
@@ -194,8 +197,14 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 layout: LedLayout {
                     id,
                     pixel_count: led_count,
-                    width: None,
-                    height: None,
+                    width: Some(led_count),
+                    height: Some(1),
+                    points_3d: use_spatial.then(|| strip_points(led_count, placement)),
+                },
+                kind: if use_spatial {
+                    RenderLayoutKind::Spatial3d
+                } else {
+                    RenderLayoutKind::Index1d
                 },
             })
         }
@@ -212,6 +221,8 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 .and_then(|value| value.as_u64())
                 .unwrap_or(8)
                 .max(1) as usize;
+            let use_spatial = bool_parameter(node, "use_spatial");
+            let placement = SpatialPlacement::from_parameters(&node.parameters);
             let id = format!("sink:dummy:{}", node.id);
             Some(RenderContext {
                 id: id.clone(),
@@ -220,11 +231,26 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                     pixel_count: width * height,
                     width: Some(width),
                     height: Some(height),
+                    points_3d: use_spatial.then(|| matrix_points(width, height, placement)),
+                },
+                kind: if use_spatial {
+                    RenderLayoutKind::Spatial3d
+                } else if width > 1 && height > 1 {
+                    RenderLayoutKind::Matrix2d
+                } else {
+                    RenderLayoutKind::Index1d
                 },
             })
         }
         _ => None,
     }
+}
+
+fn bool_parameter(node: &CompiledNode, name: &str) -> bool {
+    node.parameters
+        .get(name)
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
 }
 
 #[cfg(test)]

@@ -404,6 +404,7 @@ fn normalize_frame(
         pixel_count: pixels.len(),
         width: None,
         height: None,
+        points_3d: None,
     });
 
     let mut frame_pixels = pixels.to_vec();
@@ -508,6 +509,7 @@ mod tests {
                 pixel_count: 2,
                 width: None,
                 height: None,
+                points_3d: None,
             }),
             ddp::DDP_PORT,
         );
@@ -520,6 +522,7 @@ mod tests {
                 pixel_count: 3,
                 width: None,
                 height: None,
+                points_3d: None,
             }),
             ddp::DDP_PORT,
         );

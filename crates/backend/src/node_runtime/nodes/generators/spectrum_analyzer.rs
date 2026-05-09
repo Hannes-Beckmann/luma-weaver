@@ -80,6 +80,7 @@ impl RuntimeNode for SpectrumAnalyzerNode {
             pixel_count: inputs.spectrum.values.len().max(1),
             width: Some(inputs.spectrum.values.len().max(1)),
             height: Some(1),
+            points_3d: None,
         });
 
         let levels = self.display_levels(&inputs.spectrum.values, context.elapsed_seconds);
@@ -267,6 +268,7 @@ mod tests {
             pixel_count: 4,
             width: None,
             height: None,
+            points_3d: None,
         };
         let frame = render_spectrum_frame(
             &layout,

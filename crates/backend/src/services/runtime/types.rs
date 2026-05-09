@@ -4,6 +4,7 @@ use std::sync::Arc;
 use serde_json::Value as JsonValue;
 use shared::{
     GraphRuntimeStatus, InputValue, LedLayout, NodeDiagnostic, NodeRuntimeValue, NodeTypeId,
+    RenderLayoutKind,
 };
 
 use crate::node_runtime::NodeRegistry;
@@ -64,4 +65,5 @@ pub(crate) struct CompiledIncomingEdge {
 pub(crate) struct RenderContext {
     pub(crate) id: String,
     pub(crate) layout: LedLayout,
+    pub(crate) kind: RenderLayoutKind,
 }

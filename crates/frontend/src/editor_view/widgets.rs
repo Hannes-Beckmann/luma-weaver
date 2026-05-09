@@ -395,6 +395,14 @@ pub(super) fn edit_parameter_value(
     wled_instances: &[WledInstance],
     mqtt_broker_configs: &[MqttBrokerConfig],
 ) -> bool {
+    if matches!(ui_hint, ParameterUiHint::Hidden) {
+        return false;
+    }
+    if matches!(ui_hint, ParameterUiHint::SpatialLayoutSetup) {
+        edit_spatial_layout_setup(ui, parameters, name);
+        return false;
+    }
+
     let value = parameter_value_mut(parameters, name, default_value);
     match ui_hint {
         ParameterUiHint::DragFloat { speed, min, max } => {
@@ -485,6 +493,7 @@ pub(super) fn edit_parameter_value(
             });
             requested_upload
         }
+        ParameterUiHint::Hidden | ParameterUiHint::SpatialLayoutSetup => false,
         ParameterUiHint::EnumSelect { options } => {
             let mut selected = value.as_str().unwrap_or("").to_owned();
             let selected_label = options
@@ -627,6 +636,68 @@ fn shorten_asset_id(asset_id: &str) -> String {
     } else {
         format!("{}...", &asset_id[..12])
     }
+}
+
+fn edit_spatial_layout_setup(ui: &mut egui::Ui, parameters: &mut Vec<NodeParameter>, name: &str) {
+    let window_id = ui.id().with(("spatial_layout_setup", name));
+    let mut open = ui
+        .memory(|memory| memory.data.get_temp::<bool>(window_id))
+        .unwrap_or(false);
+
+    if ui.button("Setup Layout").clicked() {
+        open = true;
+    }
+
+    if open {
+        egui::Window::new("Spatial Layout")
+            .id(window_id)
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut open)
+            .show(ui.ctx(), |ui| {
+                egui::Grid::new(ui.id().with("spatial_layout_grid"))
+                    .num_columns(2)
+                    .spacing([12.0, 6.0])
+                    .show(ui, |ui| {
+                        spatial_float_row(ui, parameters, "Origin X", "layout_origin_x", 0.0, 0.1);
+                        spatial_float_row(ui, parameters, "Origin Y", "layout_origin_y", 0.0, 0.1);
+                        spatial_float_row(ui, parameters, "Origin Z", "layout_origin_z", 0.0, 0.1);
+                        spatial_float_row(ui, parameters, "Roll", "layout_rotation_roll", 0.0, 1.0);
+                        spatial_float_row(
+                            ui,
+                            parameters,
+                            "Pitch",
+                            "layout_rotation_pitch",
+                            0.0,
+                            1.0,
+                        );
+                        spatial_float_row(ui, parameters, "Yaw", "layout_rotation_yaw", 0.0, 1.0);
+                        spatial_float_row(ui, parameters, "Spacing", "layout_spacing", 1.0, 0.1);
+                    });
+            });
+    }
+
+    ui.memory_mut(|memory| memory.data.insert_temp(window_id, open));
+}
+
+fn spatial_float_row(
+    ui: &mut egui::Ui,
+    parameters: &mut Vec<NodeParameter>,
+    label: &str,
+    name: &str,
+    default_value: f64,
+    speed: f64,
+) {
+    ui.label(label);
+    let value = parameter_value_mut(parameters, name, JsonValue::from(default_value));
+    let mut float_value = value.as_f64().unwrap_or(default_value);
+    if ui
+        .add(egui::DragValue::new(&mut float_value).speed(speed))
+        .changed()
+    {
+        *value = JsonValue::from(float_value);
+    }
+    ui.end_row();
 }
 
 /// Formats the visible dimensions of a frame layout for display.
@@ -1014,6 +1085,7 @@ mod tests {
                 pixel_count: 153,
                 width: Some(1),
                 height: Some(153),
+                points_3d: None,
             },
             pixels: vec![
                 RgbaColor {
@@ -1037,6 +1109,7 @@ mod tests {
                 pixel_count: 12,
                 width: Some(4),
                 height: Some(3),
+                points_3d: None,
             },
             pixels: vec![
                 RgbaColor {

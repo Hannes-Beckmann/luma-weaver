@@ -126,6 +126,15 @@ pub enum NodeExecutionTarget {
     FrontendDemo,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+/// Declares the render-layout families a node can evaluate under.
+pub enum RenderLayoutKind {
+    Index1d,
+    Matrix2d,
+    Spatial3d,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes the shared schema for a single node type.
 ///
@@ -137,6 +146,7 @@ pub struct NodeSchema {
     pub category: NodeCategory,
     #[serde(default)]
     pub needs_io: bool,
+    pub render_layouts: Vec<RenderLayoutKind>,
     pub inputs: Vec<NodeInputDefinition>,
     pub outputs: Vec<NodeOutputDefinition>,
     pub parameters: Vec<NodeParameterDefinition>,
@@ -190,6 +200,11 @@ impl NodeSchema {
             NodeExecutionTarget::Backend => true,
             NodeExecutionTarget::FrontendDemo => !self.needs_io,
         }
+    }
+
+    /// Returns whether this node can evaluate under the requested render layout kind.
+    pub fn supports_render_layout(&self, kind: RenderLayoutKind) -> bool {
+        self.render_layouts.contains(&kind)
     }
 
     /// Returns the named input port definition, if present.
@@ -463,6 +478,8 @@ pub enum ParameterUiHint {
     Checkbox,
     TextSingleLine,
     ImageAssetUpload,
+    Hidden,
+    SpatialLayoutSetup,
     EnumSelect { options: Vec<EnumOption> },
     IntegerDrag { speed: f64, min: i64, max: i64 },
     WledInstanceOrHost,
@@ -615,6 +632,7 @@ mod tests {
             display_name: "Test IO".to_owned(),
             category: NodeCategory::Inputs,
             needs_io: true,
+            render_layouts: vec![RenderLayoutKind::Index1d, RenderLayoutKind::Matrix2d],
             inputs: vec![],
             outputs: vec![],
             parameters: vec![],
@@ -629,6 +647,7 @@ mod tests {
             display_name: "Test Portable".to_owned(),
             category: NodeCategory::Inputs,
             needs_io: false,
+            render_layouts: vec![RenderLayoutKind::Index1d, RenderLayoutKind::Matrix2d],
             inputs: vec![],
             outputs: vec![],
             parameters: vec![],
@@ -642,6 +661,28 @@ mod tests {
         assert!(backend_only.supports_execution_target(NodeExecutionTarget::Backend));
         assert!(!backend_only.supports_execution_target(NodeExecutionTarget::FrontendDemo));
         assert!(portable.supports_execution_target(NodeExecutionTarget::FrontendDemo));
+    }
+
+    #[test]
+    fn supports_render_layout_uses_declared_capabilities() {
+        let definition = NodeSchema {
+            id: "test.render".to_owned(),
+            display_name: "Test Render".to_owned(),
+            category: NodeCategory::Debug,
+            needs_io: false,
+            render_layouts: vec![RenderLayoutKind::Spatial3d],
+            inputs: vec![],
+            outputs: vec![],
+            parameters: vec![],
+            connection: NodeConnectionDefinition {
+                max_input_connections: 1,
+                require_value_kind_match: true,
+            },
+            runtime_updates: None,
+        };
+
+        assert!(definition.supports_render_layout(RenderLayoutKind::Spatial3d));
+        assert!(!definition.supports_render_layout(RenderLayoutKind::Matrix2d));
     }
 
     #[test]

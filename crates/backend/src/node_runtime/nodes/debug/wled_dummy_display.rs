@@ -2,19 +2,52 @@ use anyhow::Result;
 use shared::{ColorFrame, InputValue, LedLayout, RgbaColor};
 
 use crate::node_runtime::{
-    AnyInputValue, NodeEvaluationContext, NodeFrontendUpdate, RuntimeNode, TypedNodeEvaluation,
+    AnyInputValue, NodeEvaluationContext, NodeFrontendUpdate, RuntimeNode,
+    RuntimeNodeFromParameters, TypedNodeEvaluation,
 };
+use crate::spatial_layout::{SpatialPlacement, matrix_points};
 
 #[derive(Default)]
 pub(crate) struct WledDummyDisplayNode {
     width: usize,
     height: usize,
+    use_spatial: bool,
+    placement: SpatialPlacement,
 }
 
-crate::node_runtime::impl_runtime_parameters!(WledDummyDisplayNode {
+#[derive(Default)]
+struct WledDummyDisplayParameters {
+    width: usize,
+    height: usize,
+    use_spatial: bool,
+}
+
+crate::node_runtime::impl_runtime_parameters!(WledDummyDisplayParameters {
     width: u64 => |value| crate::node_runtime::max_u64_to_usize(value, 1), default 8usize,
     height: u64 => |value| crate::node_runtime::max_u64_to_usize(value, 1), default 8usize,
+    use_spatial: bool = false,
 });
+
+impl RuntimeNodeFromParameters for WledDummyDisplayNode {
+    fn from_parameters(
+        parameters: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> crate::node_runtime::NodeConstruction<Self> {
+        let crate::node_runtime::NodeConstruction {
+            node: config,
+            diagnostics,
+        } = WledDummyDisplayParameters::from_parameters(parameters);
+
+        crate::node_runtime::NodeConstruction {
+            node: Self {
+                width: config.width,
+                height: config.height,
+                use_spatial: config.use_spatial,
+                placement: SpatialPlacement::from_parameters(parameters),
+            },
+            diagnostics,
+        }
+    }
+}
 
 pub(crate) struct WledDummyDisplayInputs {
     value: Option<AnyInputValue>,
@@ -41,6 +74,9 @@ impl RuntimeNode for WledDummyDisplayNode {
             pixel_count,
             width: Some(self.width),
             height: Some(self.height),
+            points_3d: self
+                .use_spatial
+                .then(|| matrix_points(self.width, self.height, self.placement)),
         });
 
         let frame = if is_disabled(inputs.disable) {
@@ -109,6 +145,7 @@ mod tests {
 
     use super::{WledDummyDisplayInputs, WledDummyDisplayNode, is_disabled};
     use crate::node_runtime::{AnyInputValue, NodeEvaluationContext, RuntimeNode};
+    use crate::spatial_layout::SpatialPlacement;
 
     fn evaluation_context() -> NodeEvaluationContext {
         NodeEvaluationContext {
@@ -131,6 +168,8 @@ mod tests {
         let mut node = WledDummyDisplayNode {
             width: 8,
             height: 8,
+            use_spatial: false,
+            placement: SpatialPlacement::default(),
         };
         let evaluation = node
             .evaluate(

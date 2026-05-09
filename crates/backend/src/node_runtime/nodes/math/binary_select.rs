@@ -162,6 +162,7 @@ mod tests {
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
+                points_3d: None,
             },
             pixels: vec![
                 RgbaColor {
@@ -184,6 +185,7 @@ mod tests {
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
+                points_3d: None,
             },
             pixels: vec![
                 RgbaColor {

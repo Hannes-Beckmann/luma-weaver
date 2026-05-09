@@ -231,6 +231,7 @@ mod tests {
                     pixel_count: 1,
                     width: Some(1),
                     height: Some(1),
+                    points_3d: None,
                 },
                 pixels: vec![crate::RgbaColor {
                     r: 1.0,
@@ -325,6 +326,7 @@ mod tests {
                     pixel_count: 1,
                     width: Some(1),
                     height: Some(1),
+                    points_3d: None,
                 },
                 pixels: vec![crate::RgbaColor {
                     r: 1.0,

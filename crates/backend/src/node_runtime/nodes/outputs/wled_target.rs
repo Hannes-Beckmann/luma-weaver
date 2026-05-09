@@ -10,11 +10,14 @@ use crate::node_runtime::{
     TypedNodeEvaluation,
 };
 use crate::services::wled::ddp;
+use crate::spatial_layout::{SpatialPlacement, strip_points};
 
 #[derive(Default)]
 pub(crate) struct WledTargetNode {
     led_count: usize,
     target: String,
+    use_spatial: bool,
+    placement: SpatialPlacement,
     transport: Option<WledDdpTransport>,
 }
 
@@ -22,20 +25,24 @@ pub(crate) struct WledTargetNode {
 struct WledTargetParameters {
     led_count: usize,
     target: String,
+    use_spatial: bool,
 }
 
 crate::node_runtime::impl_runtime_parameters!(WledTargetParameters {
     led_count: u64 => |value| crate::node_runtime::max_u64_to_usize(value, 1), default 60usize,
     target: String = String::new(),
+    use_spatial: bool = false,
 });
 
 impl WledTargetNode {
     /// Creates a WLED target node from parsed parameters and eagerly resolves the destination.
-    fn from_config(config: WledTargetParameters) -> Self {
+    fn from_config(config: WledTargetParameters, placement: SpatialPlacement) -> Self {
         let transport = WledDdpTransport::new(&config.target).ok();
         Self {
             led_count: config.led_count,
             target: config.target,
+            use_spatial: config.use_spatial,
+            placement,
             transport,
         }
     }
@@ -50,7 +57,10 @@ impl RuntimeNodeFromParameters for WledTargetNode {
             diagnostics,
         } = WledTargetParameters::from_parameters(parameters);
         crate::node_runtime::NodeConstruction {
-            node: WledTargetNode::from_config(config),
+            node: WledTargetNode::from_config(
+                config,
+                SpatialPlacement::from_parameters(parameters),
+            ),
             diagnostics,
         }
     }
@@ -81,8 +91,11 @@ impl RuntimeNode for WledTargetNode {
         let layout = context.render_layout.clone().unwrap_or(LedLayout {
             id: "wled_target".to_owned(),
             pixel_count: self.led_count,
-            width: None,
-            height: None,
+            width: Some(self.led_count),
+            height: Some(1),
+            points_3d: self
+                .use_spatial
+                .then(|| strip_points(self.led_count, self.placement)),
         });
 
         let frame_for_transport = match inputs.value.map(|value| value.0) {

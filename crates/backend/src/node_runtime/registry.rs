@@ -432,6 +432,10 @@ mod tests {
                 display_name: "Custom Test".to_owned(),
                 category: NodeCategory::Debug,
                 needs_io: false,
+                render_layouts: vec![
+                    shared::RenderLayoutKind::Index1d,
+                    shared::RenderLayoutKind::Matrix2d,
+                ],
                 inputs: Vec::new(),
                 outputs: vec![shared::NodeOutputDefinition {
                     name: "value".to_owned(),

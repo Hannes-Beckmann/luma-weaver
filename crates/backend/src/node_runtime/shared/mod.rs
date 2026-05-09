@@ -163,6 +163,7 @@ mod tests {
                 pixel_count: 0,
                 width: None,
                 height: None,
+                points_3d: None,
             },
             pixels: Vec::new(),
         });
@@ -197,6 +198,7 @@ mod tests {
                     pixel_count: 64,
                     width: Some(8),
                     height: Some(8),
+                    points_3d: None,
                 },
                 pixels: vec![
                     RgbaColor {

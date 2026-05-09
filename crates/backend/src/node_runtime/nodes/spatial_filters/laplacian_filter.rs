@@ -252,6 +252,7 @@ mod tests {
             pixel_count: width * height,
             width: Some(width),
             height: Some(height),
+            points_3d: None,
         }
     }
 

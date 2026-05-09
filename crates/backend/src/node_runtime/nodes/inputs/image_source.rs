@@ -267,6 +267,7 @@ fn target_layout(layout_hint: Option<LedLayout>, source: &DecodedSource) -> LedL
             pixel_count: source_image.width() as usize * source_image.height() as usize,
             width: Some(source_image.width() as usize),
             height: Some(source_image.height() as usize),
+            points_3d: None,
         },
         DecodedSource::Svg(tree) => {
             let size = tree.size().to_int_size();
@@ -275,6 +276,7 @@ fn target_layout(layout_hint: Option<LedLayout>, source: &DecodedSource) -> LedL
                 pixel_count: size.width() as usize * size.height() as usize,
                 width: Some(size.width() as usize),
                 height: Some(size.height() as usize),
+                points_3d: None,
             }
         }
     })
@@ -286,6 +288,7 @@ fn transparent_frame(layout_hint: Option<&LedLayout>) -> ColorFrame {
         pixel_count: 0,
         width: None,
         height: None,
+        points_3d: None,
     });
     ColorFrame {
         pixels: vec![transparent_black(); layout.pixel_count],
@@ -511,6 +514,7 @@ mod tests {
                 pixel_count: 4,
                 width: Some(2),
                 height: Some(2),
+                points_3d: None,
             },
             ImageFitMode::Contain,
         );
@@ -576,6 +580,7 @@ mod tests {
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
+                points_3d: None,
             },
             ImageFitMode::Stretch,
         )

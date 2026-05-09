@@ -5,10 +5,10 @@ use egui_snarl::ui::{
     NodeLayout, PinInfo, PinPlacement, SelectionStyle, SnarlPin, SnarlStyle, SnarlViewer,
     get_selected_nodes,
 };
-use egui_snarl::{InPin, NodeId, OutPin, Snarl};
+use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use shared::{
     GraphDocument, MqttBrokerConfig, NodeCategory, NodeDiagnosticSeverity, NodeDiagnosticSummary,
-    NodeSchema, NodeTypeId, OutputInference, ValueKind, WledInstance,
+    NodeSchema, NodeTypeId, OutputInference, RenderLayoutKind, ValueKind, WledInstance,
 };
 
 use super::EditorSnarlNode;
@@ -215,12 +215,14 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
             return;
         };
 
+        let max_input_connections = to_definition.connection.max_input_connections;
+        if max_input_connections == 0 {
+            return;
+        }
         if self.connection_kind_mismatch(from_kind, from_port_definition, to_port_definition) {
             return;
         }
-
-        let max_input_connections = to_definition.connection.max_input_connections;
-        if max_input_connections == 0 {
+        if self.connection_render_layout_mismatch(from.id, to.id, max_input_connections, snarl) {
             return;
         }
         if max_input_connections == 1 {
@@ -403,6 +405,103 @@ impl GraphSnarlViewer {
         }
         false
     }
+
+    fn connection_render_layout_mismatch(
+        &self,
+        candidate_from: OutPinId,
+        candidate_to: InPinId,
+        max_input_connections: usize,
+        snarl: &Snarl<EditorSnarlNode>,
+    ) -> bool {
+        let mut wires = snarl.wires().collect::<Vec<_>>();
+        if max_input_connections == 1 {
+            wires.retain(|(_, in_pin)| *in_pin != candidate_to);
+        }
+        wires.push((candidate_from, candidate_to));
+
+        render_layout_requirements_are_invalid(snarl, &wires, &self.available_node_definitions)
+    }
+}
+
+fn render_layout_requirements_are_invalid(
+    snarl: &Snarl<EditorSnarlNode>,
+    wires: &[(OutPinId, InPinId)],
+    available_node_definitions: &[NodeSchema],
+) -> bool {
+    let mut queue = std::collections::VecDeque::<(NodeId, RenderLayoutKind)>::new();
+    let mut visited = std::collections::HashSet::<(NodeId, RenderLayoutKind)>::new();
+
+    for (node_id, node) in snarl.nodes_ids_data() {
+        if let Some(kind) = sink_render_layout_kind(&node.value) {
+            queue.push_back((node_id, kind));
+        }
+    }
+
+    while let Some((node_id, kind)) = queue.pop_front() {
+        if !visited.insert((node_id, kind)) {
+            continue;
+        }
+        let Some(node) = snarl.get_node(node_id) else {
+            continue;
+        };
+        let Some(definition) = find_node_definition(available_node_definitions, &node.node_type_id)
+        else {
+            continue;
+        };
+        if !definition.supports_render_layout(kind) {
+            return true;
+        }
+
+        for (out_pin, in_pin) in wires {
+            if in_pin.node == node_id {
+                queue.push_back((out_pin.node, kind));
+            }
+        }
+    }
+
+    false
+}
+
+fn sink_render_layout_kind(node: &EditorSnarlNode) -> Option<RenderLayoutKind> {
+    match node.node_type_id.as_str() {
+        NodeTypeId::WLED_TARGET => {
+            if bool_parameter(&node.parameters, "use_spatial") {
+                Some(RenderLayoutKind::Spatial3d)
+            } else {
+                Some(RenderLayoutKind::Index1d)
+            }
+        }
+        NodeTypeId::WLED_DUMMY_DISPLAY => {
+            if bool_parameter(&node.parameters, "use_spatial") {
+                Some(RenderLayoutKind::Spatial3d)
+            } else {
+                let width = integer_parameter(&node.parameters, "width").unwrap_or(8);
+                let height = integer_parameter(&node.parameters, "height").unwrap_or(8);
+                if width > 1 && height > 1 {
+                    Some(RenderLayoutKind::Matrix2d)
+                } else {
+                    Some(RenderLayoutKind::Index1d)
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
+fn bool_parameter(parameters: &[shared::NodeParameter], name: &str) -> bool {
+    parameters
+        .iter()
+        .find(|parameter| parameter.name == name)
+        .and_then(|parameter| parameter.value.as_bool())
+        .unwrap_or(false)
+}
+
+fn integer_parameter(parameters: &[shared::NodeParameter], name: &str) -> Option<usize> {
+    parameters
+        .iter()
+        .find(|parameter| parameter.name == name)
+        .and_then(|parameter| parameter.value.as_u64())
+        .map(|value| value as usize)
 }
 
 fn infer_node_output(
@@ -863,7 +962,8 @@ mod tests {
     use egui_snarl::Snarl;
 
     use super::{
-        infer_node_output, infer_node_output_kind, node_menu_categories, propagate_inferred_outputs,
+        infer_node_output, infer_node_output_kind, node_menu_categories,
+        propagate_inferred_outputs, render_layout_requirements_are_invalid,
     };
     use crate::editor_view::model::editor_node_from_definition;
     use shared::{
@@ -877,6 +977,10 @@ mod tests {
             display_name: display_name.to_owned(),
             category,
             needs_io: false,
+            render_layouts: vec![
+                shared::RenderLayoutKind::Index1d,
+                shared::RenderLayoutKind::Matrix2d,
+            ],
             inputs: vec![NodeInputDefinition {
                 name: "value".to_owned(),
                 display_name: "Value".to_owned(),
@@ -1135,5 +1239,97 @@ mod tests {
         );
 
         assert!(matches!(inferred, Some(OutputInference::Invalid { .. })));
+    }
+
+    #[test]
+    fn render_layout_validation_rejects_legacy_node_for_spatial_sink() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let rainbow = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "rainbow".to_owned(),
+                "Linear Sweep".to_owned(),
+                NodeTypeId::RAINBOW_SWEEP.to_owned(),
+                &definitions,
+            ),
+        );
+        let dummy = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "dummy".to_owned(),
+                "Dummy".to_owned(),
+                NodeTypeId::WLED_DUMMY_DISPLAY.to_owned(),
+                &definitions,
+            ),
+        );
+        snarl[dummy]
+            .parameters
+            .iter_mut()
+            .find(|parameter| parameter.name == "use_spatial")
+            .expect("use_spatial parameter")
+            .value = serde_json::json!(true);
+        let wires = vec![(
+            egui_snarl::OutPinId {
+                node: rainbow,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: dummy,
+                input: 0,
+            },
+        )];
+
+        assert!(render_layout_requirements_are_invalid(
+            &snarl,
+            &wires,
+            &definitions
+        ));
+    }
+
+    #[test]
+    fn render_layout_validation_accepts_spatial_capable_node_for_spatial_sink() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let solid = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "solid".to_owned(),
+                "Solid".to_owned(),
+                NodeTypeId::SOLID_FRAME.to_owned(),
+                &definitions,
+            ),
+        );
+        let dummy = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "dummy".to_owned(),
+                "Dummy".to_owned(),
+                NodeTypeId::WLED_DUMMY_DISPLAY.to_owned(),
+                &definitions,
+            ),
+        );
+        snarl[dummy]
+            .parameters
+            .iter_mut()
+            .find(|parameter| parameter.name == "use_spatial")
+            .expect("use_spatial parameter")
+            .value = serde_json::json!(true);
+        let wires = vec![(
+            egui_snarl::OutPinId {
+                node: solid,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: dummy,
+                input: 0,
+            },
+        )];
+
+        assert!(!render_layout_requirements_are_invalid(
+            &snarl,
+            &wires,
+            &definitions
+        ));
     }
 }

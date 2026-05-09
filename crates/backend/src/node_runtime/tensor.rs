@@ -197,24 +197,28 @@ pub(crate) fn layout_from_shape(shape: &[usize], id: &str) -> LedLayout {
             pixel_count: 1,
             width: None,
             height: None,
+            points_3d: None,
         },
         [len] => LedLayout {
             id: id.to_owned(),
             pixel_count: *len,
             width: None,
             height: None,
+            points_3d: None,
         },
         [height, width] => LedLayout {
             id: id.to_owned(),
             pixel_count: height * width,
             width: Some(*width),
             height: Some(*height),
+            points_3d: None,
         },
         _ => LedLayout {
             id: id.to_owned(),
             pixel_count: shape_element_count(shape),
             width: None,
             height: None,
+            points_3d: None,
         },
     }
 }
