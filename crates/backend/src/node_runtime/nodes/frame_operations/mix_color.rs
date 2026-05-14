@@ -92,6 +92,8 @@ mod tests {
         let pixel_count = width * height;
         let layout = LedLayout {
             id: "profile".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count,
             width: Some(width),
             height: Some(height),

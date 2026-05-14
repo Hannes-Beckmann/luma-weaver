@@ -157,6 +157,40 @@ static IMAGE_FIT_MODES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
     ]
 });
 
+static FILL_FROM_FRAME_METHODS: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
+    vec![
+        EnumOption {
+            value: "nearest".to_owned(),
+            label: "Nearest".to_owned(),
+        },
+        EnumOption {
+            value: "smooth_distance".to_owned(),
+            label: "Smooth Distance".to_owned(),
+        },
+        EnumOption {
+            value: "radius".to_owned(),
+            label: "Radius".to_owned(),
+        },
+        EnumOption {
+            value: "index_stretch".to_owned(),
+            label: "Index Stretch".to_owned(),
+        },
+    ]
+});
+
+static FILL_FROM_FRAME_SOURCE_SHAPES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
+    vec![
+        EnumOption {
+            value: "strip".to_owned(),
+            label: "Strip".to_owned(),
+        },
+        EnumOption {
+            value: "matrix".to_owned(),
+            label: "Matrix".to_owned(),
+        },
+    ]
+});
+
 static MIN_MAX_FLOAT_MODES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
     vec![
         EnumOption {
@@ -561,7 +595,7 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
     inputs: vec![],
     outputs: vec![NodeOutputDefinition {
         name: "frame".to_owned(),
-        display_name: title_case_name("frame"),
+        display_name: "Source Frame".to_owned(),
         value_kind: ValueKind::ColorFrame,
         accepted_kinds: vec![],
     }],
@@ -592,6 +626,74 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
                 min: 1,
                 max: 65535,
             },
+        ),
+        NodeParameterDefinition::new(
+            "source_shape",
+            "Source Shape".to_owned(),
+            ParameterDefaultValue::String("strip".to_owned()),
+            ParameterUiHint::EnumSelect {
+                options: FILL_FROM_FRAME_SOURCE_SHAPES.clone(),
+            },
+        ),
+        NodeParameterDefinition::new(
+            "source_spatial_layout_setup",
+            "Source Layout".to_owned(),
+            ParameterDefaultValue::String(String::new()),
+            ParameterUiHint::SpatialLayoutSetup,
+        ),
+        NodeParameterDefinition::new(
+            "source_width",
+            "Source Width".to_owned(),
+            ParameterDefaultValue::Integer(8),
+            ParameterUiHint::Hidden,
+        ),
+        NodeParameterDefinition::new(
+            "source_height",
+            "Source Height".to_owned(),
+            ParameterDefaultValue::Integer(8),
+            ParameterUiHint::Hidden,
+        ),
+        NodeParameterDefinition::new(
+            "source_layout_origin_x",
+            "Source Origin X".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::Hidden,
+        ),
+        NodeParameterDefinition::new(
+            "source_layout_origin_y",
+            "Source Origin Y".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::Hidden,
+        ),
+        NodeParameterDefinition::new(
+            "source_layout_origin_z",
+            "Source Origin Z".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::Hidden,
+        ),
+        NodeParameterDefinition::new(
+            "source_layout_rotation_roll",
+            "Source Roll".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::Hidden,
+        ),
+        NodeParameterDefinition::new(
+            "source_layout_rotation_pitch",
+            "Source Pitch".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::Hidden,
+        ),
+        NodeParameterDefinition::new(
+            "source_layout_rotation_yaw",
+            "Source Yaw".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::Hidden,
+        ),
+        NodeParameterDefinition::new(
+            "source_layout_spacing",
+            "Source Spacing".to_owned(),
+            ParameterDefaultValue::Float(1.0),
+            ParameterUiHint::Hidden,
         ),
     ],
     connection: NodeConnectionDefinition {
@@ -1536,6 +1638,83 @@ static TINT_FRAME_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema 
         accepted_kinds: vec![],
     }],
     parameters: vec![],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
+static FILL_FROM_FRAME_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
+    id: NodeTypeId::FILL_FROM_FRAME.to_owned(),
+    display_name: "Fill From Frame".to_owned(),
+    category: NodeCategory::FrameOperations,
+    needs_io: false,
+    render_layouts: all_render_layouts(),
+    inputs: vec![NodeInputDefinition {
+        name: "frame".to_owned(),
+        display_name: "Source Frame".to_owned(),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![],
+        default_value: None,
+    }],
+    outputs: vec![NodeOutputDefinition {
+        name: "frame".to_owned(),
+        display_name: "Frame".to_owned(),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![],
+    }],
+    parameters: vec![
+        NodeParameterDefinition::new(
+            "method",
+            title_case_name("method"),
+            ParameterDefaultValue::String("nearest".to_owned()),
+            ParameterUiHint::EnumSelect {
+                options: FILL_FROM_FRAME_METHODS.clone(),
+            },
+        ),
+        NodeParameterDefinition::new(
+            "sample_count",
+            "Sample Count".to_owned(),
+            ParameterDefaultValue::Integer(4),
+            ParameterUiHint::IntegerDrag {
+                speed: 1.0,
+                min: 1,
+                max: 64,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "distance_power",
+            "Distance Power".to_owned(),
+            ParameterDefaultValue::Float(2.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.05,
+                min: 0.1,
+                max: 8.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "radius",
+            title_case_name("radius"),
+            ParameterDefaultValue::Float(2.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.1,
+                min: 0.0,
+                max: 1_000.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "fallback_color",
+            "Fallback Color".to_owned(),
+            ParameterDefaultValue::Color(RgbaColor {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            }),
+            ParameterUiHint::ColorPicker,
+        ),
+    ],
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -2792,6 +2971,11 @@ default_node_definition!(
     TINT_FRAME_NODE_TYPE
 );
 default_node_definition!(
+    FILL_FROM_FRAME_NODE_DEFINITION,
+    FillFromFrameNodeDefinition,
+    FILL_FROM_FRAME_NODE_TYPE
+);
+default_node_definition!(
     EXTRACT_CHANNELS_NODE_DEFINITION,
     ExtractChannelsNodeDefinition,
     EXTRACT_CHANNELS_NODE_TYPE
@@ -3278,6 +3462,7 @@ pub fn node_definitions() -> Vec<NodeSchema> {
         SCALE_COLOR_NODE_DEFINITION.schema().clone(),
         MULTIPLY_COLOR_NODE_DEFINITION.schema().clone(),
         TINT_FRAME_NODE_DEFINITION.schema().clone(),
+        FILL_FROM_FRAME_NODE_DEFINITION.schema().clone(),
         EXTRACT_CHANNELS_NODE_DEFINITION.schema().clone(),
         SET_CHANNEL_NODE_DEFINITION.schema().clone(),
         COLORIZE_NODE_DEFINITION.schema().clone(),
@@ -3338,6 +3523,7 @@ pub fn node_definition_impl(node_type_id: &str) -> Option<&'static dyn NodeDefin
         NodeTypeId::SCALE_COLOR => Some(&SCALE_COLOR_NODE_DEFINITION),
         NodeTypeId::MULTIPLY_COLOR => Some(&MULTIPLY_COLOR_NODE_DEFINITION),
         NodeTypeId::TINT_FRAME => Some(&TINT_FRAME_NODE_DEFINITION),
+        NodeTypeId::FILL_FROM_FRAME => Some(&FILL_FROM_FRAME_NODE_DEFINITION),
         NodeTypeId::EXTRACT_CHANNELS => Some(&EXTRACT_CHANNELS_NODE_DEFINITION),
         NodeTypeId::SET_CHANNEL => Some(&SET_CHANNEL_NODE_DEFINITION),
         NodeTypeId::COLORIZE => Some(&COLORIZE_NODE_DEFINITION),

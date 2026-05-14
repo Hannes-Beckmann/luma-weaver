@@ -118,6 +118,8 @@ mod tests {
                     value: Some(AnyInputValue(InputValue::ColorFrame(shared::ColorFrame {
                         layout: shared::LedLayout {
                             id: "grid".to_owned(),
+
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 6,
                             width: Some(3),
                             height: Some(2),

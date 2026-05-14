@@ -172,6 +172,8 @@ mod tests {
         let frame = ColorFrame {
             layout: LedLayout {
                 id: "test".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 3,
                 width: None,
                 height: None,

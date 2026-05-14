@@ -64,6 +64,8 @@ impl FloatTensor {
 /// Describes a concrete LED layout used for frame-producing nodes and sinks.
 pub struct LedLayout {
     pub id: String,
+    #[serde(default)]
+    pub role: LedLayoutRole,
     pub pixel_count: usize,
     #[serde(default)]
     pub width: Option<usize>,
@@ -71,6 +73,20 @@ pub struct LedLayout {
     pub height: Option<usize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub points_3d: Option<Vec<Vec3>>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+/// Declares whether a layout is a render destination or a source capture layout.
+pub enum LedLayoutRole {
+    RenderTarget,
+    Source,
+}
+
+impl Default for LedLayoutRole {
+    fn default() -> Self {
+        Self::RenderTarget
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -66,6 +66,7 @@ impl RuntimeNode for PlasmaNode {
                     frame: ColorFrame {
                         layout: LedLayout {
                             id: "plasma:unbound".to_owned(),
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 0,
                             width: None,
                             height: None,

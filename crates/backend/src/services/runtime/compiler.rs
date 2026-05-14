@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use shared::{
     GraphDocument, GraphNode, NodeDiagnostic, NodeDiagnosticSeverity, NodeTypeId, OutputInference,
-    infer_graph_output,
+    ValueKind, infer_graph_output,
 };
 
 use crate::node_runtime::NodeRegistry;
@@ -85,6 +85,15 @@ pub(crate) fn compile_graph_document(
             || !from_port.accepts_kind(resolved_output_kind)
         {
             continue;
+        }
+        if resolved_output_kind == ValueKind::ColorFrame {
+            let source_role = from_definition.output_frame_layout_requirement(&from_port.name);
+            let target_role = to_definition.input_frame_layout_requirement(&to_port.name);
+            if !matches!(target_role, shared::FrameLayoutRequirement::Any)
+                && source_role != target_role
+            {
+                continue;
+            }
         }
 
         incoming_edges_by_node[to_node_index].push(CompiledIncomingEdge {
@@ -383,6 +392,8 @@ mod tests {
             elapsed_seconds: 1.0 / 60.0,
             render_layout: Some(LedLayout {
                 id: "default-audit-layout".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 64,
                 width: Some(8),
                 height: Some(8),

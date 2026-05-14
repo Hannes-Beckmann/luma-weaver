@@ -63,6 +63,11 @@ fn backpropagate_from_sinks(
         );
         by_node[node_index].push(context.clone());
         for incoming in &incoming_edges_by_node[node_index] {
+            if nodes[node_index].node_type.as_str() == NodeTypeId::FILL_FROM_FRAME
+                && incoming.to_input_name == "frame"
+            {
+                continue;
+            }
             queue.push_back((incoming.from_node_index, context.clone()));
         }
     }
@@ -196,6 +201,7 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 id: id.clone(),
                 layout: LedLayout {
                     id,
+                    role: ::shared::LedLayoutRole::RenderTarget,
                     pixel_count: led_count,
                     width: Some(led_count),
                     height: Some(1),
@@ -228,6 +234,7 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 id: id.clone(),
                 layout: LedLayout {
                     id,
+                    role: ::shared::LedLayoutRole::RenderTarget,
                     pixel_count: width * height,
                     width: Some(width),
                     height: Some(height),
@@ -365,5 +372,46 @@ mod tests {
         assert_eq!(planned[2].len(), 1);
         assert_eq!(planned[1][0].id, "sink:dummy:dummy_a");
         assert_eq!(planned[2][0].id, "sink:dummy:dummy_b");
+    }
+
+    #[test]
+    /// Tests that source-frame inputs do not pull sink render contexts upstream.
+    fn fill_from_frame_source_input_does_not_backpropagate_context() {
+        let nodes = vec![
+            compiled_node("wled_source", NodeTypeId::WLED_SINK, &[]),
+            compiled_node("fill", NodeTypeId::FILL_FROM_FRAME, &[]),
+            compiled_node(
+                "dummy",
+                NodeTypeId::WLED_DUMMY_DISPLAY,
+                &[
+                    ("width", JsonValue::from(10)),
+                    ("height", JsonValue::from(1)),
+                    ("use_spatial", JsonValue::from(true)),
+                ],
+            ),
+        ];
+        let incoming = vec![
+            Vec::new(),
+            vec![CompiledIncomingEdge {
+                from_node_index: 0,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "frame".to_owned(),
+                use_previous_tick: false,
+            }],
+            vec![CompiledIncomingEdge {
+                from_node_index: 1,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "value".to_owned(),
+                use_previous_tick: false,
+            }],
+        ];
+
+        let planned = plan_render_contexts(&nodes, &incoming);
+
+        assert!(planned[0].is_empty());
+        assert_eq!(planned[1].len(), 1);
+        assert_eq!(planned[2].len(), 1);
+        assert_eq!(planned[1][0].id, "sink:dummy:dummy");
+        assert_eq!(planned[2][0].id, "sink:dummy:dummy");
     }
 }

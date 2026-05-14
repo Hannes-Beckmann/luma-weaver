@@ -127,6 +127,8 @@ mod tests {
                     frame: Some(ColorFrame {
                         layout: LedLayout {
                             id: "frame".to_owned(),
+
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 2,
                             width: Some(2),
                             height: Some(1),
@@ -173,6 +175,8 @@ mod tests {
                     frame: Some(ColorFrame {
                         layout: LedLayout {
                             id: "frame".to_owned(),
+
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 3,
                             width: None,
                             height: None,

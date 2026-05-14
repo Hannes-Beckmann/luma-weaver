@@ -76,6 +76,7 @@ impl RuntimeNode for CircleSweepNode {
                     frame: ColorFrame {
                         layout: LedLayout {
                             id: "circle_sweep:unbound".to_owned(),
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 0,
                             width: None,
                             height: None,
@@ -283,6 +284,8 @@ mod tests {
         let mut node = CircleSweepNode::default();
         let layout = LedLayout {
             id: "spatial".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 3,
             width: Some(3),
             height: Some(1),
@@ -319,6 +322,8 @@ mod tests {
         let mut node = CircleSweepNode::default();
         let layout = LedLayout {
             id: "spatial".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 2,
             width: Some(2),
             height: Some(1),

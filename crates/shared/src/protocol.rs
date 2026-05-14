@@ -392,6 +392,7 @@ impl BinaryRuntimeFrameMessage {
             name,
             layout: LedLayout {
                 id: layout_id,
+                role: crate::LedLayoutRole::RenderTarget,
                 pixel_count,
                 width: if width == 0 {
                     None
@@ -484,6 +485,7 @@ mod tests {
             name: "frame".to_owned(),
             layout: LedLayout {
                 id: "layout".to_owned(),
+                role: crate::LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
@@ -506,6 +508,7 @@ mod tests {
             name: "frame".to_owned(),
             layout: LedLayout {
                 id: "layout".to_owned(),
+                role: crate::LedLayoutRole::RenderTarget,
                 pixel_count: 1,
                 width: Some(1),
                 height: Some(1),

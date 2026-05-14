@@ -76,6 +76,7 @@ impl RuntimeNode for BouncingBallsNode {
                     frame: ColorFrame {
                         layout: LedLayout {
                             id: "bouncing_balls:unbound".to_owned(),
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 0,
                             width: None,
                             height: None,
@@ -1124,6 +1125,8 @@ mod tests {
                     elapsed_seconds: 0.0,
                     render_layout: Some(LedLayout {
                         id: "test-layout".to_owned(),
+
+                        role: ::shared::LedLayoutRole::RenderTarget,
                         pixel_count: 8,
                         width: Some(8),
                         height: Some(1),

@@ -446,6 +446,8 @@ mod tests {
                 sink_node_name: "Sink 1".to_owned(),
                 layout: LedLayout {
                     id: "sink-1".to_owned(),
+
+                    role: ::shared::LedLayoutRole::RenderTarget,
                     pixel_count: 1,
                     width: Some(1),
                     height: Some(1),

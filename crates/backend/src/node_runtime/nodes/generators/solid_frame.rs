@@ -43,6 +43,7 @@ impl RuntimeNode for SolidFrameNode {
                 frame: ColorFrame {
                     layout: LedLayout {
                         id: "solid_frame:unbound".to_owned(),
+                        role: ::shared::LedLayoutRole::RenderTarget,
                         pixel_count: 0,
                         width: None,
                         height: None,

@@ -171,6 +171,15 @@ pub fn validate_graph_document(document: &GraphDocument) -> Vec<GraphValidationI
         if !to_input.accepts_kind(resolved_output_kind)
             || !from_output.accepts_kind(resolved_output_kind)
             || inferred_output.message().is_some()
+            || (resolved_output_kind == ValueKind::ColorFrame
+                && !to_definition
+                    .input_frame_layout_requirement(&to_input.name)
+                    .accepts(
+                        match from_definition.output_frame_layout_requirement(&from_output.name) {
+                            crate::FrameLayoutRequirement::Source => crate::LedLayoutRole::Source,
+                            _ => crate::LedLayoutRole::RenderTarget,
+                        },
+                    ))
         {
             issues.push(GraphValidationIssue {
                 code: GraphValidationIssueCode::EdgeTypeMismatch,
@@ -228,6 +237,7 @@ mod tests {
             value: InputValue::ColorFrame(crate::ColorFrame {
                 layout: crate::LedLayout {
                     id: "panel".to_owned(),
+                    role: crate::LedLayoutRole::RenderTarget,
                     pixel_count: 1,
                     width: Some(1),
                     height: Some(1),
@@ -323,6 +333,7 @@ mod tests {
             value: InputValue::ColorFrame(crate::ColorFrame {
                 layout: crate::LedLayout {
                     id: "panel".to_owned(),
+                    role: crate::LedLayoutRole::RenderTarget,
                     pixel_count: 1,
                     width: Some(1),
                     height: Some(1),
@@ -376,6 +387,35 @@ mod tests {
             issue.code == GraphValidationIssueCode::EdgeTypeMismatch
                 && issue.message.contains("must resolve to the same kind")
         }));
+    }
+
+    #[test]
+    fn validation_rejects_source_frame_connected_directly_to_target() {
+        let document = GraphDocument {
+            metadata: GraphMetadata {
+                id: "graph".to_owned(),
+                name: "Graph".to_owned(),
+                execution_frequency_hz: 60,
+            },
+            viewport: crate::GraphViewport::default(),
+            nodes: vec![
+                node("source", NodeTypeId::WLED_SINK),
+                node("target", NodeTypeId::WLED_TARGET),
+            ],
+            edges: vec![GraphEdge {
+                from_node_id: "source".to_owned(),
+                from_output_name: "frame".to_owned(),
+                to_node_id: "target".to_owned(),
+                to_input_name: "value".to_owned(),
+            }],
+        };
+
+        let issues = validate_graph_document(&document);
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == GraphValidationIssueCode::EdgeTypeMismatch)
+        );
     }
 }
 

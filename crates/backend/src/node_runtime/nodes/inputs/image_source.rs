@@ -264,6 +264,7 @@ fn target_layout(layout_hint: Option<LedLayout>, source: &DecodedSource) -> LedL
     layout_hint.unwrap_or_else(|| match source {
         DecodedSource::Raster(source_image) => LedLayout {
             id: "image_source".to_owned(),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: source_image.width() as usize * source_image.height() as usize,
             width: Some(source_image.width() as usize),
             height: Some(source_image.height() as usize),
@@ -273,6 +274,7 @@ fn target_layout(layout_hint: Option<LedLayout>, source: &DecodedSource) -> LedL
             let size = tree.size().to_int_size();
             LedLayout {
                 id: "image_source".to_owned(),
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: size.width() as usize * size.height() as usize,
                 width: Some(size.width() as usize),
                 height: Some(size.height() as usize),
@@ -285,6 +287,7 @@ fn target_layout(layout_hint: Option<LedLayout>, source: &DecodedSource) -> LedL
 fn transparent_frame(layout_hint: Option<&LedLayout>) -> ColorFrame {
     let layout = layout_hint.cloned().unwrap_or(LedLayout {
         id: "image_source".to_owned(),
+        role: ::shared::LedLayoutRole::RenderTarget,
         pixel_count: 0,
         width: None,
         height: None,
@@ -511,6 +514,8 @@ mod tests {
             &image,
             &LedLayout {
                 id: "matrix".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 4,
                 width: Some(2),
                 height: Some(2),
@@ -577,6 +582,8 @@ mod tests {
             &source,
             &LedLayout {
                 id: "matrix".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),

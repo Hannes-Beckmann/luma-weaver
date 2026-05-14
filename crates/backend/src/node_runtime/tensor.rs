@@ -194,6 +194,7 @@ pub(crate) fn layout_from_shape(shape: &[usize], id: &str) -> LedLayout {
     match shape {
         [] => LedLayout {
             id: id.to_owned(),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 1,
             width: None,
             height: None,
@@ -201,6 +202,7 @@ pub(crate) fn layout_from_shape(shape: &[usize], id: &str) -> LedLayout {
         },
         [len] => LedLayout {
             id: id.to_owned(),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: *len,
             width: None,
             height: None,
@@ -208,6 +210,7 @@ pub(crate) fn layout_from_shape(shape: &[usize], id: &str) -> LedLayout {
         },
         [height, width] => LedLayout {
             id: id.to_owned(),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: height * width,
             width: Some(*width),
             height: Some(*height),
@@ -215,6 +218,7 @@ pub(crate) fn layout_from_shape(shape: &[usize], id: &str) -> LedLayout {
         },
         _ => LedLayout {
             id: id.to_owned(),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: shape_element_count(shape),
             width: None,
             height: None,

@@ -341,6 +341,7 @@ pub(super) fn default_input_value(kind: ValueKind) -> InputValue {
         }),
         ValueKind::LedLayout => InputValue::LedLayout(shared::LedLayout {
             id: "default".to_owned(),
+            role: shared::LedLayoutRole::RenderTarget,
             pixel_count: 60,
             width: None,
             height: None,
@@ -349,6 +350,7 @@ pub(super) fn default_input_value(kind: ValueKind) -> InputValue {
         ValueKind::ColorFrame => InputValue::ColorFrame(shared::ColorFrame {
             layout: shared::LedLayout {
                 id: "default".to_owned(),
+                role: shared::LedLayoutRole::RenderTarget,
                 pixel_count: 0,
                 width: None,
                 height: None,

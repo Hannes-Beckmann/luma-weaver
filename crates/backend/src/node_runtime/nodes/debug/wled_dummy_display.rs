@@ -71,6 +71,7 @@ impl RuntimeNode for WledDummyDisplayNode {
         let pixel_count = self.width * self.height;
         let layout = context.render_layout.clone().unwrap_or(LedLayout {
             id: format!("dummy:{}x{}", self.width, self.height),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count,
             width: Some(self.width),
             height: Some(self.height),

@@ -249,6 +249,8 @@ mod tests {
     fn layout(width: usize, height: usize) -> LedLayout {
         LedLayout {
             id: "laplacian-test".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: width * height,
             width: Some(width),
             height: Some(height),

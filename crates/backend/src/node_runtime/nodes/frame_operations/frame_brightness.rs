@@ -90,6 +90,8 @@ mod tests {
         let input_frame = ColorFrame {
             layout: LedLayout {
                 id: "frame-brightness-default".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 1,
                 width: Some(1),
                 height: Some(1),

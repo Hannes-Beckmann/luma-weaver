@@ -30,16 +30,32 @@ impl Default for SpatialPlacement {
 
 impl SpatialPlacement {
     pub(crate) fn from_parameters(parameters: &HashMap<String, JsonValue>) -> Self {
+        Self::from_parameters_with_prefix(parameters, "")
+    }
+
+    pub(crate) fn from_parameters_with_prefix(
+        parameters: &HashMap<String, JsonValue>,
+        prefix: &str,
+    ) -> Self {
         Self {
             origin: Vec3 {
-                x: float_parameter(parameters, "layout_origin_x", 0.0),
-                y: float_parameter(parameters, "layout_origin_y", 0.0),
-                z: float_parameter(parameters, "layout_origin_z", 0.0),
+                x: float_parameter(parameters, &format!("{prefix}layout_origin_x"), 0.0),
+                y: float_parameter(parameters, &format!("{prefix}layout_origin_y"), 0.0),
+                z: float_parameter(parameters, &format!("{prefix}layout_origin_z"), 0.0),
             },
-            roll_degrees: float_parameter(parameters, "layout_rotation_roll", 0.0),
-            pitch_degrees: float_parameter(parameters, "layout_rotation_pitch", 0.0),
-            yaw_degrees: float_parameter(parameters, "layout_rotation_yaw", 0.0),
-            spacing: float_parameter(parameters, "layout_spacing", 1.0).max(0.0001),
+            roll_degrees: float_parameter(
+                parameters,
+                &format!("{prefix}layout_rotation_roll"),
+                0.0,
+            ),
+            pitch_degrees: float_parameter(
+                parameters,
+                &format!("{prefix}layout_rotation_pitch"),
+                0.0,
+            ),
+            yaw_degrees: float_parameter(parameters, &format!("{prefix}layout_rotation_yaw"), 0.0),
+            spacing: float_parameter(parameters, &format!("{prefix}layout_spacing"), 1.0)
+                .max(0.0001),
         }
     }
 

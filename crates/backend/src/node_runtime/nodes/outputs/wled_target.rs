@@ -90,6 +90,7 @@ impl RuntimeNode for WledTargetNode {
         let disabled = is_disabled(inputs.disable);
         let layout = context.render_layout.clone().unwrap_or(LedLayout {
             id: "wled_target".to_owned(),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: self.led_count,
             width: Some(self.led_count),
             height: Some(1),

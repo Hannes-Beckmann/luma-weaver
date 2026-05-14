@@ -64,6 +64,7 @@ impl RuntimeNode for TwinkleStarsNode {
                     frame: ColorFrame {
                         layout: LedLayout {
                             id: "twinkle_stars:unbound".to_owned(),
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 0,
                             width: None,
                             height: None,

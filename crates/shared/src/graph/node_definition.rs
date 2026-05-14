@@ -4,8 +4,8 @@
 //! and the backend runtime registry.
 
 use super::{
-    ColorGradient, ColorGradientStop, InputKindRef, InputValue, NodeParameter, RgbaColor,
-    ValueKind, node_definition_impl,
+    ColorGradient, ColorGradientStop, InputKindRef, InputValue, LedLayoutRole, NodeParameter,
+    RgbaColor, ValueKind, node_definition_impl,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -49,6 +49,7 @@ impl NodeTypeId {
     pub const SET_CHANNEL: &'static str = "frame_operations.set_channel";
     pub const COLORIZE: &'static str = "frame_operations.colorize";
     pub const TINT_FRAME: &'static str = "frame_operations.tint_frame";
+    pub const FILL_FROM_FRAME: &'static str = "frame_operations.fill_from_frame";
     pub const MASK_FRAME: &'static str = "frame_operations.mask_frame";
     pub const MIX_COLOR: &'static str = "frame_operations.mix";
     pub const ALPHA_OVER: &'static str = "frame_operations.alpha_over";
@@ -133,6 +134,26 @@ pub enum RenderLayoutKind {
     Index1d,
     Matrix2d,
     Spatial3d,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+/// Declares which layout role a `ColorFrame` port expects or produces.
+pub enum FrameLayoutRequirement {
+    Any,
+    RenderTarget,
+    Source,
+}
+
+impl FrameLayoutRequirement {
+    pub fn accepts(self, role: LedLayoutRole) -> bool {
+        matches!(self, Self::Any)
+            || matches!(
+                (self, role),
+                (Self::RenderTarget, LedLayoutRole::RenderTarget)
+            )
+            || matches!((self, role), (Self::Source, LedLayoutRole::Source))
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -234,6 +255,30 @@ impl NodeSchema {
             return false;
         }
         true
+    }
+
+    /// Returns the layout role required by an input frame port.
+    pub fn input_frame_layout_requirement(&self, input_name: &str) -> FrameLayoutRequirement {
+        if self.id == NodeTypeId::FILL_FROM_FRAME && input_name == "frame" {
+            FrameLayoutRequirement::Source
+        } else {
+            self.input_port(input_name)
+                .filter(|input| input.value_kind == ValueKind::ColorFrame)
+                .map(|_| FrameLayoutRequirement::RenderTarget)
+                .unwrap_or(FrameLayoutRequirement::Any)
+        }
+    }
+
+    /// Returns the layout role produced by an output frame port.
+    pub fn output_frame_layout_requirement(&self, output_name: &str) -> FrameLayoutRequirement {
+        if self.id == NodeTypeId::WLED_SINK && output_name == "frame" {
+            FrameLayoutRequirement::Source
+        } else {
+            self.output_port(output_name)
+                .filter(|output| output.value_kind == ValueKind::ColorFrame)
+                .map(|_| FrameLayoutRequirement::RenderTarget)
+                .unwrap_or(FrameLayoutRequirement::Any)
+        }
     }
 
     /// Infers the concrete kind of a polymorphic output port from the currently resolved input kinds.
@@ -756,6 +801,30 @@ mod tests {
         );
 
         assert_eq!(inferred, Some(ValueKind::ColorFrame));
+    }
+
+    #[test]
+    fn wled_sink_frame_output_is_marked_as_source_layout() {
+        let definition = node_definition(NodeTypeId::WLED_SINK).expect("wled sink definition");
+
+        let frame = definition.output_port("frame").expect("frame output");
+
+        assert_eq!(frame.value_kind, ValueKind::ColorFrame);
+        assert_eq!(
+            definition.output_frame_layout_requirement("frame"),
+            FrameLayoutRequirement::Source
+        );
+    }
+
+    #[test]
+    fn fill_from_frame_input_requires_source_layout() {
+        let definition =
+            node_definition(NodeTypeId::FILL_FROM_FRAME).expect("fill from frame definition");
+
+        assert_eq!(
+            definition.input_frame_layout_requirement("frame"),
+            FrameLayoutRequirement::Source
+        );
     }
 
     #[test]

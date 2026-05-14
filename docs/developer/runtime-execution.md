@@ -176,6 +176,12 @@ Important consequence:
 
 So if one animation branch feeds two different sinks, the upstream generator may be evaluated once per sink context.
 
+Some inputs deliberately stop render-context backpropagation. `Fill From Frame` receives the
+downstream sink context for its output, but its `frame` input consumes a source-layout
+`ColorFrame`. The planner therefore does not propagate the destination context across that input.
+This lets a `WLED Sink` publish sampled pixels with intrinsic source geometry once, while
+`Fill From Frame` remaps that source frame into each downstream sink layout.
+
 ## Forward Fill For Observer Branches
 
 Backpropagation alone is not enough.

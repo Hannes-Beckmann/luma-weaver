@@ -190,6 +190,8 @@ mod tests {
         let mut node = SetChannelNode::default();
         let layout = shared::LedLayout {
             id: "frame".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 2,
             width: Some(2),
             height: Some(1),
@@ -259,6 +261,8 @@ mod tests {
                     frame: Some(ColorFrame {
                         layout: shared::LedLayout {
                             id: "frame".to_owned(),
+
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 1,
                             width: Some(1),
                             height: Some(1),

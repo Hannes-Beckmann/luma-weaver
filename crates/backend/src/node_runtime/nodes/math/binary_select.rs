@@ -159,6 +159,8 @@ mod tests {
         let other_frame = InputValue::ColorFrame(ColorFrame {
             layout: LedLayout {
                 id: "frame".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
@@ -182,6 +184,8 @@ mod tests {
         let frame = InputValue::ColorFrame(ColorFrame {
             layout: LedLayout {
                 id: "frame".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),

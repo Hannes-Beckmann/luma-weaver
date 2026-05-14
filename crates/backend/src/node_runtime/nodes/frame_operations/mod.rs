@@ -1,6 +1,7 @@
 pub(crate) mod alpha_over;
 pub(crate) mod colorize;
 pub(crate) mod extract_channels;
+pub(crate) mod fill_from_frame;
 pub(crate) mod frame_brightness;
 pub(crate) mod mask_frame;
 pub(crate) mod mix_color;

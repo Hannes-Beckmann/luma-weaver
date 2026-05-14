@@ -249,6 +249,10 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         nodes::frame_operations::tint_frame::TintFrameNode
     );
     register_node!(
+        NodeTypeId::FILL_FROM_FRAME,
+        nodes::frame_operations::fill_from_frame::FillFromFrameNode
+    );
+    register_node!(
         NodeTypeId::MASK_FRAME,
         nodes::frame_operations::mask_frame::MaskFrameNode
     );

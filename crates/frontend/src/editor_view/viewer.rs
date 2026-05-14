@@ -219,7 +219,13 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
         if max_input_connections == 0 {
             return;
         }
-        if self.connection_kind_mismatch(from_kind, from_port_definition, to_port_definition) {
+        if self.connection_kind_mismatch(
+            from_kind,
+            from_definition,
+            from_port_definition,
+            to_definition,
+            to_port_definition,
+        ) {
             return;
         }
         if self.connection_render_layout_mismatch(from.id, to.id, max_input_connections, snarl) {
@@ -394,7 +400,9 @@ impl GraphSnarlViewer {
     fn connection_kind_mismatch(
         &self,
         from_kind: ValueKind,
+        from_definition: &shared::NodeSchema,
         from_port: &shared::NodeOutputDefinition,
+        to_definition: &shared::NodeSchema,
         to_port: &shared::NodeInputDefinition,
     ) -> bool {
         if !to_port.accepts_kind(from_kind) {
@@ -402,6 +410,15 @@ impl GraphSnarlViewer {
         }
         if !from_port.accepts_kind(from_kind) {
             return true;
+        }
+        if from_kind == ValueKind::ColorFrame {
+            let source_role = from_definition.output_frame_layout_requirement(&from_port.name);
+            let target_role = to_definition.input_frame_layout_requirement(&to_port.name);
+            if !matches!(target_role, shared::FrameLayoutRequirement::Any)
+                && source_role != target_role
+            {
+                return true;
+            }
         }
         false
     }
@@ -454,6 +471,14 @@ fn render_layout_requirements_are_invalid(
 
         for (out_pin, in_pin) in wires {
             if in_pin.node == node_id {
+                if definition.id == NodeTypeId::FILL_FROM_FRAME {
+                    let Some(input) = node.inputs.get(in_pin.input) else {
+                        continue;
+                    };
+                    if input.name == "frame" {
+                        continue;
+                    }
+                }
                 queue.push_back((out_pin.node, kind));
             }
         }

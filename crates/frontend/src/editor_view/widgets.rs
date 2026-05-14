@@ -34,8 +34,9 @@ pub(super) fn format_input_value(value: &InputValue) -> String {
             }
         }
         InputValue::ColorFrame(frame) => format!(
-            "frame(layout={}, leds={}, dims={})",
+            "frame(layout={}, role={:?}, leds={}, dims={})",
             frame.layout.id,
+            frame.layout.role,
             frame.pixels.len(),
             frame_layout_dims_label(frame)
         ),
@@ -95,8 +96,9 @@ pub(super) fn show_runtime_value(ui: &mut egui::Ui, value: &InputValue) {
         }
         InputValue::ColorFrame(frame) => {
             ui.label(format!(
-                "frame(layout={}, leds={}, dims={})",
+                "frame(layout={}, role={:?}, leds={}, dims={})",
                 frame.layout.id,
+                frame.layout.role,
                 frame.pixels.len(),
                 frame_layout_dims_label(frame)
             ));
@@ -640,6 +642,8 @@ fn shorten_asset_id(asset_id: &str) -> String {
 
 fn edit_spatial_layout_setup(ui: &mut egui::Ui, parameters: &mut Vec<NodeParameter>, name: &str) {
     let window_id = ui.id().with(("spatial_layout_setup", name));
+    let is_source_layout = name.starts_with("source_");
+    let prefix = if is_source_layout { "source_" } else { "" };
     let mut open = ui
         .memory(|memory| memory.data.get_temp::<bool>(window_id))
         .unwrap_or(false);
@@ -659,25 +663,95 @@ fn edit_spatial_layout_setup(ui: &mut egui::Ui, parameters: &mut Vec<NodeParamet
                     .num_columns(2)
                     .spacing([12.0, 6.0])
                     .show(ui, |ui| {
-                        spatial_float_row(ui, parameters, "Origin X", "layout_origin_x", 0.0, 0.1);
-                        spatial_float_row(ui, parameters, "Origin Y", "layout_origin_y", 0.0, 0.1);
-                        spatial_float_row(ui, parameters, "Origin Z", "layout_origin_z", 0.0, 0.1);
-                        spatial_float_row(ui, parameters, "Roll", "layout_rotation_roll", 0.0, 1.0);
+                        if is_source_layout {
+                            spatial_integer_row(ui, parameters, "Width", "source_width", 8, 1.0);
+                            spatial_integer_row(ui, parameters, "Height", "source_height", 8, 1.0);
+                        }
+                        spatial_float_row(
+                            ui,
+                            parameters,
+                            "Origin X",
+                            &format!("{prefix}layout_origin_x"),
+                            0.0,
+                            0.1,
+                        );
+                        spatial_float_row(
+                            ui,
+                            parameters,
+                            "Origin Y",
+                            &format!("{prefix}layout_origin_y"),
+                            0.0,
+                            0.1,
+                        );
+                        spatial_float_row(
+                            ui,
+                            parameters,
+                            "Origin Z",
+                            &format!("{prefix}layout_origin_z"),
+                            0.0,
+                            0.1,
+                        );
+                        spatial_float_row(
+                            ui,
+                            parameters,
+                            "Roll",
+                            &format!("{prefix}layout_rotation_roll"),
+                            0.0,
+                            1.0,
+                        );
                         spatial_float_row(
                             ui,
                             parameters,
                             "Pitch",
-                            "layout_rotation_pitch",
+                            &format!("{prefix}layout_rotation_pitch"),
                             0.0,
                             1.0,
                         );
-                        spatial_float_row(ui, parameters, "Yaw", "layout_rotation_yaw", 0.0, 1.0);
-                        spatial_float_row(ui, parameters, "Spacing", "layout_spacing", 1.0, 0.1);
+                        spatial_float_row(
+                            ui,
+                            parameters,
+                            "Yaw",
+                            &format!("{prefix}layout_rotation_yaw"),
+                            0.0,
+                            1.0,
+                        );
+                        spatial_float_row(
+                            ui,
+                            parameters,
+                            "Spacing",
+                            &format!("{prefix}layout_spacing"),
+                            1.0,
+                            0.1,
+                        );
                     });
             });
     }
 
     ui.memory_mut(|memory| memory.data.insert_temp(window_id, open));
+}
+
+fn spatial_integer_row(
+    ui: &mut egui::Ui,
+    parameters: &mut Vec<NodeParameter>,
+    label: &str,
+    name: &str,
+    default_value: i64,
+    speed: f64,
+) {
+    ui.label(label);
+    let value = parameter_value_mut(parameters, name, JsonValue::from(default_value));
+    let mut int_value = value.as_i64().unwrap_or(default_value);
+    if ui
+        .add(
+            egui::DragValue::new(&mut int_value)
+                .speed(speed)
+                .range(1..=8192),
+        )
+        .changed()
+    {
+        *value = JsonValue::from(int_value);
+    }
+    ui.end_row();
 }
 
 fn spatial_float_row(
@@ -1082,6 +1156,8 @@ mod tests {
         let frame = ColorFrame {
             layout: LedLayout {
                 id: "strip".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 153,
                 width: Some(1),
                 height: Some(153),
@@ -1106,6 +1182,8 @@ mod tests {
         let frame = ColorFrame {
             layout: LedLayout {
                 id: "matrix".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 12,
                 width: Some(4),
                 height: Some(3),

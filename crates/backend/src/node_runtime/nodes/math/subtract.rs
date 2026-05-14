@@ -122,6 +122,8 @@ mod tests {
         let mut node = SubtractNode;
         let layout = LedLayout {
             id: "frame".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 1,
             width: Some(1),
             height: Some(1),

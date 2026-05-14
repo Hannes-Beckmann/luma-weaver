@@ -142,6 +142,8 @@ mod tests {
         let mut node = MaskFrameNode;
         let layout = LedLayout {
             id: "layout".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 2,
             width: Some(2),
             height: Some(1),
@@ -219,6 +221,8 @@ mod tests {
         let mut node = MaskFrameNode;
         let layout = LedLayout {
             id: "layout".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 2,
             width: Some(2),
             height: Some(1),

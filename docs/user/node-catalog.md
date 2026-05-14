@@ -67,6 +67,7 @@ Examples:
 - Extract Channels
 - Set Channel
 - Colorize
+- Fill From Frame
 - Mask Frame
 - Mix Color
 - Alpha Over
@@ -80,6 +81,11 @@ matching `FloatTensor`.
 
 `Colorize` maps a `Float` or `FloatTensor` from `0..1` across a gradient and outputs a
 `ColorFrame`.
+
+`Fill From Frame` maps an incoming source `ColorFrame` into the active render-target layout.
+`WLED Sink` emits source frames with optional strip or matrix source geometry configured on the
+sink. Fill methods include nearest point, smooth distance blending, radius-limited blending, and
+index stretching.
 
 `Mask Frame` accepts either a `ColorFrame` mask, using its alpha channel, or a `FloatTensor`
 mask that matches the target frame shape.

@@ -175,6 +175,7 @@ fn zero_like(value: &InputValue) -> InputValue {
         }),
         InputValue::LedLayout(layout) => InputValue::LedLayout(LedLayout {
             id: layout.id.clone(),
+            role: layout.role,
             pixel_count: layout.pixel_count,
             width: layout.width,
             height: layout.height,
@@ -198,6 +199,7 @@ fn zero_like(value: &InputValue) -> InputValue {
 fn initial_layout(layout: Option<&LedLayout>) -> LedLayout {
     layout.cloned().unwrap_or(LedLayout {
         id: "delay.initial".to_owned(),
+        role: ::shared::LedLayoutRole::RenderTarget,
         pixel_count: 0,
         width: None,
         height: None,
@@ -244,6 +246,8 @@ mod tests {
         let mut node = DelayNode::default();
         let layout = LedLayout {
             id: "test".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 2,
             width: None,
             height: None,
@@ -292,6 +296,8 @@ mod tests {
     fn disconnected_delay_uses_selected_tensor_initial_type() {
         let context = evaluation_context(Some(LedLayout {
             id: "panel".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 6,
             width: Some(3),
             height: Some(2),
@@ -311,6 +317,8 @@ mod tests {
     fn disconnected_delay_uses_selected_frame_initial_type() {
         let context = evaluation_context(Some(LedLayout {
             id: "strip".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 4,
             width: None,
             height: None,
@@ -322,6 +330,8 @@ mod tests {
             InputValue::ColorFrame(shared::ColorFrame {
                 layout: LedLayout {
                     id: "strip".to_owned(),
+
+                    role: ::shared::LedLayoutRole::RenderTarget,
                     pixel_count: 4,
                     width: None,
                     height: None,
