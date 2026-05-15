@@ -1,5 +1,5 @@
 use anyhow::Result;
-use shared::{ColorFrame, InputValue, RgbaColor};
+use shared::{InputValue, RgbaColor, ValueKind};
 
 use crate::node_runtime::tensor::{
     coerce_color_frame, coerce_float_tensor, infer_broadcast_shape, layout_from_shape,
@@ -29,10 +29,8 @@ crate::node_runtime::impl_runtime_inputs!(MixColorInputs {
 });
 
 pub(crate) struct MixColorOutputs {
-    color: ColorFrame,
+    color: InputValue,
 }
-
-crate::node_runtime::impl_runtime_outputs!(MixColorOutputs { color });
 
 impl RuntimeNode for MixColorNode {
     type Inputs = MixColorInputs;
@@ -43,6 +41,10 @@ impl RuntimeNode for MixColorNode {
         _context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
+        let output_kind = output_frame_kind(&[
+            inputs.foreground.0.value_kind(),
+            inputs.background.0.value_kind(),
+        ]);
         let foreground = inputs.foreground.0;
         let background = inputs.background.0;
         let factor = inputs.factor.0;
@@ -53,9 +55,26 @@ impl RuntimeNode for MixColorNode {
         let background = coerce_color_frame(&background, &shape, &fallback_layout.id)?;
         let factor = coerce_float_tensor(&factor, &shape)?;
         let color = mix_color_frames(&foreground, &background, &factor)?;
+        let color = InputValue::from_frame_kind(output_kind, color).expect("frame kind");
 
         Ok(TypedNodeEvaluation::from_outputs(MixColorOutputs { color }))
     }
+}
+
+impl crate::node_runtime::RuntimeOutputs for MixColorOutputs {
+    fn into_runtime_outputs(self) -> anyhow::Result<std::collections::HashMap<String, InputValue>> {
+        let mut outputs = std::collections::HashMap::new();
+        outputs.insert("color".to_owned(), self.color);
+        Ok(outputs)
+    }
+}
+
+fn output_frame_kind(kinds: &[ValueKind]) -> ValueKind {
+    kinds
+        .iter()
+        .copied()
+        .find(|kind| kind.is_frame())
+        .unwrap_or(ValueKind::ColorFrame)
 }
 
 fn default_white_value() -> AnyInputValue {

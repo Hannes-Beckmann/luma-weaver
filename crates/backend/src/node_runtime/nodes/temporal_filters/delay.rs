@@ -193,6 +193,18 @@ fn zero_like(value: &InputValue) -> InputValue {
                 frame.pixels.len()
             ],
         }),
+        InputValue::MappedFrame(frame) => InputValue::MappedFrame(ColorFrame {
+            layout: frame.layout.clone(),
+            pixels: vec![
+                RgbaColor {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                };
+                frame.pixels.len()
+            ],
+        }),
     }
 }
 

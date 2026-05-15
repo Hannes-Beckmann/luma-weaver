@@ -347,17 +347,21 @@ pub(super) fn default_input_value(kind: ValueKind) -> InputValue {
             height: None,
             points_3d: None,
         }),
-        ValueKind::ColorFrame => InputValue::ColorFrame(shared::ColorFrame {
-            layout: shared::LedLayout {
-                id: "default".to_owned(),
-                role: shared::LedLayoutRole::RenderTarget,
-                pixel_count: 0,
-                width: None,
-                height: None,
-                points_3d: None,
+        ValueKind::ColorFrame | ValueKind::MappedFrame => InputValue::from_frame_kind(
+            kind,
+            shared::ColorFrame {
+                layout: shared::LedLayout {
+                    id: "default".to_owned(),
+                    role: shared::LedLayoutRole::RenderTarget,
+                    pixel_count: 0,
+                    width: None,
+                    height: None,
+                    points_3d: None,
+                },
+                pixels: Vec::new(),
             },
-            pixels: Vec::new(),
-        }),
+        )
+        .expect("frame kind"),
     }
 }
 
@@ -374,6 +378,9 @@ pub(super) fn coerce_input_value_kind(value: InputValue, kind: ValueKind) -> Inp
         (ValueKind::Color, InputValue::Color(v)) => InputValue::Color(v),
         (ValueKind::LedLayout, InputValue::LedLayout(v)) => InputValue::LedLayout(v),
         (ValueKind::ColorFrame, InputValue::ColorFrame(v)) => InputValue::ColorFrame(v),
+        (ValueKind::ColorFrame, InputValue::MappedFrame(v)) => InputValue::ColorFrame(v),
+        (ValueKind::MappedFrame, InputValue::ColorFrame(v)) => InputValue::MappedFrame(v),
+        (ValueKind::MappedFrame, InputValue::MappedFrame(v)) => InputValue::MappedFrame(v),
         (expected_kind, _) => default_input_value(expected_kind),
     }
 }

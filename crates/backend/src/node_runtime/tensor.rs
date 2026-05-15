@@ -83,7 +83,7 @@ pub(crate) fn coerce_color_frame(
                 layout,
             })
         }
-        InputValue::ColorFrame(frame) => {
+        InputValue::ColorFrame(frame) | InputValue::MappedFrame(frame) => {
             let shape = value_shape(value)?;
             if shape != target_shape {
                 bail!(
@@ -174,7 +174,7 @@ pub(crate) fn coerce_numeric_color_frame(
                 layout,
             })
         }
-        InputValue::ColorFrame(frame) => {
+        InputValue::ColorFrame(frame) | InputValue::MappedFrame(frame) => {
             let shape = value_shape(value)?;
             if shape != target_shape {
                 bail!(
@@ -239,7 +239,13 @@ pub(crate) fn apply_binary_numeric_op<F>(
 where
     F: Fn(f32, f32) -> f32 + Copy,
 {
-    if matches!(left, InputValue::ColorFrame(_)) || matches!(right, InputValue::ColorFrame(_)) {
+    if matches!(left, InputValue::ColorFrame(_) | InputValue::MappedFrame(_))
+        || matches!(
+            right,
+            InputValue::ColorFrame(_) | InputValue::MappedFrame(_)
+        )
+    {
+        let output_kind = left.value_kind();
         let target_shape = infer_broadcast_shape(&[left, right])?;
         let left = coerce_numeric_color_frame(left, &target_shape, fallback_layout_id)?;
         let right = coerce_numeric_color_frame(right, &target_shape, fallback_layout_id)?;
@@ -256,10 +262,14 @@ where
             })
             .collect();
 
-        return Ok(InputValue::ColorFrame(ColorFrame {
-            layout: left.layout,
-            pixels,
-        }));
+        return Ok(InputValue::from_frame_kind(
+            output_kind,
+            ColorFrame {
+                layout: left.layout,
+                pixels,
+            },
+        )
+        .expect("frame kind"));
     }
 
     if matches!(left, InputValue::FloatTensor(_)) || matches!(right, InputValue::FloatTensor(_)) {
@@ -353,7 +363,11 @@ pub(crate) fn clamp_numeric_value(
     max: &InputValue,
     fallback_layout_id: &str,
 ) -> Result<InputValue> {
-    if matches!(value, InputValue::ColorFrame(_)) {
+    if matches!(
+        value,
+        InputValue::ColorFrame(_) | InputValue::MappedFrame(_)
+    ) {
+        let output_kind = value.value_kind();
         let target_shape = infer_broadcast_shape(&[value, min, max])?;
         let value = coerce_numeric_color_frame(value, &target_shape, fallback_layout_id)?;
         let min = coerce_float_tensor(min, &target_shape)?;
@@ -371,10 +385,14 @@ pub(crate) fn clamp_numeric_value(
             })
             .collect();
 
-        return Ok(InputValue::ColorFrame(ColorFrame {
-            layout: value.layout,
-            pixels,
-        }));
+        return Ok(InputValue::from_frame_kind(
+            output_kind,
+            ColorFrame {
+                layout: value.layout,
+                pixels,
+            },
+        )
+        .expect("frame kind"));
     }
 
     if matches!(value, InputValue::FloatTensor(_))
@@ -417,9 +435,14 @@ pub(crate) fn input_value_is_finite(value: &InputValue) -> bool {
             color.r.is_finite() && color.g.is_finite() && color.b.is_finite() && color.a.is_finite()
         }
         InputValue::LedLayout(_) => true,
-        InputValue::ColorFrame(frame) => frame.pixels.iter().all(|pixel| {
-            pixel.r.is_finite() && pixel.g.is_finite() && pixel.b.is_finite() && pixel.a.is_finite()
-        }),
+        InputValue::ColorFrame(frame) | InputValue::MappedFrame(frame) => {
+            frame.pixels.iter().all(|pixel| {
+                pixel.r.is_finite()
+                    && pixel.g.is_finite()
+                    && pixel.b.is_finite()
+                    && pixel.a.is_finite()
+            })
+        }
     }
 }
 
@@ -428,7 +451,9 @@ fn value_shape(value: &InputValue) -> Result<Vec<usize>> {
     match value {
         InputValue::Float(_) | InputValue::String(_) | InputValue::Color(_) => Ok(Vec::new()),
         InputValue::FloatTensor(tensor) => Ok(normalize_float_tensor(tensor).shape),
-        InputValue::ColorFrame(frame) => Ok(shape_from_layout(&frame.layout)),
+        InputValue::ColorFrame(frame) | InputValue::MappedFrame(frame) => {
+            Ok(shape_from_layout(&frame.layout))
+        }
         InputValue::LedLayout(layout) => Ok(shape_from_layout(layout)),
     }
 }

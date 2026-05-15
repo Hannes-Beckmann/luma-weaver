@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
-use shared::{ColorFrame, FloatTensor, InputValue, LedLayout, RgbaColor};
+use shared::{ColorFrame, FloatTensor, InputValue, LedLayout, RgbaColor, ValueKind};
 
 use crate::node_runtime::{
     AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
@@ -112,6 +112,7 @@ enum RunningSum {
         values: Vec<f32>,
     },
     Frame {
+        frame_kind: ValueKind,
         layout: LedLayout,
         values: Vec<[f32; 4]>,
     },
@@ -128,6 +129,16 @@ impl RunningSum {
                 values: tensor.values.clone(),
             }),
             InputValue::ColorFrame(frame) => Some(Self::Frame {
+                frame_kind: ValueKind::ColorFrame,
+                layout: frame.layout.clone(),
+                values: frame
+                    .pixels
+                    .iter()
+                    .map(|pixel| [pixel.r, pixel.g, pixel.b, pixel.a])
+                    .collect(),
+            }),
+            InputValue::MappedFrame(frame) => Some(Self::Frame {
+                frame_kind: ValueKind::MappedFrame,
                 layout: frame.layout.clone(),
                 values: frame
                     .pixels
@@ -149,6 +160,12 @@ impl RunningSum {
                 values: vec![0.0; tensor.values.len()],
             }),
             InputValue::ColorFrame(frame) => Some(Self::Frame {
+                frame_kind: ValueKind::ColorFrame,
+                layout: frame.layout.clone(),
+                values: vec![[0.0; 4]; frame.pixels.len()],
+            }),
+            InputValue::MappedFrame(frame) => Some(Self::Frame {
+                frame_kind: ValueKind::MappedFrame,
                 layout: frame.layout.clone(),
                 values: vec![[0.0; 4]; frame.pixels.len()],
             }),
@@ -163,8 +180,31 @@ impl RunningSum {
             (Self::Tensor { shape, values }, InputValue::FloatTensor(tensor)) => {
                 shape == &tensor.shape && values.len() == tensor.values.len()
             }
-            (Self::Frame { layout, values }, InputValue::ColorFrame(frame)) => {
-                layout.id == frame.layout.id
+            (
+                Self::Frame {
+                    frame_kind,
+                    layout,
+                    values,
+                },
+                InputValue::ColorFrame(frame),
+            ) => {
+                *frame_kind == ValueKind::ColorFrame
+                    && layout.id == frame.layout.id
+                    && layout.pixel_count == frame.layout.pixel_count
+                    && layout.width == frame.layout.width
+                    && layout.height == frame.layout.height
+                    && values.len() == frame.pixels.len()
+            }
+            (
+                Self::Frame {
+                    frame_kind,
+                    layout,
+                    values,
+                },
+                InputValue::MappedFrame(frame),
+            ) => {
+                *frame_kind == ValueKind::MappedFrame
+                    && layout.id == frame.layout.id
                     && layout.pixel_count == frame.layout.pixel_count
                     && layout.width == frame.layout.width
                     && layout.height == frame.layout.height
@@ -188,7 +228,25 @@ impl RunningSum {
                     *sum += value;
                 }
             }
-            (Self::Frame { values, .. }, InputValue::ColorFrame(frame)) => {
+            (
+                Self::Frame {
+                    frame_kind, values, ..
+                },
+                InputValue::ColorFrame(frame),
+            ) if *frame_kind == ValueKind::ColorFrame => {
+                for (sum, pixel) in values.iter_mut().zip(frame.pixels.iter()) {
+                    sum[0] += pixel.r;
+                    sum[1] += pixel.g;
+                    sum[2] += pixel.b;
+                    sum[3] += pixel.a;
+                }
+            }
+            (
+                Self::Frame {
+                    frame_kind, values, ..
+                },
+                InputValue::MappedFrame(frame),
+            ) if *frame_kind == ValueKind::MappedFrame => {
                 for (sum, pixel) in values.iter_mut().zip(frame.pixels.iter()) {
                     sum[0] += pixel.r;
                     sum[1] += pixel.g;
@@ -214,7 +272,25 @@ impl RunningSum {
                     *sum -= value;
                 }
             }
-            (Self::Frame { values, .. }, InputValue::ColorFrame(frame)) => {
+            (
+                Self::Frame {
+                    frame_kind, values, ..
+                },
+                InputValue::ColorFrame(frame),
+            ) if *frame_kind == ValueKind::ColorFrame => {
+                for (sum, pixel) in values.iter_mut().zip(frame.pixels.iter()) {
+                    sum[0] -= pixel.r;
+                    sum[1] -= pixel.g;
+                    sum[2] -= pixel.b;
+                    sum[3] -= pixel.a;
+                }
+            }
+            (
+                Self::Frame {
+                    frame_kind, values, ..
+                },
+                InputValue::MappedFrame(frame),
+            ) if *frame_kind == ValueKind::MappedFrame => {
                 for (sum, pixel) in values.iter_mut().zip(frame.pixels.iter()) {
                     sum[0] -= pixel.r;
                     sum[1] -= pixel.g;
@@ -239,18 +315,26 @@ impl RunningSum {
                 shape: shape.clone(),
                 values: values.iter().map(|value| *value / divisor).collect(),
             }),
-            Self::Frame { layout, values } => InputValue::ColorFrame(ColorFrame {
-                layout: layout.clone(),
-                pixels: values
-                    .iter()
-                    .map(|sum| RgbaColor {
-                        r: (sum[0] / divisor).clamp(0.0, 1.0),
-                        g: (sum[1] / divisor).clamp(0.0, 1.0),
-                        b: (sum[2] / divisor).clamp(0.0, 1.0),
-                        a: (sum[3] / divisor).clamp(0.0, 1.0),
-                    })
-                    .collect(),
-            }),
+            Self::Frame {
+                frame_kind,
+                layout,
+                values,
+            } => InputValue::from_frame_kind(
+                *frame_kind,
+                ColorFrame {
+                    layout: layout.clone(),
+                    pixels: values
+                        .iter()
+                        .map(|sum| RgbaColor {
+                            r: (sum[0] / divisor).clamp(0.0, 1.0),
+                            g: (sum[1] / divisor).clamp(0.0, 1.0),
+                            b: (sum[2] / divisor).clamp(0.0, 1.0),
+                            a: (sum[3] / divisor).clamp(0.0, 1.0),
+                        })
+                        .collect(),
+                },
+            )
+            .expect("frame kind"),
         }
     }
 }

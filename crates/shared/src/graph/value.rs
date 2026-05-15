@@ -10,6 +10,7 @@ pub enum ValueKind {
     Color,
     LedLayout,
     ColorFrame,
+    MappedFrame,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -22,6 +23,7 @@ pub enum InputValue {
     Color(RgbaColor),
     LedLayout(LedLayout),
     ColorFrame(ColorFrame),
+    MappedFrame(ColorFrame),
 }
 
 impl InputValue {
@@ -34,7 +36,40 @@ impl InputValue {
             Self::Color(_) => ValueKind::Color,
             Self::LedLayout(_) => ValueKind::LedLayout,
             Self::ColorFrame(_) => ValueKind::ColorFrame,
+            Self::MappedFrame(_) => ValueKind::MappedFrame,
         }
+    }
+
+    /// Returns the contained frame payload for either frame-valued variant.
+    pub fn as_frame(&self) -> Option<&ColorFrame> {
+        match self {
+            Self::ColorFrame(frame) | Self::MappedFrame(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Returns the contained frame payload for either frame-valued variant.
+    pub fn as_frame_mut(&mut self) -> Option<&mut ColorFrame> {
+        match self {
+            Self::ColorFrame(frame) | Self::MappedFrame(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Converts a frame payload into the requested frame-valued variant.
+    pub fn from_frame_kind(kind: ValueKind, frame: ColorFrame) -> Option<Self> {
+        match kind {
+            ValueKind::ColorFrame => Some(Self::ColorFrame(frame)),
+            ValueKind::MappedFrame => Some(Self::MappedFrame(frame)),
+            _ => None,
+        }
+    }
+}
+
+impl ValueKind {
+    /// Returns whether the kind represents one of the frame-carrying variants.
+    pub fn is_frame(self) -> bool {
+        matches!(self, Self::ColorFrame | Self::MappedFrame)
     }
 }
 

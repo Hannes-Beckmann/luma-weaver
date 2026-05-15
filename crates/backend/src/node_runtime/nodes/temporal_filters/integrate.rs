@@ -96,6 +96,18 @@ impl IntegrateNode {
                     frame.pixels.len()
                 ],
             }),
+            InputValue::MappedFrame(frame) => InputValue::MappedFrame(ColorFrame {
+                layout: frame.layout.clone(),
+                pixels: vec![
+                    RgbaColor {
+                        r: self.clamp_scalar(self.initial_value),
+                        g: self.clamp_scalar(self.initial_value),
+                        b: self.clamp_scalar(self.initial_value),
+                        a: self.clamp_scalar(self.initial_value),
+                    };
+                    frame.pixels.len()
+                ],
+            }),
             other => panic!("unsupported integrate input kind: {:?}", other.value_kind()),
         }
     }
@@ -132,6 +144,27 @@ impl IntegrateNode {
                     bail!("integrate frame layout mismatch");
                 }
                 Ok(InputValue::ColorFrame(ColorFrame {
+                    layout: accumulated.layout.clone(),
+                    pixels: accumulated
+                        .pixels
+                        .iter()
+                        .zip(rate.pixels.iter())
+                        .map(|(accumulated, rate)| RgbaColor {
+                            r: self.clamp_scalar(accumulated.r + rate.r * dt),
+                            g: self.clamp_scalar(accumulated.g + rate.g * dt),
+                            b: self.clamp_scalar(accumulated.b + rate.b * dt),
+                            a: self.clamp_scalar(accumulated.a + rate.a * dt),
+                        })
+                        .collect(),
+                }))
+            }
+            (InputValue::MappedFrame(accumulated), InputValue::MappedFrame(rate)) => {
+                if accumulated.layout != rate.layout
+                    || accumulated.pixels.len() != rate.pixels.len()
+                {
+                    bail!("integrate frame layout mismatch");
+                }
+                Ok(InputValue::MappedFrame(ColorFrame {
                     layout: accumulated.layout.clone(),
                     pixels: accumulated
                         .pixels

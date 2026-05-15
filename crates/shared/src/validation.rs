@@ -171,15 +171,6 @@ pub fn validate_graph_document(document: &GraphDocument) -> Vec<GraphValidationI
         if !to_input.accepts_kind(resolved_output_kind)
             || !from_output.accepts_kind(resolved_output_kind)
             || inferred_output.message().is_some()
-            || (resolved_output_kind == ValueKind::ColorFrame
-                && !to_definition
-                    .input_frame_layout_requirement(&to_input.name)
-                    .accepts(
-                        match from_definition.output_frame_layout_requirement(&from_output.name) {
-                            crate::FrameLayoutRequirement::Source => crate::LedLayoutRole::Source,
-                            _ => crate::LedLayoutRole::RenderTarget,
-                        },
-                    ))
         {
             issues.push(GraphValidationIssue {
                 code: GraphValidationIssueCode::EdgeTypeMismatch,

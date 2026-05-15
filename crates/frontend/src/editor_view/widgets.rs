@@ -40,6 +40,13 @@ pub(super) fn format_input_value(value: &InputValue) -> String {
             frame.pixels.len(),
             frame_layout_dims_label(frame)
         ),
+        InputValue::MappedFrame(frame) => format!(
+            "mapped_frame(layout={}, role={:?}, leds={}, dims={})",
+            frame.layout.id,
+            frame.layout.role,
+            frame.pixels.len(),
+            frame_layout_dims_label(frame)
+        ),
     }
 }
 
@@ -97,6 +104,15 @@ pub(super) fn show_runtime_value(ui: &mut egui::Ui, value: &InputValue) {
         InputValue::ColorFrame(frame) => {
             ui.label(format!(
                 "frame(layout={}, role={:?}, leds={}, dims={})",
+                frame.layout.id,
+                frame.layout.role,
+                frame.pixels.len(),
+                frame_layout_dims_label(frame)
+            ));
+        }
+        InputValue::MappedFrame(frame) => {
+            ui.label(format!(
+                "mapped_frame(layout={}, role={:?}, leds={}, dims={})",
                 frame.layout.id,
                 frame.layout.role,
                 frame.pixels.len(),
@@ -278,7 +294,7 @@ pub(super) fn edit_input_value(ui: &mut egui::Ui, input: &mut EditorInputPort) {
         InputValue::LedLayout(layout) => {
             ui.label(format!("{} LEDs ({})", layout.pixel_count, layout.id));
         }
-        InputValue::ColorFrame(_) => {}
+        InputValue::ColorFrame(_) | InputValue::MappedFrame(_) => {}
     }
 }
 
@@ -291,7 +307,7 @@ pub(super) fn supports_disconnected_inline_editor(kind: ValueKind) -> bool {
         ValueKind::FloatTensor => true,
         ValueKind::Color => true,
         ValueKind::LedLayout => true,
-        ValueKind::ColorFrame => false,
+        ValueKind::ColorFrame | ValueKind::MappedFrame => false,
     }
 }
 

@@ -1,8 +1,8 @@
 use anyhow::Result;
-use shared::{ColorFrame, InputValue, RgbaColor};
+use shared::{InputValue, RgbaColor};
 
 use crate::node_runtime::{
-    NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
+    AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
     TypedNodeEvaluation,
 };
 
@@ -12,7 +12,7 @@ pub(crate) struct TintFrameNode;
 impl RuntimeNodeFromParameters for TintFrameNode {}
 
 pub(crate) struct TintFrameInputs {
-    frame: Option<ColorFrame>,
+    frame: Option<AnyInputValue>,
     tint: RgbaColor,
 }
 
@@ -27,14 +27,14 @@ crate::node_runtime::impl_runtime_inputs!(TintFrameInputs {
 });
 
 pub(crate) struct TintFrameOutputs {
-    frame: Option<ColorFrame>,
+    frame: Option<InputValue>,
 }
 
 impl RuntimeOutputs for TintFrameOutputs {
     fn into_runtime_outputs(self) -> anyhow::Result<std::collections::HashMap<String, InputValue>> {
         let mut outputs = std::collections::HashMap::new();
         if let Some(frame) = self.frame {
-            outputs.insert("frame".to_owned(), InputValue::ColorFrame(frame));
+            outputs.insert("frame".to_owned(), frame);
         }
         Ok(outputs)
     }
@@ -49,8 +49,13 @@ impl RuntimeNode for TintFrameNode {
         _context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
-        let frame = inputs.frame.map(|mut frame| {
-            for pixel in &mut frame.pixels {
+        let frame = inputs.frame.map(|value| {
+            let mut frame = value.0;
+            let pixels = &mut frame
+                .as_frame_mut()
+                .expect("tint frame only accepts frame values")
+                .pixels;
+            for pixel in pixels {
                 pixel.r = (pixel.r * inputs.tint.r).clamp(0.0, 1.0);
                 pixel.g = (pixel.g * inputs.tint.g).clamp(0.0, 1.0);
                 pixel.b = (pixel.b * inputs.tint.b).clamp(0.0, 1.0);

@@ -4,8 +4,8 @@
 //! and the backend runtime registry.
 
 use super::{
-    ColorGradient, ColorGradientStop, InputKindRef, InputValue, LedLayoutRole, NodeParameter,
-    RgbaColor, ValueKind, node_definition_impl,
+    ColorGradient, ColorGradientStop, InputKindRef, InputValue, NodeParameter, RgbaColor,
+    ValueKind, node_definition_impl,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
@@ -49,6 +49,7 @@ impl NodeTypeId {
     pub const SET_CHANNEL: &'static str = "frame_operations.set_channel";
     pub const COLORIZE: &'static str = "frame_operations.colorize";
     pub const TINT_FRAME: &'static str = "frame_operations.tint_frame";
+    pub const MAP_TO_LAYOUT: &'static str = "frame_operations.map_to_layout";
     pub const FILL_FROM_FRAME: &'static str = "frame_operations.fill_from_frame";
     pub const MASK_FRAME: &'static str = "frame_operations.mask_frame";
     pub const MIX_COLOR: &'static str = "frame_operations.mix";
@@ -136,26 +137,6 @@ pub enum RenderLayoutKind {
     Spatial3d,
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
-#[serde(rename_all = "snake_case")]
-/// Declares which layout role a `ColorFrame` port expects or produces.
-pub enum FrameLayoutRequirement {
-    Any,
-    RenderTarget,
-    Source,
-}
-
-impl FrameLayoutRequirement {
-    pub fn accepts(self, role: LedLayoutRole) -> bool {
-        matches!(self, Self::Any)
-            || matches!(
-                (self, role),
-                (Self::RenderTarget, LedLayoutRole::RenderTarget)
-            )
-            || matches!((self, role), (Self::Source, LedLayoutRole::Source))
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes the shared schema for a single node type.
 ///
@@ -181,13 +162,31 @@ pub trait NodeDefinition: Sync {
     fn infer_output(
         &self,
         output_name: &str,
-        _input_kinds: &[InputKindRef<'_>],
+        input_kinds: &[InputKindRef<'_>],
         _parameters: &[NodeParameter],
     ) -> OutputInference {
-        self.schema()
-            .output_port(output_name)
-            .map(|output| OutputInference::Resolved(output.value_kind))
-            .unwrap_or(OutputInference::Unavailable)
+        let Some(output) = self.schema().output_port(output_name) else {
+            return OutputInference::Unavailable;
+        };
+        if output.value_kind == ValueKind::ColorFrame
+            && output.accepted_kinds.contains(&ValueKind::MappedFrame)
+        {
+            let inferred_kind = self
+                .schema()
+                .inputs
+                .iter()
+                .filter_map(|input| {
+                    input_kinds
+                        .iter()
+                        .find(|candidate| candidate.name == input.name)
+                        .map(|candidate| candidate.kind)
+                })
+                .find(|kind| kind.is_frame() && output.accepts_kind(*kind))
+                .unwrap_or(output.value_kind);
+            OutputInference::Resolved(inferred_kind)
+        } else {
+            OutputInference::Resolved(output.value_kind)
+        }
     }
 }
 
@@ -255,30 +254,6 @@ impl NodeSchema {
             return false;
         }
         true
-    }
-
-    /// Returns the layout role required by an input frame port.
-    pub fn input_frame_layout_requirement(&self, input_name: &str) -> FrameLayoutRequirement {
-        if self.id == NodeTypeId::FILL_FROM_FRAME && input_name == "frame" {
-            FrameLayoutRequirement::Source
-        } else {
-            self.input_port(input_name)
-                .filter(|input| input.value_kind == ValueKind::ColorFrame)
-                .map(|_| FrameLayoutRequirement::RenderTarget)
-                .unwrap_or(FrameLayoutRequirement::Any)
-        }
-    }
-
-    /// Returns the layout role produced by an output frame port.
-    pub fn output_frame_layout_requirement(&self, output_name: &str) -> FrameLayoutRequirement {
-        if self.id == NodeTypeId::WLED_SINK && output_name == "frame" {
-            FrameLayoutRequirement::Source
-        } else {
-            self.output_port(output_name)
-                .filter(|output| output.value_kind == ValueKind::ColorFrame)
-                .map(|_| FrameLayoutRequirement::RenderTarget)
-                .unwrap_or(FrameLayoutRequirement::Any)
-        }
     }
 
     /// Infers the concrete kind of a polymorphic output port from the currently resolved input kinds.
@@ -804,26 +779,86 @@ mod tests {
     }
 
     #[test]
-    fn wled_sink_frame_output_is_marked_as_source_layout() {
+    fn wled_sink_frame_output_is_mapped_frame() {
         let definition = node_definition(NodeTypeId::WLED_SINK).expect("wled sink definition");
 
         let frame = definition.output_port("frame").expect("frame output");
 
-        assert_eq!(frame.value_kind, ValueKind::ColorFrame);
-        assert_eq!(
-            definition.output_frame_layout_requirement("frame"),
-            FrameLayoutRequirement::Source
-        );
+        assert_eq!(frame.value_kind, ValueKind::MappedFrame);
     }
 
     #[test]
-    fn fill_from_frame_input_requires_source_layout() {
+    fn fill_from_frame_input_requires_mapped_frame() {
         let definition =
             node_definition(NodeTypeId::FILL_FROM_FRAME).expect("fill from frame definition");
 
         assert_eq!(
-            definition.input_frame_layout_requirement("frame"),
-            FrameLayoutRequirement::Source
+            definition.input_port("frame").map(|port| port.value_kind),
+            Some(ValueKind::MappedFrame)
+        );
+    }
+
+    #[test]
+    fn map_to_layout_converts_color_frame_to_mapped_frame() {
+        let definition =
+            node_definition(NodeTypeId::MAP_TO_LAYOUT).expect("map to layout definition");
+
+        assert_eq!(
+            definition.input_port("frame").map(|port| port.value_kind),
+            Some(ValueKind::ColorFrame)
+        );
+        assert_eq!(
+            definition.output_port("frame").map(|port| port.value_kind),
+            Some(ValueKind::MappedFrame)
+        );
+    }
+
+    #[test]
+    fn fill_from_frame_method_hides_irrelevant_parameters() {
+        let definition =
+            node_definition(NodeTypeId::FILL_FROM_FRAME).expect("fill from frame definition");
+        let nearest = [NodeParameter {
+            name: "method".to_owned(),
+            value: serde_json::json!("nearest"),
+        }];
+        let smooth_distance = [NodeParameter {
+            name: "method".to_owned(),
+            value: serde_json::json!("smooth_distance"),
+        }];
+        let radius = [NodeParameter {
+            name: "method".to_owned(),
+            value: serde_json::json!("radius"),
+        }];
+
+        assert!(
+            !definition
+                .parameter("sample_count")
+                .expect("sample_count parameter")
+                .is_visible(&nearest)
+        );
+        assert!(
+            definition
+                .parameter("sample_count")
+                .expect("sample_count parameter")
+                .is_visible(&smooth_distance)
+        );
+        assert!(
+            !definition
+                .parameter("radius")
+                .expect("radius parameter")
+                .is_visible(&smooth_distance)
+        );
+        assert!(
+            definition
+                .parameter("radius")
+                .expect("radius parameter")
+                .is_visible(&radius)
+        );
+        assert!(
+            definition
+                .parameter("fallback_color")
+                .expect("fallback_color parameter")
+                .is_visible(&radius)
         );
     }
 

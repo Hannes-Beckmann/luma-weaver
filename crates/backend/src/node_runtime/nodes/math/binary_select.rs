@@ -89,6 +89,7 @@ fn value_kind(value: &InputValue) -> ValueKind {
         InputValue::Color(_) => ValueKind::Color,
         InputValue::LedLayout(_) => ValueKind::LedLayout,
         InputValue::ColorFrame(_) => ValueKind::ColorFrame,
+        InputValue::MappedFrame(_) => ValueKind::MappedFrame,
     }
 }
 

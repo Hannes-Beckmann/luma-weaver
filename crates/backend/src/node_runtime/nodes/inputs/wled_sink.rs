@@ -5,7 +5,8 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use shared::{
-    ColorFrame, LedLayout, LedLayoutRole, NodeDiagnostic, NodeDiagnosticSeverity, RgbaColor,
+    ColorFrame, InputValue, LedLayout, LedLayoutRole, NodeDiagnostic, NodeDiagnosticSeverity,
+    RgbaColor,
 };
 
 use crate::node_runtime::{
@@ -153,16 +154,22 @@ impl RuntimeNodeFromParameters for WledSinkNode {
 }
 
 pub(crate) struct WledSinkOutputs {
-    frame: ColorFrame,
+    frame: InputValue,
 }
 
-crate::node_runtime::impl_runtime_outputs!(WledSinkOutputs { frame });
+impl crate::node_runtime::RuntimeOutputs for WledSinkOutputs {
+    fn into_runtime_outputs(self) -> anyhow::Result<HashMap<String, InputValue>> {
+        let mut outputs = HashMap::new();
+        outputs.insert("frame".to_owned(), self.frame);
+        Ok(outputs)
+    }
+}
 
 impl RuntimeNode for WledSinkNode {
     type Inputs = ();
     type Outputs = WledSinkOutputs;
 
-    /// Polls the DDP socket, reassembles the latest frame, and exposes it as a `ColorFrame`.
+    /// Polls the DDP socket, reassembles the latest frame, and exposes it as a `MappedFrame`.
     fn evaluate(
         &mut self,
         _context: &NodeEvaluationContext,
@@ -179,22 +186,30 @@ impl RuntimeNode for WledSinkNode {
             });
         }
 
-        let frame = source_frame_from_pixels(
+        let frame = InputValue::MappedFrame(source_frame_from_pixels(
             &self.latest_pixels,
             self.source_shape,
             self.source_width,
             self.source_height,
             self.source_placement,
             self.port,
-        );
+        ));
 
+        let output_pixels = frame
+            .as_frame()
+            .map(|value| value.pixels.len())
+            .unwrap_or_default();
+        let layout_id = frame
+            .as_frame()
+            .map(|value| value.layout.id.as_str())
+            .unwrap_or("");
         tracing::trace!(
             protocol = self.protocol.label(),
             port = self.port,
             socket_bound = self.socket.is_some(),
             received_pixels = self.latest_pixels.len(),
-            output_pixels = frame.pixels.len(),
-            layout_id = %frame.layout.id,
+            output_pixels,
+            layout_id,
             "WLED sink output frame"
         );
 

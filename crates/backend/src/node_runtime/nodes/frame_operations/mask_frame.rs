@@ -13,7 +13,7 @@ pub(crate) struct MaskFrameNode;
 impl RuntimeNodeFromParameters for MaskFrameNode {}
 
 pub(crate) struct MaskFrameInputs {
-    frame: Option<ColorFrame>,
+    frame: Option<AnyInputValue>,
     mask: Option<AnyInputValue>,
 }
 
@@ -23,14 +23,14 @@ crate::node_runtime::impl_runtime_inputs!(MaskFrameInputs {
 });
 
 pub(crate) struct MaskFrameOutputs {
-    frame: Option<ColorFrame>,
+    frame: Option<InputValue>,
 }
 
 impl RuntimeOutputs for MaskFrameOutputs {
     fn into_runtime_outputs(self) -> anyhow::Result<std::collections::HashMap<String, InputValue>> {
         let mut outputs = std::collections::HashMap::new();
         if let Some(frame) = self.frame {
-            outputs.insert("frame".to_owned(), InputValue::ColorFrame(frame));
+            outputs.insert("frame".to_owned(), frame);
         }
         Ok(outputs)
     }
@@ -45,7 +45,7 @@ impl RuntimeNode for MaskFrameNode {
         _context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
-        let Some(mut frame) = inputs.frame else {
+        let Some(mut frame) = inputs.frame.map(|value| value.0) else {
             return Ok(TypedNodeEvaluation::from_outputs(MaskFrameOutputs {
                 frame: None,
             }));
@@ -57,9 +57,20 @@ impl RuntimeNode for MaskFrameNode {
         };
 
         let diagnostics;
-        match mask_alphas_for_frame(&mask, &frame.layout) {
+        let layout = frame
+            .as_frame()
+            .expect("mask frame only accepts frame values")
+            .layout
+            .clone();
+        match mask_alphas_for_frame(&mask, &layout) {
             Ok(mask_alphas) => {
-                for (pixel, alpha) in frame.pixels.iter_mut().zip(mask_alphas.iter().copied()) {
+                for (pixel, alpha) in frame
+                    .as_frame_mut()
+                    .expect("mask frame only accepts frame values")
+                    .pixels
+                    .iter_mut()
+                    .zip(mask_alphas.iter().copied())
+                {
                     let factor = alpha.clamp(0.0, 1.0);
                     pixel.r = (pixel.r * factor).clamp(0.0, 1.0);
                     pixel.g = (pixel.g * factor).clamp(0.0, 1.0);
@@ -90,7 +101,9 @@ fn mask_alphas_for_frame(
     layout: &shared::LedLayout,
 ) -> Result<Vec<f32>, String> {
     match mask {
-        InputValue::ColorFrame(mask) => mask_alphas_from_frame(mask, layout.pixel_count),
+        InputValue::ColorFrame(mask) | InputValue::MappedFrame(mask) => {
+            mask_alphas_from_frame(mask, layout.pixel_count)
+        }
         InputValue::FloatTensor(mask) => mask_alphas_from_tensor(mask, layout),
         other => Err(format!(
             "Mask Frame expected a mask frame or float tensor, but got {:?}.",
@@ -158,7 +171,7 @@ mod tests {
                     render_layout: None,
                 },
                 MaskFrameInputs {
-                    frame: Some(ColorFrame {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(ColorFrame {
                         layout: layout.clone(),
                         pixels: vec![
                             RgbaColor {
@@ -174,7 +187,7 @@ mod tests {
                                 a: 0.5,
                             },
                         ],
-                    }),
+                    }))),
                     mask: Some(AnyInputValue(InputValue::ColorFrame(ColorFrame {
                         layout,
                         pixels: vec![
@@ -197,6 +210,7 @@ mod tests {
             .expect("evaluate mask frame");
 
         let output = result.outputs.frame.expect("masked frame output");
+        let output = output.as_frame().expect("frame output");
         assert_eq!(
             output.pixels,
             vec![
@@ -237,7 +251,7 @@ mod tests {
                     render_layout: None,
                 },
                 MaskFrameInputs {
-                    frame: Some(ColorFrame {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(ColorFrame {
                         layout: layout.clone(),
                         pixels: vec![
                             RgbaColor {
@@ -253,7 +267,7 @@ mod tests {
                                 a: 0.5,
                             },
                         ],
-                    }),
+                    }))),
                     mask: Some(AnyInputValue(InputValue::FloatTensor(FloatTensor {
                         shape: vec![1, 2],
                         values: vec![0.25, 1.0],
@@ -263,6 +277,7 @@ mod tests {
             .expect("evaluate mask frame with tensor");
 
         let output = result.outputs.frame.expect("masked frame output");
+        let output = output.as_frame().expect("frame output");
         assert_eq!(
             output.pixels,
             vec![

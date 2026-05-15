@@ -86,20 +86,12 @@ pub(crate) fn compile_graph_document(
         {
             continue;
         }
-        if resolved_output_kind == ValueKind::ColorFrame {
-            let source_role = from_definition.output_frame_layout_requirement(&from_port.name);
-            let target_role = to_definition.input_frame_layout_requirement(&to_port.name);
-            if !matches!(target_role, shared::FrameLayoutRequirement::Any)
-                && source_role != target_role
-            {
-                continue;
-            }
-        }
 
         incoming_edges_by_node[to_node_index].push(CompiledIncomingEdge {
             from_node_index,
             from_output_name: edge.from_output_name.clone(),
             to_input_name: edge.to_input_name.clone(),
+            participates_in_render_context: resolved_output_kind != ValueKind::MappedFrame,
             use_previous_tick: from_node.node_type.as_str() == NodeTypeId::DELAY,
         });
         if from_node.node_type.as_str() != NodeTypeId::DELAY {

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use shared::{ColorFrame, InputValue, RgbaColor};
+use shared::{InputValue, RgbaColor, ValueKind};
 
 use crate::node_runtime::tensor::{coerce_color_frame, infer_broadcast_shape, layout_from_shape};
 use crate::node_runtime::{
@@ -24,10 +24,8 @@ crate::node_runtime::impl_runtime_inputs!(AlphaOverInputs {
 });
 
 pub(crate) struct AlphaOverOutputs {
-    color: ColorFrame,
+    color: InputValue,
 }
-
-crate::node_runtime::impl_runtime_outputs!(AlphaOverOutputs { color });
 
 impl RuntimeNode for AlphaOverNode {
     type Inputs = AlphaOverInputs;
@@ -38,6 +36,10 @@ impl RuntimeNode for AlphaOverNode {
         _context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
+        let output_kind = output_frame_kind(&[
+            inputs.foreground.0.value_kind(),
+            inputs.background.0.value_kind(),
+        ]);
         let foreground = inputs.foreground.0;
         let background = inputs.background.0;
 
@@ -54,12 +56,32 @@ impl RuntimeNode for AlphaOverNode {
             .collect();
 
         Ok(TypedNodeEvaluation::from_outputs(AlphaOverOutputs {
-            color: ColorFrame {
-                layout: foreground.layout,
-                pixels,
-            },
+            color: InputValue::from_frame_kind(
+                output_kind,
+                shared::ColorFrame {
+                    layout: foreground.layout,
+                    pixels,
+                },
+            )
+            .expect("frame kind"),
         }))
     }
+}
+
+impl crate::node_runtime::RuntimeOutputs for AlphaOverOutputs {
+    fn into_runtime_outputs(self) -> anyhow::Result<std::collections::HashMap<String, InputValue>> {
+        let mut outputs = std::collections::HashMap::new();
+        outputs.insert("color".to_owned(), self.color);
+        Ok(outputs)
+    }
+}
+
+fn output_frame_kind(kinds: &[ValueKind]) -> ValueKind {
+    kinds
+        .iter()
+        .copied()
+        .find(|kind| kind.is_frame())
+        .unwrap_or(ValueKind::ColorFrame)
 }
 
 fn default_transparent_value() -> AnyInputValue {
@@ -133,7 +155,12 @@ mod tests {
         .expect("evaluate alpha over");
 
         assert_eq!(
-            evaluation.outputs.color.pixels[0],
+            evaluation
+                .outputs
+                .color
+                .as_frame()
+                .expect("frame output")
+                .pixels[0],
             RgbaColor {
                 r: 0.5,
                 g: 0.0,

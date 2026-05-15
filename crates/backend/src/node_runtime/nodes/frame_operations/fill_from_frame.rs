@@ -77,7 +77,7 @@ impl RuntimeNodeFromParameters for FillFromFrameNode {
 }
 
 pub(crate) struct FillFromFrameInputs {
-    frame: Option<ColorFrame>,
+    frame: Option<InputValue>,
 }
 
 crate::node_runtime::impl_runtime_inputs!(FillFromFrameInputs {
@@ -107,7 +107,10 @@ impl RuntimeNode for FillFromFrameNode {
         context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
-        let Some(source_frame) = inputs.frame else {
+        let Some(source_frame) = inputs.frame.and_then(|value| match value {
+            InputValue::MappedFrame(frame) => Some(frame),
+            _ => None,
+        }) else {
             return Ok(TypedNodeEvaluation::from_outputs(FillFromFrameOutputs {
                 frame: None,
             }));
@@ -470,7 +473,7 @@ mod tests {
             .evaluate(
                 &context(destination),
                 FillFromFrameInputs {
-                    frame: Some(source),
+                    frame: Some(InputValue::MappedFrame(source)),
                 },
             )
             .expect("evaluate")
@@ -514,7 +517,7 @@ mod tests {
             .evaluate(
                 &context(destination),
                 FillFromFrameInputs {
-                    frame: Some(source),
+                    frame: Some(InputValue::MappedFrame(source)),
                 },
             )
             .expect("evaluate")
@@ -565,7 +568,7 @@ mod tests {
             .evaluate(
                 &context(destination),
                 FillFromFrameInputs {
-                    frame: Some(source),
+                    frame: Some(InputValue::MappedFrame(source)),
                 },
             )
             .expect("evaluate")

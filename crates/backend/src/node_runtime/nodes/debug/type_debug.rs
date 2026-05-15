@@ -53,6 +53,10 @@ fn type_label(value: Option<&InputValue>) -> String {
             (Some(width), Some(height)) => format!("ColorFrame shape=[{}, {}]", height, width),
             _ => format!("ColorFrame shape=[{}]", frame.pixels.len()),
         },
+        Some(InputValue::MappedFrame(frame)) => match (frame.layout.width, frame.layout.height) {
+            (Some(width), Some(height)) => format!("MappedFrame shape=[{}, {}]", height, width),
+            _ => format!("MappedFrame shape=[{}]", frame.pixels.len()),
+        },
     }
 }
 

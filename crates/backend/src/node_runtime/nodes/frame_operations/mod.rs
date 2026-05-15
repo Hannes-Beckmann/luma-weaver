@@ -3,6 +3,7 @@ pub(crate) mod colorize;
 pub(crate) mod extract_channels;
 pub(crate) mod fill_from_frame;
 pub(crate) mod frame_brightness;
+pub(crate) mod map_to_layout;
 pub(crate) mod mask_frame;
 pub(crate) mod mix_color;
 pub(crate) mod multiply_color;

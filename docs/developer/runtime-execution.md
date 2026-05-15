@@ -167,6 +167,7 @@ Each sink node contributes a concrete `RenderContext`:
 
 - `WLED Target` creates a context based on its configured target and LED count
 - `WLED Dummy Display` creates a context based on its configured width and height
+- `Map To Layout` also creates a context from its configured width, height, and optional spatial layout
 
 That context is then propagated backward through upstream dependencies.
 
@@ -177,10 +178,10 @@ Important consequence:
 So if one animation branch feeds two different sinks, the upstream generator may be evaluated once per sink context.
 
 Some inputs deliberately stop render-context backpropagation. `Fill From Frame` receives the
-downstream sink context for its output, but its `frame` input consumes a source-layout
-`ColorFrame`. The planner therefore does not propagate the destination context across that input.
-This lets a `WLED Sink` publish sampled pixels with intrinsic source geometry once, while
-`Fill From Frame` remaps that source frame into each downstream sink layout.
+downstream sink context for its output, but its `frame` input consumes a `MappedFrame` with its
+own fixed layout. The planner therefore does not propagate the destination context across that
+input. This lets nodes like `WLED Sink` or `Map To Layout` publish pixels with intrinsic source
+geometry once, while `Fill From Frame` remaps that mapped frame into each downstream sink layout.
 
 ## Forward Fill For Observer Branches
 
@@ -194,7 +195,7 @@ This is what allows nodes like displays or previews to stay aligned with the ren
 
 ```mermaid
 flowchart LR
-    Sinks[Sink nodes\nWLED Target / Dummy Display] --> Backprop[Backpropagate contexts upstream]
+    Sinks[Sink-like nodes\nWLED Target / Dummy Display / Map To Layout] --> Backprop[Backpropagate contexts upstream]
     Backprop --> Dedup[Sort and deduplicate contexts per node]
     Dedup --> ForwardFill[Forward-fill contexts into observer branches]
     ForwardFill --> Planned[render_contexts_by_node]

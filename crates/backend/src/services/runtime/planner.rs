@@ -63,9 +63,7 @@ fn backpropagate_from_sinks(
         );
         by_node[node_index].push(context.clone());
         for incoming in &incoming_edges_by_node[node_index] {
-            if nodes[node_index].node_type.as_str() == NodeTypeId::FILL_FROM_FRAME
-                && incoming.to_input_name == "frame"
-            {
+            if !incoming.participates_in_render_context {
                 continue;
             }
             queue.push_back((incoming.from_node_index, context.clone()));
@@ -214,7 +212,7 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 },
             })
         }
-        NodeTypeId::WLED_DUMMY_DISPLAY => {
+        NodeTypeId::WLED_DUMMY_DISPLAY | NodeTypeId::MAP_TO_LAYOUT => {
             let width = node
                 .parameters
                 .get("width")
@@ -229,7 +227,11 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 .max(1) as usize;
             let use_spatial = bool_parameter(node, "use_spatial");
             let placement = SpatialPlacement::from_parameters(&node.parameters);
-            let id = format!("sink:dummy:{}", node.id);
+            let id = if node.node_type.as_str() == NodeTypeId::MAP_TO_LAYOUT {
+                format!("sink:map_to_layout:{}", node.id)
+            } else {
+                format!("sink:dummy:{}", node.id)
+            };
             Some(RenderContext {
                 id: id.clone(),
                 layout: LedLayout {
@@ -307,12 +309,14 @@ mod tests {
                 from_node_index: 0,
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
+                participates_in_render_context: true,
                 use_previous_tick: false,
             }],
             vec![CompiledIncomingEdge {
                 from_node_index: 0,
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
+                participates_in_render_context: true,
                 use_previous_tick: false,
             }],
         ];
@@ -355,12 +359,14 @@ mod tests {
                 from_node_index: 0,
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
+                participates_in_render_context: true,
                 use_previous_tick: false,
             }],
             vec![CompiledIncomingEdge {
                 from_node_index: 0,
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
+                participates_in_render_context: true,
                 use_previous_tick: false,
             }],
         ];
@@ -396,12 +402,14 @@ mod tests {
                 from_node_index: 0,
                 from_output_name: "frame".to_owned(),
                 to_input_name: "frame".to_owned(),
+                participates_in_render_context: false,
                 use_previous_tick: false,
             }],
             vec![CompiledIncomingEdge {
                 from_node_index: 1,
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
+                participates_in_render_context: true,
                 use_previous_tick: false,
             }],
         ];
@@ -413,5 +421,79 @@ mod tests {
         assert_eq!(planned[2].len(), 1);
         assert_eq!(planned[1][0].id, "sink:dummy:dummy");
         assert_eq!(planned[2][0].id, "sink:dummy:dummy");
+    }
+
+    #[test]
+    fn map_to_layout_backpropagates_its_configured_render_context() {
+        let nodes = vec![
+            compiled_node("bouncing", NodeTypeId::BOUNCING_BALLS, &[]),
+            compiled_node(
+                "map",
+                NodeTypeId::MAP_TO_LAYOUT,
+                &[
+                    ("width", JsonValue::from(12)),
+                    ("height", JsonValue::from(1)),
+                ],
+            ),
+        ];
+        let incoming = vec![
+            Vec::new(),
+            vec![CompiledIncomingEdge {
+                from_node_index: 0,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "frame".to_owned(),
+                participates_in_render_context: true,
+                use_previous_tick: false,
+            }],
+        ];
+
+        let planned = plan_render_contexts(&nodes, &incoming);
+
+        assert_eq!(planned[0].len(), 1);
+        assert_eq!(planned[1].len(), 1);
+        assert_eq!(planned[0][0].id, "sink:map_to_layout:map");
+        assert_eq!(planned[1][0].layout.pixel_count, 12);
+    }
+
+    #[test]
+    fn mapped_frame_output_does_not_backpropagate_context_downstream() {
+        let nodes = vec![
+            compiled_node("bouncing", NodeTypeId::BOUNCING_BALLS, &[]),
+            compiled_node(
+                "map",
+                NodeTypeId::MAP_TO_LAYOUT,
+                &[
+                    ("width", JsonValue::from(8)),
+                    ("height", JsonValue::from(8)),
+                ],
+            ),
+            compiled_node("fill", NodeTypeId::FILL_FROM_FRAME, &[]),
+        ];
+        let incoming = vec![
+            Vec::new(),
+            vec![CompiledIncomingEdge {
+                from_node_index: 0,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "frame".to_owned(),
+                participates_in_render_context: true,
+                use_previous_tick: false,
+            }],
+            vec![CompiledIncomingEdge {
+                from_node_index: 1,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "frame".to_owned(),
+                participates_in_render_context: false,
+                use_previous_tick: false,
+            }],
+        ];
+
+        let planned = plan_render_contexts(&nodes, &incoming);
+
+        assert_eq!(planned[0].len(), 1);
+        assert_eq!(planned[1].len(), 1);
+        assert_eq!(planned[2].len(), 1);
+        assert_eq!(planned[0][0].id, "sink:map_to_layout:map");
+        assert_eq!(planned[1][0].id, "sink:map_to_layout:map");
+        assert_eq!(planned[2][0].id, "sink:map_to_layout:map");
     }
 }

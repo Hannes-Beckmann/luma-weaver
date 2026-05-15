@@ -3,7 +3,7 @@ use shared::{ColorFrame, InputValue, RgbaColor};
 
 use crate::node_runtime::nodes::filter_utils::{clamped_index, layout_dimensions};
 use crate::node_runtime::{
-    NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
+    AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
     TypedNodeEvaluation,
 };
 
@@ -13,7 +13,7 @@ pub(crate) struct MedianFilterNode;
 impl RuntimeNodeFromParameters for MedianFilterNode {}
 
 pub(crate) struct MedianFilterInputs {
-    frame: Option<ColorFrame>,
+    frame: Option<AnyInputValue>,
     radius: f32,
 }
 
@@ -23,14 +23,14 @@ crate::node_runtime::impl_runtime_inputs!(MedianFilterInputs {
 });
 
 pub(crate) struct MedianFilterOutputs {
-    frame: Option<ColorFrame>,
+    frame: Option<InputValue>,
 }
 
 impl RuntimeOutputs for MedianFilterOutputs {
     fn into_runtime_outputs(self) -> anyhow::Result<std::collections::HashMap<String, InputValue>> {
         let mut outputs = std::collections::HashMap::new();
         if let Some(frame) = self.frame {
-            outputs.insert("frame".to_owned(), InputValue::ColorFrame(frame));
+            outputs.insert("frame".to_owned(), frame);
         }
         Ok(outputs)
     }
@@ -45,16 +45,21 @@ impl RuntimeNode for MedianFilterNode {
         _context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
-        let Some(frame) = inputs.frame else {
+        let Some(frame) = inputs.frame.map(|value| value.0) else {
             return Ok(TypedNodeEvaluation::from_outputs(MedianFilterOutputs {
                 frame: None,
             }));
         };
+        let kind = frame.value_kind();
+        let frame = frame
+            .as_frame()
+            .expect("median filter only accepts frame values")
+            .clone();
 
         let radius = inputs.radius.round().clamp(0.0, 16.0) as usize;
         if radius == 0 || frame.pixels.is_empty() {
             return Ok(TypedNodeEvaluation::from_outputs(MedianFilterOutputs {
-                frame: Some(frame),
+                frame: Some(InputValue::from_frame_kind(kind, frame).expect("frame kind")),
             }));
         }
 
@@ -100,10 +105,16 @@ impl RuntimeNode for MedianFilterNode {
         }
 
         Ok(TypedNodeEvaluation::from_outputs(MedianFilterOutputs {
-            frame: Some(ColorFrame {
-                layout: frame.layout,
-                pixels,
-            }),
+            frame: Some(
+                InputValue::from_frame_kind(
+                    kind,
+                    ColorFrame {
+                        layout: frame.layout,
+                        pixels,
+                    },
+                )
+                .expect("frame kind"),
+            ),
         }))
     }
 }

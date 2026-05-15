@@ -249,6 +249,10 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         nodes::frame_operations::tint_frame::TintFrameNode
     );
     register_node!(
+        NodeTypeId::MAP_TO_LAYOUT,
+        nodes::frame_operations::map_to_layout::MapToLayoutNode
+    );
+    register_node!(
         NodeTypeId::FILL_FROM_FRAME,
         nodes::frame_operations::fill_from_frame::FillFromFrameNode
     );

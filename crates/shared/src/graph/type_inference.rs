@@ -46,8 +46,15 @@ pub(crate) fn infer_preferred_kind(
     output: &NodeOutputDefinition,
     candidates: &[Option<ValueKind>],
 ) -> ValueKind {
+    for candidate in candidates.iter().flatten() {
+        if candidate.is_frame() && output.accepts_kind(*candidate) {
+            return *candidate;
+        }
+    }
+
     for preferred_kind in [
         ValueKind::ColorFrame,
+        ValueKind::MappedFrame,
         ValueKind::FloatTensor,
         ValueKind::Float,
     ] {

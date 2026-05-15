@@ -67,6 +67,7 @@ Examples:
 - Extract Channels
 - Set Channel
 - Colorize
+- Map To Layout
 - Fill From Frame
 - Mask Frame
 - Mix Color
@@ -82,7 +83,11 @@ matching `FloatTensor`.
 `Colorize` maps a `Float` or `FloatTensor` from `0..1` across a gradient and outputs a
 `ColorFrame`.
 
-`Fill From Frame` maps an incoming source `ColorFrame` into the active render-target layout.
+`Map To Layout` behaves like a local layout sink: it requests a concrete render layout from
+upstream using its configured width, height, and optional spatial parameters, then emits the
+result as a self-contained `MappedFrame`.
+
+`Fill From Frame` maps an incoming `MappedFrame` into the active render-target layout.
 `WLED Sink` emits source frames with optional strip or matrix source geometry configured on the
 sink. Fill methods include nearest point, smooth distance blending, radius-limited blending, and
 index stretching.

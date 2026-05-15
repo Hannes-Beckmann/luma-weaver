@@ -219,13 +219,7 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
         if max_input_connections == 0 {
             return;
         }
-        if self.connection_kind_mismatch(
-            from_kind,
-            from_definition,
-            from_port_definition,
-            to_definition,
-            to_port_definition,
-        ) {
+        if self.connection_kind_mismatch(from_kind, from_port_definition, to_port_definition) {
             return;
         }
         if self.connection_render_layout_mismatch(from.id, to.id, max_input_connections, snarl) {
@@ -312,7 +306,8 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
             }
             for (_name, value) in &editor_node.runtime_values {
                 match value {
-                    shared::InputValue::ColorFrame(frame) => {
+                    shared::InputValue::ColorFrame(frame)
+                    | shared::InputValue::MappedFrame(frame) => {
                         draw_color_frame_preview(ui, frame);
                     }
                     _ => {
@@ -400,27 +395,10 @@ impl GraphSnarlViewer {
     fn connection_kind_mismatch(
         &self,
         from_kind: ValueKind,
-        from_definition: &shared::NodeSchema,
         from_port: &shared::NodeOutputDefinition,
-        to_definition: &shared::NodeSchema,
         to_port: &shared::NodeInputDefinition,
     ) -> bool {
-        if !to_port.accepts_kind(from_kind) {
-            return true;
-        }
-        if !from_port.accepts_kind(from_kind) {
-            return true;
-        }
-        if from_kind == ValueKind::ColorFrame {
-            let source_role = from_definition.output_frame_layout_requirement(&from_port.name);
-            let target_role = to_definition.input_frame_layout_requirement(&to_port.name);
-            if !matches!(target_role, shared::FrameLayoutRequirement::Any)
-                && source_role != target_role
-            {
-                return true;
-            }
-        }
-        false
+        !to_port.accepts_kind(from_kind) || !from_port.accepts_kind(from_kind)
     }
 
     fn connection_render_layout_mismatch(
@@ -471,13 +449,14 @@ fn render_layout_requirements_are_invalid(
 
         for (out_pin, in_pin) in wires {
             if in_pin.node == node_id {
-                if definition.id == NodeTypeId::FILL_FROM_FRAME {
-                    let Some(input) = node.inputs.get(in_pin.input) else {
-                        continue;
-                    };
-                    if input.name == "frame" {
-                        continue;
-                    }
+                let Some(out_node) = snarl.get_node(out_pin.node) else {
+                    continue;
+                };
+                let Some(output) = out_node.outputs.get(out_pin.output) else {
+                    continue;
+                };
+                if output.value_kind == ValueKind::MappedFrame {
+                    continue;
                 }
                 queue.push_back((out_pin.node, kind));
             }
@@ -496,7 +475,7 @@ fn sink_render_layout_kind(node: &EditorSnarlNode) -> Option<RenderLayoutKind> {
                 Some(RenderLayoutKind::Index1d)
             }
         }
-        NodeTypeId::WLED_DUMMY_DISPLAY => {
+        NodeTypeId::WLED_DUMMY_DISPLAY | NodeTypeId::MAP_TO_LAYOUT => {
             if bool_parameter(&node.parameters, "use_spatial") {
                 Some(RenderLayoutKind::Spatial3d)
             } else {
@@ -889,6 +868,7 @@ fn pin_info_for_inference(inference: &OutputInference) -> PinInfo {
             ValueKind::Color => egui::Color32::from_rgb(198, 120, 221),
             ValueKind::LedLayout => egui::Color32::from_rgb(224, 108, 117),
             ValueKind::ColorFrame => egui::Color32::from_rgb(152, 195, 121),
+            ValueKind::MappedFrame => egui::Color32::from_rgb(86, 156, 214),
         },
     };
 

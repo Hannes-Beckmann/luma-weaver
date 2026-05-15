@@ -61,7 +61,9 @@ fn input_value_to_json(value: &InputValue) -> JsonValue {
         }
         InputValue::Color(value) => serde_json::to_value(value).expect("color must serialize"),
         InputValue::LedLayout(value) => serde_json::to_value(value).expect("layout must serialize"),
-        InputValue::ColorFrame(value) => serde_json::to_value(value).expect("frame must serialize"),
+        InputValue::ColorFrame(value) | InputValue::MappedFrame(value) => {
+            serde_json::to_value(value).expect("frame must serialize")
+        }
     }
 }
 
@@ -77,14 +79,14 @@ fn json_to_input_value(value: JsonValue) -> Result<InputValue> {
     if let Ok(value) = serde_json::from_value::<String>(value.clone()) {
         return Ok(InputValue::String(value));
     }
-    if let Ok(value) = serde_json::from_value::<shared::ColorFrame>(value.clone()) {
-        return Ok(InputValue::ColorFrame(value));
-    }
     if let Ok(value) = serde_json::from_value::<LedLayout>(value.clone()) {
         return Ok(InputValue::LedLayout(value));
     }
     if let Ok(value) = serde_json::from_value::<RgbaColor>(value.clone()) {
         return Ok(InputValue::Color(value));
+    }
+    if let Ok(value) = serde_json::from_value::<shared::ColorFrame>(value.clone()) {
+        return Ok(InputValue::ColorFrame(value));
     }
     if let Ok(value) = serde_json::from_value::<FloatTensor>(value.clone()) {
         return Ok(InputValue::FloatTensor(value));
@@ -143,6 +145,7 @@ fn summarize_input_value(value: &InputValue) -> String {
         InputValue::Color(_) => "Color".to_owned(),
         InputValue::LedLayout(layout) => format!("LedLayout({})", layout.pixel_count),
         InputValue::ColorFrame(frame) => format!("ColorFrame({})", frame.layout.pixel_count),
+        InputValue::MappedFrame(frame) => format!("MappedFrame({})", frame.layout.pixel_count),
     }
 }
 

@@ -3,7 +3,7 @@ use shared::{ColorFrame, InputValue, NodeDiagnostic, NodeDiagnosticSeverity, Rgb
 
 use crate::node_runtime::nodes::filter_utils::{clamped_index, layout_dimensions};
 use crate::node_runtime::{
-    NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
+    AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
     TypedNodeEvaluation,
 };
 
@@ -13,7 +13,7 @@ pub(crate) struct BoxBlurNode;
 impl RuntimeNodeFromParameters for BoxBlurNode {}
 
 pub(crate) struct BoxBlurInputs {
-    frame: Option<ColorFrame>,
+    frame: Option<AnyInputValue>,
     radius: f32,
 }
 
@@ -23,14 +23,14 @@ crate::node_runtime::impl_runtime_inputs!(BoxBlurInputs {
 });
 
 pub(crate) struct BoxBlurOutputs {
-    frame: Option<ColorFrame>,
+    frame: Option<InputValue>,
 }
 
 impl RuntimeOutputs for BoxBlurOutputs {
     fn into_runtime_outputs(self) -> anyhow::Result<std::collections::HashMap<String, InputValue>> {
         let mut outputs = std::collections::HashMap::new();
         if let Some(frame) = self.frame {
-            outputs.insert("frame".to_owned(), InputValue::ColorFrame(frame));
+            outputs.insert("frame".to_owned(), frame);
         }
         Ok(outputs)
     }
@@ -46,11 +46,16 @@ impl RuntimeNode for BoxBlurNode {
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let mut diagnostics = Vec::new();
-        let Some(frame) = inputs.frame else {
+        let Some(frame) = inputs.frame.map(|value| value.0) else {
             return Ok(TypedNodeEvaluation::from_outputs(BoxBlurOutputs {
                 frame: None,
             }));
         };
+        let kind = frame.value_kind();
+        let frame = frame
+            .as_frame()
+            .expect("box blur only accepts frame values")
+            .clone();
 
         let radius = inputs.radius.round().clamp(0.0, 32.0) as usize;
         if (radius as f32 - inputs.radius).abs() > f32::EPSILON {
@@ -65,7 +70,9 @@ impl RuntimeNode for BoxBlurNode {
         }
         if radius == 0 || frame.pixels.is_empty() {
             return Ok(TypedNodeEvaluation {
-                outputs: BoxBlurOutputs { frame: Some(frame) },
+                outputs: BoxBlurOutputs {
+                    frame: Some(InputValue::from_frame_kind(kind, frame).expect("frame kind")),
+                },
                 frontend_updates: Vec::new(),
                 diagnostics,
             });
@@ -105,10 +112,16 @@ impl RuntimeNode for BoxBlurNode {
 
         Ok(TypedNodeEvaluation {
             outputs: BoxBlurOutputs {
-                frame: Some(ColorFrame {
-                    layout: frame.layout,
-                    pixels,
-                }),
+                frame: Some(
+                    InputValue::from_frame_kind(
+                        kind,
+                        ColorFrame {
+                            layout: frame.layout,
+                            pixels,
+                        },
+                    )
+                    .expect("frame kind"),
+                ),
             },
             frontend_updates: Vec::new(),
             diagnostics,
