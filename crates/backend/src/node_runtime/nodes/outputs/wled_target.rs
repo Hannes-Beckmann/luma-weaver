@@ -10,14 +10,14 @@ use crate::node_runtime::{
     TypedNodeEvaluation,
 };
 use crate::services::wled::ddp;
-use crate::spatial_layout::{SpatialPlacement, strip_points};
+use crate::spatial_layout::{MatrixStripMode, spatial_points_for_mode};
 
 #[derive(Default)]
 pub(crate) struct WledTargetNode {
     led_count: usize,
     target: String,
     use_spatial: bool,
-    placement: SpatialPlacement,
+    parameters: HashMap<String, JsonValue>,
     transport: Option<WledDdpTransport>,
 }
 
@@ -36,13 +36,13 @@ crate::node_runtime::impl_runtime_parameters!(WledTargetParameters {
 
 impl WledTargetNode {
     /// Creates a WLED target node from parsed parameters and eagerly resolves the destination.
-    fn from_config(config: WledTargetParameters, placement: SpatialPlacement) -> Self {
+    fn from_config(config: WledTargetParameters, parameters: HashMap<String, JsonValue>) -> Self {
         let transport = WledDdpTransport::new(&config.target).ok();
         Self {
             led_count: config.led_count,
             target: config.target,
             use_spatial: config.use_spatial,
-            placement,
+            parameters,
             transport,
         }
     }
@@ -57,10 +57,7 @@ impl RuntimeNodeFromParameters for WledTargetNode {
             diagnostics,
         } = WledTargetParameters::from_parameters(parameters);
         crate::node_runtime::NodeConstruction {
-            node: WledTargetNode::from_config(
-                config,
-                SpatialPlacement::from_parameters(parameters),
-            ),
+            node: WledTargetNode::from_config(config, parameters.clone()),
             diagnostics,
         }
     }
@@ -94,9 +91,14 @@ impl RuntimeNode for WledTargetNode {
             pixel_count: self.led_count,
             width: Some(self.led_count),
             height: Some(1),
-            points_3d: self
-                .use_spatial
-                .then(|| strip_points(self.led_count, self.placement)),
+            points_3d: self.use_spatial.then(|| {
+                spatial_points_for_mode(
+                    &self.parameters,
+                    "",
+                    self.led_count,
+                    MatrixStripMode::Strip,
+                )
+            }),
         });
 
         let frame_for_transport = match inputs.value.map(|value| value.0) {

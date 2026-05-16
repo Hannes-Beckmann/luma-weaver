@@ -317,6 +317,9 @@ impl FrontendApp {
         self.graphs.runtime_node_values.clear();
         self.graphs.plot_history.clear();
         self.graphs.sink_preview_frames_by_graph.clear();
+        self.ui.sink_preview_window_open = false;
+        self.ui.sink_preview_selected_view_key = "all".to_owned();
+        self.ui.sink_preview_display_scope_node_id = None;
         self.ui.diagnostics_window_graph_id = None;
         self.ui.diagnostics_window_node_id = None;
         #[cfg(target_arch = "wasm32")]

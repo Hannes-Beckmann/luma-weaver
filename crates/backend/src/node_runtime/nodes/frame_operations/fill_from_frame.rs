@@ -7,7 +7,7 @@ use shared::{
 };
 
 use crate::node_runtime::{
-    NodeConstruction, NodeEvaluationContext, ParameterStatus, RuntimeNode,
+    NodeConstruction, NodeEvaluationContext, NodeFrontendUpdate, ParameterStatus, RuntimeNode,
     RuntimeNodeFromParameters, RuntimeOutputs, TypedNodeEvaluation, parameter_status,
 };
 
@@ -133,15 +133,29 @@ impl RuntimeNode for FillFromFrameNode {
         let source_pixels = resample_index(&source_frame.pixels, source_layout.pixel_count);
         let (pixels, diagnostics) =
             self.fill_destination(&source_pixels, &source_layout, &destination_layout);
+        let output_frame = ColorFrame {
+            layout: destination_layout.clone(),
+            pixels,
+        };
+        let frame_name = format!("frame ({})", destination_layout.id);
 
         Ok(TypedNodeEvaluation {
             outputs: FillFromFrameOutputs {
-                frame: Some(ColorFrame {
-                    layout: destination_layout,
-                    pixels,
-                }),
+                frame: Some(output_frame.clone()),
             },
-            frontend_updates: Vec::new(),
+            frontend_updates: vec![
+                NodeFrontendUpdate {
+                    name: "source_frame".to_owned(),
+                    value: InputValue::MappedFrame(ColorFrame {
+                        layout: source_layout,
+                        pixels: source_frame.pixels,
+                    }),
+                },
+                NodeFrontendUpdate {
+                    name: frame_name,
+                    value: InputValue::ColorFrame(output_frame),
+                },
+            ],
             diagnostics,
         })
     }
@@ -587,5 +601,65 @@ mod tests {
         let node = FillFromFrameNode::from_parameters(&parameters).node;
 
         assert_eq!(node.method, FillFromFrameMethod::SmoothDistance);
+    }
+
+    #[test]
+    fn emits_frontend_updates_for_source_and_render_layout_frame() {
+        let mut node = FillFromFrameNode::default();
+        let source = ColorFrame {
+            layout: LedLayout {
+                id: "source".to_owned(),
+                role: LedLayoutRole::Source,
+                pixel_count: 2,
+                width: Some(2),
+                height: Some(1),
+                points_3d: Some(vec![
+                    Vec3 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                    Vec3 {
+                        x: 1.0,
+                        y: 0.0,
+                        z: 0.0,
+                    },
+                ]),
+            },
+            pixels: vec![color(1.0, 0.0, 0.0), color(0.0, 0.0, 1.0)],
+        };
+        let destination = spatial_layout(vec![
+            Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            Vec3 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        ]);
+
+        let evaluation = node
+            .evaluate(
+                &context(destination),
+                FillFromFrameInputs {
+                    frame: Some(InputValue::MappedFrame(source)),
+                },
+            )
+            .expect("evaluate");
+
+        assert_eq!(evaluation.frontend_updates.len(), 2);
+        assert_eq!(evaluation.frontend_updates[0].name, "source_frame");
+        assert_eq!(evaluation.frontend_updates[1].name, "frame (destination)");
+        assert!(matches!(
+            evaluation.frontend_updates[0].value,
+            InputValue::MappedFrame(_)
+        ));
+        assert!(matches!(
+            evaluation.frontend_updates[1].value,
+            InputValue::ColorFrame(_)
+        ));
     }
 }

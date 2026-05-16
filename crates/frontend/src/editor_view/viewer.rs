@@ -17,8 +17,9 @@ use super::model::{
     visible_parameter_definitions,
 };
 use super::widgets::{
-    draw_color_frame_preview, draw_float_plot, edit_input_value, edit_parameter_value,
-    ensure_parameter_defaults, format_input_value, max_input_label_width, show_runtime_value,
+    ParameterEditRequest, draw_color_frame_preview, draw_float_plot, edit_input_value,
+    edit_parameter_value, ensure_parameter_defaults, format_input_value, max_input_label_width,
+    show_runtime_value,
 };
 
 struct GraphSnarlViewer {
@@ -32,6 +33,8 @@ struct GraphSnarlViewer {
     diagnostic_summaries: std::collections::HashMap<String, NodeDiagnosticSummary>,
     opened_diagnostics_node_id: Option<String>,
     requested_image_upload: Option<(String, String)>,
+    requested_layout_upload: Option<(String, String)>,
+    requested_preview_node_id: Option<String>,
     node_menu_search: String,
     requested_graph_menu_pos: Option<egui::Pos2>,
 }
@@ -290,11 +293,16 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
                             &self.wled_instances,
                             &self.mqtt_broker_configs,
                         );
-                        if requested_upload {
-                            self.requested_image_upload = Some((
-                                editor_node.graph_node_id.clone(),
-                                parameter_definition.name.clone(),
-                            ));
+                        match requested_upload {
+                            Some(ParameterEditRequest::UploadImageAsset { parameter_name }) => {
+                                self.requested_image_upload =
+                                    Some((editor_node.graph_node_id.clone(), parameter_name));
+                            }
+                            Some(ParameterEditRequest::UploadLayoutAsset { parameter_name }) => {
+                                self.requested_layout_upload =
+                                    Some((editor_node.graph_node_id.clone(), parameter_name));
+                            }
+                            None => {}
                         }
                         ui.end_row();
                     }
@@ -304,7 +312,20 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
             {
                 ui.separator();
             }
+            if editor_node.node_type_id == NodeTypeId::DISPLAY
+                || editor_node.node_type_id == NodeTypeId::FILL_FROM_FRAME
+            {
+                if ui.button("Open 3D View").clicked() {
+                    self.requested_preview_node_id = Some(editor_node.graph_node_id.clone());
+                }
+                if !editor_node.runtime_values.is_empty() {
+                    ui.separator();
+                }
+            }
             for (_name, value) in &editor_node.runtime_values {
+                if editor_node.node_type_id == NodeTypeId::FILL_FROM_FRAME {
+                    continue;
+                }
                 match value {
                     shared::InputValue::ColorFrame(frame)
                     | shared::InputValue::MappedFrame(frame) => {
@@ -699,6 +720,8 @@ pub(super) fn show_snarl_canvas(
     String,
     Option<egui::Pos2>,
     Option<(String, String)>,
+    Option<(String, String)>,
+    Option<String>,
 ) {
     let canvas_size = ui.available_size();
     if focus_requested {
@@ -728,6 +751,8 @@ pub(super) fn show_snarl_canvas(
         diagnostic_summaries: diagnostic_summaries.clone(),
         opened_diagnostics_node_id: None,
         requested_image_upload: None,
+        requested_layout_upload: None,
+        requested_preview_node_id: None,
         node_menu_search: node_menu_search.to_owned(),
         requested_graph_menu_pos: None,
     };
@@ -814,6 +839,8 @@ pub(super) fn show_snarl_canvas(
         viewer.node_menu_search,
         next_node_menu_graph_position,
         viewer.requested_image_upload,
+        viewer.requested_layout_upload,
+        viewer.requested_preview_node_id,
     )
 }
 

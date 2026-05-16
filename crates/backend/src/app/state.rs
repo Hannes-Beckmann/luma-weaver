@@ -7,6 +7,7 @@ use crate::messaging::event_bus::EventBus;
 use crate::node_runtime::NodeRegistry;
 use crate::services::graph_store::GraphStore;
 use crate::services::image_asset_store::ImageAssetStore;
+use crate::services::layout_asset_store::LayoutAssetStore;
 use crate::services::mqtt::HomeAssistantMqttService;
 use crate::services::mqtt_broker_store::MqttBrokerStore;
 use crate::services::runtime::manager::GraphRuntimeManager;
@@ -20,6 +21,7 @@ pub(crate) struct AppState {
     pub(crate) node_registry: Arc<NodeRegistry>,
     pub(crate) graph_store: Arc<GraphStore>,
     pub(crate) image_asset_store: Arc<ImageAssetStore>,
+    pub(crate) layout_asset_store: Arc<LayoutAssetStore>,
     pub(crate) mqtt_broker_store: Arc<MqttBrokerStore>,
     pub(crate) mqtt_service: Arc<HomeAssistantMqttService>,
     pub(crate) runtime_manager: Arc<GraphRuntimeManager>,

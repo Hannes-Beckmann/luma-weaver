@@ -49,36 +49,101 @@ fn all_render_layouts() -> Vec<RenderLayoutKind> {
     ]
 }
 
+fn hidden_float(name: &str, default: f64) -> NodeParameterDefinition {
+    NodeParameterDefinition::new(
+        name,
+        title_case_name(name),
+        ParameterDefaultValue::Float(default),
+        ParameterUiHint::Hidden,
+    )
+}
+
+fn hidden_integer(name: &str, default: i64) -> NodeParameterDefinition {
+    NodeParameterDefinition::new(
+        name,
+        title_case_name(name),
+        ParameterDefaultValue::Integer(default),
+        ParameterUiHint::Hidden,
+    )
+}
+
+fn hidden_string(name: &str, default: &str) -> NodeParameterDefinition {
+    NodeParameterDefinition::new(
+        name,
+        title_case_name(name),
+        ParameterDefaultValue::String(default.to_owned()),
+        ParameterUiHint::Hidden,
+    )
+}
+
 fn spatial_layout_parameter_definitions() -> Vec<NodeParameterDefinition> {
-    let spatial_visible = ParameterVisibilityCondition::Equals {
+    spatial_layout_parameter_definitions_with_prefix("", true)
+}
+
+fn source_spatial_layout_parameter_definitions() -> Vec<NodeParameterDefinition> {
+    let mut parameters = vec![
+        NodeParameterDefinition::new(
+            "source_shape",
+            "Source Shape".to_owned(),
+            ParameterDefaultValue::String("strip".to_owned()),
+            ParameterUiHint::Hidden,
+        ),
+        hidden_integer("source_width", 8),
+        hidden_integer("source_height", 8),
+    ];
+    parameters.extend(spatial_layout_parameter_definitions_with_prefix(
+        "source_", false,
+    ));
+    parameters
+}
+
+fn spatial_layout_parameter_definitions_with_prefix(
+    prefix: &str,
+    visible_when_spatial: bool,
+) -> Vec<NodeParameterDefinition> {
+    let visible_when = visible_when_spatial.then_some(ParameterVisibilityCondition::Equals {
         parameter: "use_spatial".to_owned(),
         value: serde_json::Value::Bool(true),
+    });
+    let visible_when_condition = visible_when.clone();
+    let with_visible_when = |definition: NodeParameterDefinition| match &visible_when_condition {
+        Some(condition) => definition.visible_when(condition.clone()),
+        None => definition,
     };
-    let hidden_float = |name: &str, default| {
-        NodeParameterDefinition::new(
-            name,
-            title_case_name(name),
-            ParameterDefaultValue::Float(default),
-            ParameterUiHint::Hidden,
-        )
-    };
+    let setup_name = format!("{prefix}spatial_layout_setup");
+    let pattern_name = format!("{prefix}layout_pattern");
+    let asset_name = format!("{prefix}layout_asset_id");
 
     vec![
         NodeParameterDefinition::new(
-            "spatial_layout_setup",
+            &setup_name,
             "Spatial Layout".to_owned(),
             ParameterDefaultValue::String(String::new()),
             ParameterUiHint::SpatialLayoutSetup,
-        )
-        .visible_when(spatial_visible),
-        hidden_float("layout_origin_x", 0.0),
-        hidden_float("layout_origin_y", 0.0),
-        hidden_float("layout_origin_z", 0.0),
-        hidden_float("layout_rotation_roll", 0.0),
-        hidden_float("layout_rotation_pitch", 0.0),
-        hidden_float("layout_rotation_yaw", 0.0),
-        hidden_float("layout_spacing", 1.0),
+        ),
+        hidden_string(&pattern_name, "matrix_strip"),
+        hidden_float(&format!("{prefix}layout_origin_x"), 0.0),
+        hidden_float(&format!("{prefix}layout_origin_y"), 0.0),
+        hidden_float(&format!("{prefix}layout_origin_z"), 0.0),
+        hidden_float(&format!("{prefix}layout_rotation_roll"), 0.0),
+        hidden_float(&format!("{prefix}layout_rotation_pitch"), 0.0),
+        hidden_float(&format!("{prefix}layout_rotation_yaw"), 0.0),
+        hidden_float(&format!("{prefix}layout_spacing"), 1.0),
+        hidden_float(&format!("{prefix}layout_circle_radius"), 1.0),
+        hidden_float(&format!("{prefix}layout_circle_start_degrees"), 0.0),
+        hidden_float(&format!("{prefix}layout_circle_sweep_degrees"), 360.0),
+        hidden_float(&format!("{prefix}layout_rectangle_width"), 8.0),
+        hidden_float(&format!("{prefix}layout_rectangle_height"), 8.0),
+        hidden_string(
+            &format!("{prefix}layout_rectangle_perimeter_count_mode"),
+            "continuous",
+        ),
+        hidden_string(&format!("{prefix}layout_rectangle_corner_mode"), "sharp"),
+        hidden_string(&asset_name, ""),
     ]
+    .into_iter()
+    .map(with_visible_when)
+    .collect()
 }
 
 /// Converts a snake_case field name into the title-cased label used by node schema definitions.
@@ -174,19 +239,6 @@ static FILL_FROM_FRAME_METHODS: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
         EnumOption {
             value: "index_stretch".to_owned(),
             label: "Index Stretch".to_owned(),
-        },
-    ]
-});
-
-static FILL_FROM_FRAME_SOURCE_SHAPES: LazyLock<Vec<EnumOption>> = LazyLock::new(|| {
-    vec![
-        EnumOption {
-            value: "strip".to_owned(),
-            label: "Strip".to_owned(),
-        },
-        EnumOption {
-            value: "matrix".to_owned(),
-            label: "Matrix".to_owned(),
         },
     ]
 });
@@ -369,7 +421,15 @@ static IMAGE_SOURCE_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchem
         max_input_connections: 1,
         require_value_kind_match: true,
     },
-    runtime_updates: None,
+    runtime_updates: Some(NodeRuntimeUpdateDefinition {
+        auto_subscribe_in_editor: true,
+        values: vec![NodeRuntimeValueDefinition {
+            name: "frame".to_owned(),
+            display_name: "Frame".to_owned(),
+            value_kind: ValueKind::ColorFrame,
+            accepted_kinds: vec![],
+        }],
+    }),
 });
 
 static DISPLAY_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
@@ -601,103 +661,39 @@ static WLED_SINK_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
         value_kind: ValueKind::MappedFrame,
         accepted_kinds: vec![],
     }],
-    parameters: vec![
-        NodeParameterDefinition::new(
-            "protocol",
-            title_case_name("protocol"),
-            ParameterDefaultValue::String("ddp".to_owned()),
-            ParameterUiHint::EnumSelect {
-                options: vec![
-                    EnumOption {
-                        value: "ddp".to_owned(),
-                        label: "DDP".to_owned(),
-                    },
-                    EnumOption {
-                        value: "udp_raw".to_owned(),
-                        label: "UDP Raw".to_owned(),
-                    },
-                ],
-            },
-        ),
-        NodeParameterDefinition::new(
-            "port",
-            title_case_name("port"),
-            ParameterDefaultValue::Integer(4048),
-            ParameterUiHint::IntegerDrag {
-                speed: 1.0,
-                min: 1,
-                max: 65535,
-            },
-        ),
-        NodeParameterDefinition::new(
-            "source_shape",
-            "Source Shape".to_owned(),
-            ParameterDefaultValue::String("strip".to_owned()),
-            ParameterUiHint::EnumSelect {
-                options: FILL_FROM_FRAME_SOURCE_SHAPES.clone(),
-            },
-        ),
-        NodeParameterDefinition::new(
-            "source_spatial_layout_setup",
-            "Source Layout".to_owned(),
-            ParameterDefaultValue::String(String::new()),
-            ParameterUiHint::SpatialLayoutSetup,
-        ),
-        NodeParameterDefinition::new(
-            "source_width",
-            "Source Width".to_owned(),
-            ParameterDefaultValue::Integer(8),
-            ParameterUiHint::Hidden,
-        ),
-        NodeParameterDefinition::new(
-            "source_height",
-            "Source Height".to_owned(),
-            ParameterDefaultValue::Integer(8),
-            ParameterUiHint::Hidden,
-        ),
-        NodeParameterDefinition::new(
-            "source_layout_origin_x",
-            "Source Origin X".to_owned(),
-            ParameterDefaultValue::Float(0.0),
-            ParameterUiHint::Hidden,
-        ),
-        NodeParameterDefinition::new(
-            "source_layout_origin_y",
-            "Source Origin Y".to_owned(),
-            ParameterDefaultValue::Float(0.0),
-            ParameterUiHint::Hidden,
-        ),
-        NodeParameterDefinition::new(
-            "source_layout_origin_z",
-            "Source Origin Z".to_owned(),
-            ParameterDefaultValue::Float(0.0),
-            ParameterUiHint::Hidden,
-        ),
-        NodeParameterDefinition::new(
-            "source_layout_rotation_roll",
-            "Source Roll".to_owned(),
-            ParameterDefaultValue::Float(0.0),
-            ParameterUiHint::Hidden,
-        ),
-        NodeParameterDefinition::new(
-            "source_layout_rotation_pitch",
-            "Source Pitch".to_owned(),
-            ParameterDefaultValue::Float(0.0),
-            ParameterUiHint::Hidden,
-        ),
-        NodeParameterDefinition::new(
-            "source_layout_rotation_yaw",
-            "Source Yaw".to_owned(),
-            ParameterDefaultValue::Float(0.0),
-            ParameterUiHint::Hidden,
-        ),
-        NodeParameterDefinition::new(
-            "source_layout_spacing",
-            "Source Spacing".to_owned(),
-            ParameterDefaultValue::Float(1.0),
-            ParameterUiHint::Hidden,
-        ),
-    ],
+    parameters: {
+        let mut parameters = vec![
+            NodeParameterDefinition::new(
+                "protocol",
+                title_case_name("protocol"),
+                ParameterDefaultValue::String("ddp".to_owned()),
+                ParameterUiHint::EnumSelect {
+                    options: vec![
+                        EnumOption {
+                            value: "ddp".to_owned(),
+                            label: "DDP".to_owned(),
+                        },
+                        EnumOption {
+                            value: "udp_raw".to_owned(),
+                            label: "UDP Raw".to_owned(),
+                        },
+                    ],
+                },
+            ),
+            NodeParameterDefinition::new(
+                "port",
+                title_case_name("port"),
+                ParameterDefaultValue::Integer(4048),
+                ParameterUiHint::IntegerDrag {
+                    speed: 1.0,
+                    min: 1,
+                    max: 65535,
+                },
+            ),
+        ];
+        parameters.extend(source_spatial_layout_parameter_definitions());
+        parameters
+    },
     connection: NodeConnectionDefinition {
         max_input_connections: 1,
         require_value_kind_match: true,
@@ -1669,6 +1665,10 @@ static MAP_TO_LAYOUT_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
         accepted_kinds: vec![],
     }],
     parameters: {
+        let non_spatial_only = ParameterVisibilityCondition::Equals {
+            parameter: "use_spatial".to_owned(),
+            value: serde_json::Value::Bool(false),
+        };
         let mut parameters = vec![
             NodeParameterDefinition::new(
                 "width",
@@ -1679,7 +1679,8 @@ static MAP_TO_LAYOUT_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
                     min: 1,
                     max: 256,
                 },
-            ),
+            )
+            .visible_when(non_spatial_only.clone()),
             NodeParameterDefinition::new(
                 "height",
                 title_case_name("height"),
@@ -1689,7 +1690,8 @@ static MAP_TO_LAYOUT_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSche
                     min: 1,
                     max: 256,
                 },
-            ),
+            )
+            .visible_when(non_spatial_only),
             NodeParameterDefinition::new(
                 "use_spatial",
                 title_case_name("use_spatial"),
@@ -1796,7 +1798,23 @@ static FILL_FROM_FRAME_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSc
         max_input_connections: 1,
         require_value_kind_match: true,
     },
-    runtime_updates: None,
+    runtime_updates: Some(NodeRuntimeUpdateDefinition {
+        auto_subscribe_in_editor: true,
+        values: vec![
+            NodeRuntimeValueDefinition {
+                name: "source_frame".to_owned(),
+                display_name: "Mapped Frame".to_owned(),
+                value_kind: ValueKind::MappedFrame,
+                accepted_kinds: vec![],
+            },
+            NodeRuntimeValueDefinition {
+                name: "frame".to_owned(),
+                display_name: "Frame".to_owned(),
+                value_kind: ValueKind::ColorFrame,
+                accepted_kinds: vec![],
+            },
+        ],
+    }),
 });
 
 static EXTRACT_CHANNELS_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
@@ -2831,6 +2849,10 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| Nod
     ],
     outputs: vec![],
     parameters: {
+        let non_spatial_only = ParameterVisibilityCondition::Equals {
+            parameter: "use_spatial".to_owned(),
+            value: serde_json::Value::Bool(false),
+        };
         let mut parameters = vec![
             NodeParameterDefinition::new(
                 "width",
@@ -2841,7 +2863,8 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| Nod
                     min: 1,
                     max: 256,
                 },
-            ),
+            )
+            .visible_when(non_spatial_only.clone()),
             NodeParameterDefinition::new(
                 "height",
                 title_case_name("height"),
@@ -2851,7 +2874,8 @@ static WLED_DUMMY_DISPLAY_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| Nod
                     min: 1,
                     max: 256,
                 },
-            ),
+            )
+            .visible_when(non_spatial_only),
             NodeParameterDefinition::new(
                 "use_spatial",
                 title_case_name("use_spatial"),

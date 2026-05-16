@@ -55,9 +55,12 @@ pub(crate) struct UiState {
     pub(crate) sink_preview_pan_x: f32,
     pub(crate) sink_preview_pan_y: f32,
     pub(crate) sink_preview_led_size: f32,
+    pub(crate) sink_preview_show_axes: bool,
+    pub(crate) sink_preview_selected_view_key: String,
+    pub(crate) sink_preview_display_scope_node_id: Option<String>,
     #[cfg(target_arch = "wasm32")]
-    pub(crate) browser_image_asset_events:
-        Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserImageAssetEvent>>,
+    pub(crate) browser_asset_upload_events:
+        Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserAssetUploadEvent>>,
 }
 
 impl Default for UiState {
@@ -96,8 +99,11 @@ impl Default for UiState {
             sink_preview_pan_x: 0.0,
             sink_preview_pan_y: 0.0,
             sink_preview_led_size: 3.5,
+            sink_preview_show_axes: true,
+            sink_preview_selected_view_key: "all".to_owned(),
+            sink_preview_display_scope_node_id: None,
             #[cfg(target_arch = "wasm32")]
-            browser_image_asset_events: None,
+            browser_asset_upload_events: None,
         }
     }
 }

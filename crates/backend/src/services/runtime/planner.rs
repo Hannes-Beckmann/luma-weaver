@@ -3,7 +3,9 @@ use std::collections::VecDeque;
 use shared::{LedLayout, NodeTypeId, RenderLayoutKind};
 
 use crate::services::runtime::types::{CompiledIncomingEdge, CompiledNode, RenderContext};
-use crate::spatial_layout::{SpatialPlacement, matrix_points, strip_points};
+use crate::spatial_layout::{
+    MatrixStripMode, spatial_layout_dimensions, spatial_layout_pixel_count, spatial_points_for_mode,
+};
 
 /// Plans the render contexts that each compiled node should evaluate in.
 ///
@@ -189,7 +191,6 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 .unwrap_or(60)
                 .max(1) as usize;
             let use_spatial = bool_parameter(node, "use_spatial");
-            let placement = SpatialPlacement::from_parameters(&node.parameters);
             let id = if target.is_empty() {
                 format!("sink:wled:{}", node.id)
             } else {
@@ -203,7 +204,14 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                     pixel_count: led_count,
                     width: Some(led_count),
                     height: Some(1),
-                    points_3d: use_spatial.then(|| strip_points(led_count, placement)),
+                    points_3d: use_spatial.then(|| {
+                        spatial_points_for_mode(
+                            &node.parameters,
+                            "",
+                            led_count,
+                            MatrixStripMode::Strip,
+                        )
+                    }),
                 },
                 kind: if use_spatial {
                     RenderLayoutKind::Spatial3d
@@ -226,7 +234,10 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 .unwrap_or(8)
                 .max(1) as usize;
             let use_spatial = bool_parameter(node, "use_spatial");
-            let placement = SpatialPlacement::from_parameters(&node.parameters);
+            let pixel_count =
+                spatial_layout_pixel_count(&node.parameters, "", width, height, use_spatial);
+            let (layout_width, layout_height) =
+                spatial_layout_dimensions(&node.parameters, "", width, height, use_spatial);
             let id = if node.node_type.as_str() == NodeTypeId::MAP_TO_LAYOUT {
                 format!("sink:map_to_layout:{}", node.id)
             } else {
@@ -237,10 +248,17 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 layout: LedLayout {
                     id,
                     role: ::shared::LedLayoutRole::RenderTarget,
-                    pixel_count: width * height,
-                    width: Some(width),
-                    height: Some(height),
-                    points_3d: use_spatial.then(|| matrix_points(width, height, placement)),
+                    pixel_count,
+                    width: layout_width,
+                    height: layout_height,
+                    points_3d: use_spatial.then(|| {
+                        spatial_points_for_mode(
+                            &node.parameters,
+                            "",
+                            pixel_count,
+                            MatrixStripMode::Auto { width, height },
+                        )
+                    }),
                 },
                 kind: if use_spatial {
                     RenderLayoutKind::Spatial3d

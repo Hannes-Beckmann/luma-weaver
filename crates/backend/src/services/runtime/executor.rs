@@ -382,6 +382,9 @@ fn runtime_update_name_allowed(
         || (node.node_type.as_str() == shared::NodeTypeId::DISPLAY
             && node.allowed_runtime_update_names.contains("value")
             && name.starts_with("value"))
+        || (node.node_type.as_str() == shared::NodeTypeId::FILL_FROM_FRAME
+            && node.allowed_runtime_update_names.contains("frame")
+            && name.starts_with("frame"))
 }
 
 /// Returns whether a runtime update should be emitted at `now`.
@@ -411,6 +414,7 @@ mod tests {
     use crate::services::runtime::compiler::compile_graph_document;
     use crate::services::runtime::executor::{
         evaluate_node, initialize_delay_previous_outputs, resolve_input_value,
+        runtime_update_name_allowed,
     };
     use crate::services::runtime::types::{
         CompiledIncomingEdge, GraphExecutionState, RuntimeEventPublisher,
@@ -968,6 +972,25 @@ mod tests {
         let value = resolve_input_value(&outputs, &incoming, "sink:dummy:display", "__default__");
 
         assert_eq!(value, Some(InputValue::Float(42.0)));
+    }
+
+    #[test]
+    fn fill_from_frame_allows_layout_scoped_frame_runtime_updates() {
+        let node = crate::services::runtime::types::CompiledNode {
+            id: "fill".to_owned(),
+            display_name: "Fill".to_owned(),
+            node_type: shared::NodeTypeId::new(shared::NodeTypeId::FILL_FROM_FRAME),
+            input_defaults: HashMap::new(),
+            parameters: HashMap::new(),
+            construction_diagnostics: Vec::new(),
+            allowed_runtime_update_names: ["source_frame".to_owned(), "frame".to_owned()]
+                .into_iter()
+                .collect(),
+        };
+
+        assert!(runtime_update_name_allowed(&node, "source_frame"));
+        assert!(runtime_update_name_allowed(&node, "frame (destination)"));
+        assert!(!runtime_update_name_allowed(&node, "bogus"));
     }
 
     #[test]

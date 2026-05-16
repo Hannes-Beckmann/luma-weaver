@@ -1,7 +1,7 @@
+mod asset_uploads;
 mod clipboard;
 mod graph_actions;
 mod history;
-mod image_assets;
 mod import_export;
 mod messaging;
 mod navigation;
@@ -49,7 +49,7 @@ impl eframe::App for FrontendApp {
         self.drain_server_messages(ctx);
         self.drain_browser_graph_file_events();
         self.drain_browser_clipboard_events();
-        self.drain_browser_image_asset_events();
+        self.drain_browser_asset_upload_events();
         crate::header_view::render(ctx, self);
 
         egui::CentralPanel::default().show(ctx, |ui| match self.ui.active_view {

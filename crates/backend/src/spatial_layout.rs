@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+#[cfg(not(target_arch = "wasm32"))]
+use crate::services::layout_asset_store::global_layout_asset_store;
 use serde_json::Value as JsonValue;
 use shared::Vec3;
 
@@ -29,10 +31,6 @@ impl Default for SpatialPlacement {
 }
 
 impl SpatialPlacement {
-    pub(crate) fn from_parameters(parameters: &HashMap<String, JsonValue>) -> Self {
-        Self::from_parameters_with_prefix(parameters, "")
-    }
-
     pub(crate) fn from_parameters_with_prefix(
         parameters: &HashMap<String, JsonValue>,
         prefix: &str,
@@ -65,8 +63,12 @@ impl SpatialPlacement {
             y: local.y * self.spacing,
             z: local.z * self.spacing,
         };
+        self.transform_unscaled_point(scaled)
+    }
+
+    pub(crate) fn transform_unscaled_point(&self, local: Vec3) -> Vec3 {
         let rotated = rotate_xyz(
-            scaled,
+            local,
             self.roll_degrees.to_radians(),
             self.pitch_degrees.to_radians(),
             self.yaw_degrees.to_radians(),
@@ -77,6 +79,100 @@ impl SpatialPlacement {
             y: rotated.y + self.origin.y,
             z: rotated.z + self.origin.z,
         }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MatrixStripMode {
+    Auto { width: usize, height: usize },
+    Strip,
+    Matrix { width: usize, height: usize },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SpatialLayoutPattern {
+    MatrixStrip,
+    CircleArc,
+    Rectangle,
+    Imported,
+}
+
+pub(crate) fn spatial_points_for_mode(
+    parameters: &HashMap<String, JsonValue>,
+    prefix: &str,
+    pixel_count: usize,
+    mode: MatrixStripMode,
+) -> Vec<Vec3> {
+    let placement = SpatialPlacement::from_parameters_with_prefix(parameters, prefix);
+    let matrix_strip_points = matrix_strip_points(pixel_count, mode, placement);
+    match layout_pattern(parameters, prefix) {
+        SpatialLayoutPattern::MatrixStrip => matrix_strip_points,
+        SpatialLayoutPattern::CircleArc => arc_points(
+            pixel_count,
+            float_parameter(parameters, &format!("{prefix}layout_circle_radius"), 1.0).max(0.0),
+            float_parameter(
+                parameters,
+                &format!("{prefix}layout_circle_start_degrees"),
+                0.0,
+            ),
+            float_parameter(
+                parameters,
+                &format!("{prefix}layout_circle_sweep_degrees"),
+                360.0,
+            ),
+            placement,
+        ),
+        SpatialLayoutPattern::Rectangle => rectangle_perimeter_points(
+            pixel_count,
+            float_parameter(parameters, &format!("{prefix}layout_rectangle_width"), 8.0).max(0.0),
+            float_parameter(parameters, &format!("{prefix}layout_rectangle_height"), 8.0).max(0.0),
+            placement,
+        ),
+        SpatialLayoutPattern::Imported => imported_points(
+            imported_layout_points(parameters, prefix)
+                .unwrap_or_else(|| matrix_strip_points.clone()),
+            pixel_count,
+            placement,
+        ),
+    }
+}
+
+pub(crate) fn spatial_layout_pixel_count(
+    parameters: &HashMap<String, JsonValue>,
+    prefix: &str,
+    width: usize,
+    height: usize,
+    use_spatial: bool,
+) -> usize {
+    if !use_spatial {
+        return width.max(1) * height.max(1);
+    }
+
+    match layout_pattern(parameters, prefix) {
+        SpatialLayoutPattern::MatrixStrip => width.max(1) * height.max(1),
+        SpatialLayoutPattern::CircleArc | SpatialLayoutPattern::Rectangle => width.max(1),
+        SpatialLayoutPattern::Imported => imported_layout_points(parameters, prefix)
+            .map(|points| points.len().max(1))
+            .unwrap_or_else(|| width.max(1) * height.max(1)),
+    }
+}
+
+pub(crate) fn spatial_layout_dimensions(
+    parameters: &HashMap<String, JsonValue>,
+    prefix: &str,
+    width: usize,
+    height: usize,
+    use_spatial: bool,
+) -> (Option<usize>, Option<usize>) {
+    if !use_spatial {
+        return (Some(width.max(1)), Some(height.max(1)));
+    }
+
+    match layout_pattern(parameters, prefix) {
+        SpatialLayoutPattern::MatrixStrip => (Some(width.max(1)), Some(height.max(1))),
+        SpatialLayoutPattern::CircleArc
+        | SpatialLayoutPattern::Rectangle
+        | SpatialLayoutPattern::Imported => (None, None),
     }
 }
 
@@ -104,6 +200,210 @@ pub(crate) fn matrix_points(width: usize, height: usize, placement: SpatialPlace
             })
         })
         .collect()
+}
+
+fn matrix_strip_points(
+    pixel_count: usize,
+    mode: MatrixStripMode,
+    placement: SpatialPlacement,
+) -> Vec<Vec3> {
+    match mode {
+        MatrixStripMode::Strip => strip_points(pixel_count, placement),
+        MatrixStripMode::Matrix { width, height } => {
+            matrix_points_for_count(width, height, pixel_count, placement)
+        }
+        MatrixStripMode::Auto { width, height } if width > 1 && height > 1 => {
+            matrix_points_for_count(width, height, pixel_count, placement)
+        }
+        MatrixStripMode::Auto { .. } => strip_points(pixel_count, placement),
+    }
+}
+
+fn matrix_points_for_count(
+    width: usize,
+    height: usize,
+    pixel_count: usize,
+    placement: SpatialPlacement,
+) -> Vec<Vec3> {
+    let mut points = matrix_points(width.max(1), height.max(1), placement);
+    points.truncate(pixel_count);
+    if points.len() < pixel_count {
+        points.extend(resample_points(&points, pixel_count - points.len()));
+        points.truncate(pixel_count);
+    }
+    points
+}
+
+fn arc_points(
+    pixel_count: usize,
+    radius: f32,
+    start_degrees: f32,
+    sweep_degrees: f32,
+    placement: SpatialPlacement,
+) -> Vec<Vec3> {
+    if pixel_count == 0 {
+        return Vec::new();
+    }
+
+    let closed_loop = sweep_degrees.abs() >= 360.0;
+    (0..pixel_count)
+        .map(|index| {
+            let t = if pixel_count <= 1 {
+                0.0
+            } else if closed_loop {
+                index as f32 / pixel_count as f32
+            } else {
+                index as f32 / (pixel_count - 1) as f32
+            };
+            let angle = (start_degrees + sweep_degrees * t).to_radians();
+            let (sin, cos) = angle.sin_cos();
+            let local = Vec3 {
+                x: cos * radius,
+                y: sin * radius,
+                z: 0.0,
+            };
+            placement.transform_unscaled_point(local)
+        })
+        .collect()
+}
+
+fn rectangle_perimeter_points(
+    pixel_count: usize,
+    width: f32,
+    height: f32,
+    placement: SpatialPlacement,
+) -> Vec<Vec3> {
+    if pixel_count == 0 {
+        return Vec::new();
+    }
+    let half_width = width * 0.5;
+    let half_height = height * 0.5;
+    let perimeter = (2.0 * (width + height)).max(0.0001);
+
+    (0..pixel_count)
+        .map(|index| {
+            let distance = perimeter * index as f32 / pixel_count as f32;
+            let local = if distance < width {
+                Vec3 {
+                    x: -half_width + distance,
+                    y: -half_height,
+                    z: 0.0,
+                }
+            } else if distance < width + height {
+                Vec3 {
+                    x: half_width,
+                    y: -half_height + (distance - width),
+                    z: 0.0,
+                }
+            } else if distance < (2.0 * width) + height {
+                Vec3 {
+                    x: half_width - (distance - width - height),
+                    y: half_height,
+                    z: 0.0,
+                }
+            } else {
+                Vec3 {
+                    x: -half_width,
+                    y: half_height - (distance - (2.0 * width) - height),
+                    z: 0.0,
+                }
+            };
+            placement.transform_unscaled_point(local)
+        })
+        .collect()
+}
+
+fn imported_points(
+    points: Vec<Vec3>,
+    pixel_count: usize,
+    placement: SpatialPlacement,
+) -> Vec<Vec3> {
+    adapt_points_to_count(&points, pixel_count)
+        .into_iter()
+        .map(|point| placement.transform_unscaled_point(point))
+        .collect()
+}
+
+fn adapt_points_to_count(points: &[Vec3], pixel_count: usize) -> Vec<Vec3> {
+    if pixel_count == 0 {
+        return Vec::new();
+    }
+    if points.is_empty() {
+        return Vec::new();
+    }
+    if points.len() == pixel_count {
+        return points.to_vec();
+    }
+    if pixel_count == 1 {
+        return vec![points[0]];
+    }
+    if points.len() == 1 {
+        return vec![points[0]; pixel_count];
+    }
+
+    let source_last = points.len() - 1;
+    let destination_last = pixel_count - 1;
+    (0..pixel_count)
+        .map(|index| {
+            let source_index = ((index * source_last) + destination_last / 2) / destination_last;
+            points[source_index.min(source_last)]
+        })
+        .collect()
+}
+
+fn resample_points(points: &[Vec3], count: usize) -> Vec<Vec3> {
+    if count == 0 {
+        return Vec::new();
+    }
+    if points.is_empty() {
+        return vec![
+            Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            };
+            count
+        ];
+    }
+    vec![*points.last().expect("points not empty"); count]
+}
+
+fn imported_layout_points(
+    parameters: &HashMap<String, JsonValue>,
+    prefix: &str,
+) -> Option<Vec<Vec3>> {
+    let asset_id = parameters
+        .get(&format!("{prefix}layout_asset_id"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .trim();
+    if asset_id.is_empty() {
+        return None;
+    }
+    load_imported_layout_points(asset_id)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn load_imported_layout_points(asset_id: &str) -> Option<Vec<Vec3>> {
+    global_layout_asset_store().and_then(|store| store.load_layout_points(asset_id).ok())
+}
+
+#[cfg(target_arch = "wasm32")]
+fn load_imported_layout_points(_asset_id: &str) -> Option<Vec<Vec3>> {
+    None
+}
+
+fn layout_pattern(parameters: &HashMap<String, JsonValue>, prefix: &str) -> SpatialLayoutPattern {
+    match parameters
+        .get(&format!("{prefix}layout_pattern"))
+        .and_then(|value| value.as_str())
+        .unwrap_or("matrix_strip")
+    {
+        "circle_arc" => SpatialLayoutPattern::CircleArc,
+        "rectangle" => SpatialLayoutPattern::Rectangle,
+        "import" => SpatialLayoutPattern::Imported,
+        _ => SpatialLayoutPattern::MatrixStrip,
+    }
 }
 
 fn float_parameter(parameters: &HashMap<String, JsonValue>, name: &str, default: f32) -> f32 {
@@ -140,7 +440,14 @@ fn rotate_xyz(point: Vec3, roll: f32, pitch: f32, yaw: f32) -> Vec3 {
 
 #[cfg(test)]
 mod tests {
-    use super::{SpatialPlacement, matrix_points, strip_points};
+    use std::collections::HashMap;
+
+    use serde_json::json;
+
+    use super::{
+        MatrixStripMode, SpatialPlacement, arc_points, imported_points, matrix_points,
+        rectangle_perimeter_points, spatial_points_for_mode, strip_points,
+    };
     use shared::Vec3;
 
     #[test]
@@ -166,6 +473,71 @@ mod tests {
     #[test]
     fn matrix_points_keep_physical_index_order() {
         let points = matrix_points(2, 2, SpatialPlacement::default());
+
+        assert_vec3(points[0], 0.0, 0.0, 0.0);
+        assert_vec3(points[1], 1.0, 0.0, 0.0);
+        assert_vec3(points[2], 0.0, 1.0, 0.0);
+        assert_vec3(points[3], 1.0, 1.0, 0.0);
+    }
+
+    #[test]
+    fn arc_points_generate_on_xy_plane() {
+        let points = arc_points(4, 1.0, 0.0, 360.0, SpatialPlacement::default());
+
+        assert_vec3(points[0], 1.0, 0.0, 0.0);
+        assert!((points[1].z - 0.0).abs() < 1e-5, "{:?}", points[1]);
+    }
+
+    #[test]
+    fn rectangle_points_walk_the_perimeter_in_order() {
+        let points = rectangle_perimeter_points(4, 2.0, 2.0, SpatialPlacement::default());
+
+        assert_vec3(points[0], -1.0, -1.0, 0.0);
+        assert_vec3(points[1], 1.0, -1.0, 0.0);
+        assert_vec3(points[2], 1.0, 1.0, 0.0);
+        assert_vec3(points[3], -1.0, 1.0, 0.0);
+    }
+
+    #[test]
+    fn imported_points_apply_shared_rotation_and_origin_without_spacing() {
+        let points = imported_points(
+            vec![Vec3 {
+                x: 1.0,
+                y: 0.0,
+                z: 0.0,
+            }],
+            1,
+            SpatialPlacement {
+                origin: Vec3 {
+                    x: 1.0,
+                    y: 2.0,
+                    z: 3.0,
+                },
+                yaw_degrees: 90.0,
+                spacing: 10.0,
+                ..SpatialPlacement::default()
+            },
+        );
+
+        assert_vec3(points[0], 1.0, 3.0, 3.0);
+    }
+
+    #[test]
+    fn import_pattern_falls_back_to_matrix_strip_when_asset_is_missing() {
+        let parameters = HashMap::from([
+            ("layout_pattern".to_owned(), json!("import")),
+            ("layout_asset_id".to_owned(), json!("")),
+        ]);
+
+        let points = spatial_points_for_mode(
+            &parameters,
+            "",
+            4,
+            MatrixStripMode::Auto {
+                width: 2,
+                height: 2,
+            },
+        );
 
         assert_vec3(points[0], 0.0, 0.0, 0.0);
         assert_vec3(points[1], 1.0, 0.0, 0.0);

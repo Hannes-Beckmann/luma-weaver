@@ -7,6 +7,11 @@ use shared::{
 use super::model::{coerce_input_value_kind, parameters_with_defaults};
 use super::{EditorInputPort, EditorSnarlNode};
 
+pub(super) enum ParameterEditRequest {
+    UploadImageAsset { parameter_name: String },
+    UploadLayoutAsset { parameter_name: String },
+}
+
 /// Formats an input value for compact inline display in the editor.
 pub(super) fn format_input_value(value: &InputValue) -> String {
     match value {
@@ -412,13 +417,12 @@ pub(super) fn edit_parameter_value(
     default_value: JsonValue,
     wled_instances: &[WledInstance],
     mqtt_broker_configs: &[MqttBrokerConfig],
-) -> bool {
+) -> Option<ParameterEditRequest> {
     if matches!(ui_hint, ParameterUiHint::Hidden) {
-        return false;
+        return None;
     }
     if matches!(ui_hint, ParameterUiHint::SpatialLayoutSetup) {
-        edit_spatial_layout_setup(ui, parameters, name);
-        return false;
+        return edit_spatial_layout_setup(ui, parameters, name);
     }
 
     let value = parameter_value_mut(parameters, name, default_value);
@@ -435,7 +439,7 @@ pub(super) fn edit_parameter_value(
             {
                 *value = JsonValue::from(float_value);
             }
-            false
+            None
         }
         ParameterUiHint::ColorPicker => {
             let mut color =
@@ -453,21 +457,21 @@ pub(super) fn edit_parameter_value(
                 color.a = rgba[3];
                 *value = serde_json::to_value(color).unwrap_or(JsonValue::Null);
             }
-            false
+            None
         }
         ParameterUiHint::ColorGradient => {
             let mut gradient = serde_json::from_value::<ColorGradient>(value.clone())
                 .unwrap_or_else(|_| default_editor_gradient());
             edit_color_gradient_button(ui, name, &mut gradient);
             *value = serde_json::to_value(normalize_gradient(gradient)).unwrap_or(JsonValue::Null);
-            false
+            None
         }
         ParameterUiHint::Checkbox => {
             let mut bool_value = value.as_bool().unwrap_or(false);
             if ui.checkbox(&mut bool_value, "").changed() {
                 *value = JsonValue::from(bool_value);
             }
-            false
+            None
         }
         ParameterUiHint::TextSingleLine => {
             let mut text = value.as_str().unwrap_or("").to_owned();
@@ -480,7 +484,7 @@ pub(super) fn edit_parameter_value(
             {
                 *value = JsonValue::from(text);
             }
-            false
+            None
         }
         ParameterUiHint::ImageAssetUpload => {
             let asset_id = value.as_str().unwrap_or("").to_owned();
@@ -509,9 +513,11 @@ pub(super) fn edit_parameter_value(
                     *value = JsonValue::from(String::new());
                 }
             });
-            requested_upload
+            requested_upload.then(|| ParameterEditRequest::UploadImageAsset {
+                parameter_name: name.to_owned(),
+            })
         }
-        ParameterUiHint::Hidden | ParameterUiHint::SpatialLayoutSetup => false,
+        ParameterUiHint::Hidden | ParameterUiHint::SpatialLayoutSetup => None,
         ParameterUiHint::EnumSelect { options } => {
             let mut selected = value.as_str().unwrap_or("").to_owned();
             let selected_label = options
@@ -542,7 +548,7 @@ pub(super) fn edit_parameter_value(
                 }
             }
             *value = JsonValue::from(selected);
-            false
+            None
         }
         ParameterUiHint::IntegerDrag { speed, min, max } => {
             let mut int_value = value.as_i64().unwrap_or(0);
@@ -556,7 +562,7 @@ pub(super) fn edit_parameter_value(
             {
                 *value = JsonValue::from(int_value);
             }
-            false
+            None
         }
         ParameterUiHint::WledInstanceOrHost => {
             let mut target = value.as_str().unwrap_or("").to_owned();
@@ -597,7 +603,7 @@ pub(super) fn edit_parameter_value(
                 *parameter_value_mut(parameters, "led_count", JsonValue::from(led_count as i64)) =
                     JsonValue::from(led_count as i64);
             }
-            false
+            None
         }
         ParameterUiHint::MqttBrokerSelect => {
             let mut selected = value.as_str().unwrap_or("").to_owned();
@@ -643,7 +649,7 @@ pub(super) fn edit_parameter_value(
                     }
                 });
             *value = JsonValue::from(selected);
-            false
+            None
         }
     }
 }
@@ -656,10 +662,17 @@ fn shorten_asset_id(asset_id: &str) -> String {
     }
 }
 
-fn edit_spatial_layout_setup(ui: &mut egui::Ui, parameters: &mut Vec<NodeParameter>, name: &str) {
+fn edit_spatial_layout_setup(
+    ui: &mut egui::Ui,
+    parameters: &mut Vec<NodeParameter>,
+    name: &str,
+) -> Option<ParameterEditRequest> {
     let window_id = ui.id().with(("spatial_layout_setup", name));
     let is_source_layout = name.starts_with("source_");
     let prefix = if is_source_layout { "source_" } else { "" };
+    let pattern_name = format!("{prefix}layout_pattern");
+    let pattern_default = JsonValue::from("matrix_strip");
+    let mut requested_upload = None;
     let mut open = ui
         .memory(|memory| memory.data.get_temp::<bool>(window_id))
         .unwrap_or(false);
@@ -669,81 +682,225 @@ fn edit_spatial_layout_setup(ui: &mut egui::Ui, parameters: &mut Vec<NodeParamet
     }
 
     if open {
+        let position_grid_id = ui.id().with("spatial_layout_position_grid");
+        let rotation_grid_id = ui.id().with("spatial_layout_rotation_grid");
+        let pattern_grid_id = ui.id().with("spatial_layout_pattern_grid");
         egui::Window::new("Spatial Layout")
             .id(window_id)
             .collapsible(false)
             .resizable(false)
             .open(&mut open)
             .show(ui.ctx(), |ui| {
-                egui::Grid::new(ui.id().with("spatial_layout_grid"))
+                ui.columns(2, |columns| {
+                    egui::Grid::new(position_grid_id)
+                        .num_columns(2)
+                        .spacing([12.0, 6.0])
+                        .show(&mut columns[0], |ui| {
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "X",
+                                &format!("{prefix}layout_origin_x"),
+                                0.0,
+                                0.1,
+                            );
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "Y",
+                                &format!("{prefix}layout_origin_y"),
+                                0.0,
+                                0.1,
+                            );
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "Z",
+                                &format!("{prefix}layout_origin_z"),
+                                0.0,
+                                0.1,
+                            );
+                        });
+                    egui::Grid::new(rotation_grid_id)
+                        .num_columns(2)
+                        .show(&mut columns[1], |ui| {
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "RX",
+                                &format!("{prefix}layout_rotation_roll"),
+                                0.0,
+                                1.0,
+                            );
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "RY",
+                                &format!("{prefix}layout_rotation_pitch"),
+                                0.0,
+                                1.0,
+                            );
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "RZ",
+                                &format!("{prefix}layout_rotation_yaw"),
+                                0.0,
+                                1.0,
+                            );
+                        });
+                });
+                ui.add_space(6.0);
+                ui.separator();
+                ui.add_space(6.0);
+                let selected_pattern =
+                    spatial_pattern_selector(ui, parameters, &pattern_name, "matrix_strip");
+                ui.add_space(6.0);
+                egui::Grid::new(pattern_grid_id)
                     .num_columns(2)
                     .spacing([12.0, 6.0])
                     .show(ui, |ui| {
-                        if is_source_layout {
-                            spatial_integer_row(ui, parameters, "Width", "source_width", 8, 1.0);
-                            spatial_integer_row(ui, parameters, "Height", "source_height", 8, 1.0);
+                        if selected_pattern == "matrix_strip" {
+                            if is_source_layout {
+                                spatial_enum_row(
+                                    ui,
+                                    parameters,
+                                    "Shape",
+                                    "source_shape",
+                                    "strip",
+                                    &[("strip", "Strip"), ("matrix", "Matrix")],
+                                );
+                                spatial_integer_row(
+                                    ui,
+                                    parameters,
+                                    "Width",
+                                    "source_width",
+                                    8,
+                                    1.0,
+                                );
+                                spatial_integer_row(
+                                    ui,
+                                    parameters,
+                                    "Height",
+                                    "source_height",
+                                    8,
+                                    1.0,
+                                );
+                            } else {
+                                spatial_integer_row(ui, parameters, "Width", "width", 8, 1.0);
+                                spatial_integer_row(ui, parameters, "Height", "height", 8, 1.0);
+                            }
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "Spacing",
+                                &format!("{prefix}layout_spacing"),
+                                1.0,
+                                0.1,
+                            );
+                        } else if selected_pattern == "circle_arc" {
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "Radius",
+                                &format!("{prefix}layout_circle_radius"),
+                                1.0,
+                                0.1,
+                            );
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "Start Deg",
+                                &format!("{prefix}layout_circle_start_degrees"),
+                                0.0,
+                                1.0,
+                            );
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "Sweep Deg",
+                                &format!("{prefix}layout_circle_sweep_degrees"),
+                                360.0,
+                                1.0,
+                            );
+                            if !is_source_layout {
+                                spatial_integer_row(ui, parameters, "Num LEDs", "width", 8, 1.0);
+                                set_integer_parameter(parameters, "height", 1);
+                            }
+                        } else if selected_pattern == "rectangle" {
+                            if !is_source_layout {
+                                spatial_integer_row(ui, parameters, "Num LEDs", "width", 8, 1.0);
+                                set_integer_parameter(parameters, "height", 1);
+                            }
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "Rect Width",
+                                &format!("{prefix}layout_rectangle_width"),
+                                8.0,
+                                0.1,
+                            );
+                            spatial_float_row(
+                                ui,
+                                parameters,
+                                "Rect Height",
+                                &format!("{prefix}layout_rectangle_height"),
+                                8.0,
+                                0.1,
+                            );
+                        } else if selected_pattern == "import" {
+                            requested_upload = spatial_layout_asset_row(
+                                ui,
+                                parameters,
+                                "Layout File",
+                                &format!("{prefix}layout_asset_id"),
+                            );
                         }
-                        spatial_float_row(
-                            ui,
-                            parameters,
-                            "Origin X",
-                            &format!("{prefix}layout_origin_x"),
-                            0.0,
-                            0.1,
-                        );
-                        spatial_float_row(
-                            ui,
-                            parameters,
-                            "Origin Y",
-                            &format!("{prefix}layout_origin_y"),
-                            0.0,
-                            0.1,
-                        );
-                        spatial_float_row(
-                            ui,
-                            parameters,
-                            "Origin Z",
-                            &format!("{prefix}layout_origin_z"),
-                            0.0,
-                            0.1,
-                        );
-                        spatial_float_row(
-                            ui,
-                            parameters,
-                            "Roll",
-                            &format!("{prefix}layout_rotation_roll"),
-                            0.0,
-                            1.0,
-                        );
-                        spatial_float_row(
-                            ui,
-                            parameters,
-                            "Pitch",
-                            &format!("{prefix}layout_rotation_pitch"),
-                            0.0,
-                            1.0,
-                        );
-                        spatial_float_row(
-                            ui,
-                            parameters,
-                            "Yaw",
-                            &format!("{prefix}layout_rotation_yaw"),
-                            0.0,
-                            1.0,
-                        );
-                        spatial_float_row(
-                            ui,
-                            parameters,
-                            "Spacing",
-                            &format!("{prefix}layout_spacing"),
-                            1.0,
-                            0.1,
-                        );
                     });
             });
     }
 
     ui.memory_mut(|memory| memory.data.insert_temp(window_id, open));
+    let _ = parameter_value_mut(parameters, &pattern_name, pattern_default);
+    requested_upload
+}
+
+fn spatial_pattern_selector(
+    ui: &mut egui::Ui,
+    parameters: &mut Vec<NodeParameter>,
+    name: &str,
+    default_value: &str,
+) -> String {
+    let value = parameter_value_mut(parameters, name, JsonValue::from(default_value));
+    let mut selected = value.as_str().unwrap_or(default_value).to_owned();
+    ui.horizontal(|ui| {
+        ui.label("Pattern");
+        egui::ComboBox::from_id_salt(ui.id().with(("layout_pattern", name)))
+            .selected_text(layout_pattern_label(&selected))
+            .show_ui(ui, |ui| {
+                for (pattern, label) in [
+                    ("matrix_strip", "Matrix / Strip"),
+                    ("circle_arc", "Circle / Arc"),
+                    ("rectangle", "Rectangle"),
+                    ("import", "Import CSV / JSON"),
+                ] {
+                    if ui.selectable_label(selected == pattern, label).clicked() {
+                        selected = pattern.to_owned();
+                    }
+                }
+            });
+    });
+    *value = JsonValue::from(selected.clone());
+    selected
+}
+
+fn layout_pattern_label(value: &str) -> &'static str {
+    match value {
+        "circle_arc" => "Circle / Arc",
+        "rectangle" => "Rectangle",
+        "import" => "Import CSV / JSON",
+        _ => "Matrix / Strip",
+    }
 }
 
 fn spatial_integer_row(
@@ -770,6 +927,10 @@ fn spatial_integer_row(
     ui.end_row();
 }
 
+fn set_integer_parameter(parameters: &mut Vec<NodeParameter>, name: &str, value: i64) {
+    *parameter_value_mut(parameters, name, JsonValue::from(value)) = JsonValue::from(value);
+}
+
 fn spatial_float_row(
     ui: &mut egui::Ui,
     parameters: &mut Vec<NodeParameter>,
@@ -788,6 +949,77 @@ fn spatial_float_row(
         *value = JsonValue::from(float_value);
     }
     ui.end_row();
+}
+
+fn spatial_enum_row(
+    ui: &mut egui::Ui,
+    parameters: &mut Vec<NodeParameter>,
+    label: &str,
+    name: &str,
+    default_value: &str,
+    options: &[(&str, &str)],
+) {
+    ui.label(label);
+    let value = parameter_value_mut(parameters, name, JsonValue::from(default_value));
+    let mut selected = value.as_str().unwrap_or(default_value).to_owned();
+    let selected_label = options
+        .iter()
+        .find(|(option_value, _)| *option_value == selected)
+        .map(|(_, option_label)| *option_label)
+        .unwrap_or(default_value);
+    egui::ComboBox::from_id_salt(ui.id().with(("spatial_enum", name)))
+        .selected_text(selected_label)
+        .show_ui(ui, |ui| {
+            for (option_value, option_label) in options {
+                if ui
+                    .selectable_label(selected == *option_value, *option_label)
+                    .clicked()
+                {
+                    selected = (*option_value).to_owned();
+                }
+            }
+        });
+    *value = JsonValue::from(selected);
+    ui.end_row();
+}
+
+fn spatial_layout_asset_row(
+    ui: &mut egui::Ui,
+    parameters: &mut Vec<NodeParameter>,
+    label: &str,
+    name: &str,
+) -> Option<ParameterEditRequest> {
+    ui.label(label);
+    let value = parameter_value_mut(parameters, name, JsonValue::from(String::new()));
+    let asset_id = value.as_str().unwrap_or("").to_owned();
+    let mut requested_upload = false;
+    ui.horizontal(|ui| {
+        let response = ui.label(if asset_id.trim().is_empty() {
+            "No layout uploaded".to_owned()
+        } else {
+            shorten_asset_id(&asset_id)
+        });
+        if !asset_id.trim().is_empty() {
+            response.on_hover_text(asset_id.clone());
+        }
+        if ui
+            .small_button(if asset_id.trim().is_empty() {
+                "Upload"
+            } else {
+                "Replace"
+            })
+            .clicked()
+        {
+            requested_upload = true;
+        }
+        if !asset_id.trim().is_empty() && ui.small_button("Clear").clicked() {
+            *value = JsonValue::from(String::new());
+        }
+    });
+    ui.end_row();
+    requested_upload.then(|| ParameterEditRequest::UploadLayoutAsset {
+        parameter_name: name.to_owned(),
+    })
 }
 
 /// Formats the visible dimensions of a frame layout for display.

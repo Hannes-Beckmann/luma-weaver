@@ -10,14 +10,16 @@ use crate::node_runtime::{
     NodeConstruction, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters,
     RuntimeOutputs, TypedNodeEvaluation,
 };
-use crate::spatial_layout::{SpatialPlacement, matrix_points};
+use crate::spatial_layout::{
+    MatrixStripMode, spatial_layout_dimensions, spatial_layout_pixel_count, spatial_points_for_mode,
+};
 
 #[derive(Default)]
 pub(crate) struct MapToLayoutNode {
     width: usize,
     height: usize,
     use_spatial: bool,
-    placement: SpatialPlacement,
+    parameters: HashMap<String, JsonValue>,
 }
 
 #[derive(Default)]
@@ -45,7 +47,7 @@ impl RuntimeNodeFromParameters for MapToLayoutNode {
                 width: config.width,
                 height: config.height,
                 use_spatial: config.use_spatial,
-                placement: SpatialPlacement::from_parameters(parameters),
+                parameters: parameters.clone(),
             },
             diagnostics,
         }
@@ -89,13 +91,7 @@ impl RuntimeNode for MapToLayoutNode {
             }));
         };
 
-        let layout = mapped_layout(
-            context.render_layout.as_ref(),
-            self.width,
-            self.height,
-            self.use_spatial,
-            self.placement,
-        );
+        let layout = mapped_layout(context.render_layout.as_ref(), self);
         if frame.pixels.len() != layout.pixel_count {
             return Ok(TypedNodeEvaluation {
                 outputs: MapToLayoutOutputs { frame: None },
@@ -119,13 +115,7 @@ impl RuntimeNode for MapToLayoutNode {
     }
 }
 
-fn mapped_layout(
-    render_layout: Option<&LedLayout>,
-    width: usize,
-    height: usize,
-    use_spatial: bool,
-    placement: SpatialPlacement,
-) -> LedLayout {
+fn mapped_layout(render_layout: Option<&LedLayout>, node: &MapToLayoutNode) -> LedLayout {
     match render_layout {
         Some(layout) => LedLayout {
             id: format!("mapped:{}", layout.id),
@@ -136,23 +126,61 @@ fn mapped_layout(
             points_3d: layout.points_3d.clone(),
         },
         None => LedLayout {
-            id: format!("mapped:{}x{}", width, height),
+            id: format!("mapped:{}x{}", node.width, node.height),
             role: LedLayoutRole::Source,
-            pixel_count: width * height,
-            width: Some(width),
-            height: Some(height),
-            points_3d: use_spatial.then(|| matrix_points(width, height, placement)),
+            pixel_count: spatial_layout_pixel_count(
+                &node.parameters,
+                "",
+                node.width,
+                node.height,
+                node.use_spatial,
+            ),
+            width: spatial_layout_dimensions(
+                &node.parameters,
+                "",
+                node.width,
+                node.height,
+                node.use_spatial,
+            )
+            .0,
+            height: spatial_layout_dimensions(
+                &node.parameters,
+                "",
+                node.width,
+                node.height,
+                node.use_spatial,
+            )
+            .1,
+            points_3d: node.use_spatial.then(|| {
+                let pixel_count = spatial_layout_pixel_count(
+                    &node.parameters,
+                    "",
+                    node.width,
+                    node.height,
+                    node.use_spatial,
+                );
+                spatial_points_for_mode(
+                    &node.parameters,
+                    "",
+                    pixel_count,
+                    MatrixStripMode::Auto {
+                        width: node.width,
+                        height: node.height,
+                    },
+                )
+            }),
         },
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
+
     use shared::{InputValue, LedLayoutRole, RgbaColor};
 
     use super::{MapToLayoutInputs, MapToLayoutNode, mapped_layout};
     use crate::node_runtime::{NodeEvaluationContext, RuntimeNode};
-    use crate::spatial_layout::SpatialPlacement;
 
     fn render_target_layout(width: usize, height: usize) -> shared::LedLayout {
         shared::LedLayout {
@@ -186,7 +214,7 @@ mod tests {
             width: 8,
             height: 8,
             use_spatial: false,
-            placement: SpatialPlacement::default(),
+            parameters: HashMap::new(),
         };
 
         let evaluation = node
@@ -217,7 +245,15 @@ mod tests {
 
     #[test]
     fn falls_back_to_parameter_layout_when_context_is_missing() {
-        let layout = mapped_layout(None, 4, 2, false, SpatialPlacement::default());
+        let layout = mapped_layout(
+            None,
+            &MapToLayoutNode {
+                width: 4,
+                height: 2,
+                use_spatial: false,
+                parameters: HashMap::new(),
+            },
+        );
 
         assert_eq!(layout.role, LedLayoutRole::Source);
         assert_eq!(layout.pixel_count, 8);
@@ -231,7 +267,7 @@ mod tests {
             width: 8,
             height: 8,
             use_spatial: false,
-            placement: SpatialPlacement::default(),
+            parameters: HashMap::new(),
         };
 
         let evaluation = node

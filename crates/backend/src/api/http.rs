@@ -28,6 +28,7 @@ pub(crate) fn router(state: AppState) -> Router {
         .route("/health", get(|| async { "ok" }))
         .route("/ws", get(websocket_handler))
         .route("/api/assets/images", post(upload_image_asset))
+        .route("/api/assets/layouts", post(upload_layout_asset))
         .fallback_service(
             ServeDir::new(dist_dir)
                 .append_index_html_on_directories(true)
@@ -42,6 +43,11 @@ struct UploadImageAssetResponse {
     asset_id: String,
 }
 
+#[derive(Debug, Serialize)]
+struct UploadLayoutAssetResponse {
+    asset_id: String,
+}
+
 /// Persists an uploaded image asset and returns the stable id the graph should reference.
 async fn upload_image_asset(
     State(state): State<AppState>,
@@ -52,6 +58,18 @@ async fn upload_image_asset(
         .store_image_bytes(body.as_ref())
         .map_err(invalid_upload_response)?;
     Ok(Json(UploadImageAssetResponse { asset_id }))
+}
+
+/// Persists an uploaded layout asset and returns the stable id the graph should reference.
+async fn upload_layout_asset(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Result<Json<UploadLayoutAssetResponse>, (StatusCode, String)> {
+    let asset_id = state
+        .layout_asset_store
+        .store_layout_bytes(body.as_ref())
+        .map_err(invalid_upload_response)?;
+    Ok(Json(UploadLayoutAssetResponse { asset_id }))
 }
 
 fn invalid_upload_response(error: anyhow::Error) -> (StatusCode, String) {
