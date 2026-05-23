@@ -56,7 +56,8 @@ pub(crate) struct UiState {
     pub(crate) sink_preview_pan_y: f32,
     pub(crate) sink_preview_led_size: f32,
     pub(crate) sink_preview_show_axes: bool,
-    pub(crate) sink_preview_selected_view_key: String,
+    pub(crate) sink_preview_selected_item_keys: HashSet<String>,
+    pub(crate) sink_preview_selection_context_key: Option<String>,
     pub(crate) sink_preview_display_scope_node_id: Option<String>,
     #[cfg(target_arch = "wasm32")]
     pub(crate) browser_asset_upload_events:
@@ -100,7 +101,8 @@ impl Default for UiState {
             sink_preview_pan_y: 0.0,
             sink_preview_led_size: 3.5,
             sink_preview_show_axes: true,
-            sink_preview_selected_view_key: "all".to_owned(),
+            sink_preview_selected_item_keys: HashSet::new(),
+            sink_preview_selection_context_key: None,
             sink_preview_display_scope_node_id: None,
             #[cfg(target_arch = "wasm32")]
             browser_asset_upload_events: None,
@@ -129,12 +131,12 @@ pub(crate) struct GraphState {
     pub(crate) live_snarl_needs_rebuild: bool,
     pub(crate) graph_runtime_modes: HashMap<String, GraphRuntimeMode>,
     pub(crate) runtime_node_values: HashMap<String, HashMap<String, InputValue>>,
+    pub(crate) preview_frames_by_graph: HashMap<String, Vec<SinkPreviewFrame>>,
     pub(crate) plot_history: HashMap<String, VecDeque<f32>>,
     pub(crate) node_diagnostic_summaries_by_graph:
         HashMap<String, HashMap<String, NodeDiagnosticSummary>>,
     pub(crate) node_diagnostic_details_by_graph:
         HashMap<String, HashMap<String, Vec<NodeDiagnosticEntry>>>,
-    pub(crate) sink_preview_frames_by_graph: HashMap<String, Vec<SinkPreviewFrame>>,
     pub(crate) wled_instances: Vec<WledInstance>,
     pub(crate) mqtt_broker_configs: Vec<MqttBrokerConfig>,
 }
@@ -162,10 +164,10 @@ impl Default for GraphState {
             live_snarl_needs_rebuild: false,
             graph_runtime_modes: HashMap::new(),
             runtime_node_values: HashMap::new(),
+            preview_frames_by_graph: HashMap::new(),
             plot_history: HashMap::new(),
             node_diagnostic_summaries_by_graph: HashMap::new(),
             node_diagnostic_details_by_graph: HashMap::new(),
-            sink_preview_frames_by_graph: HashMap::new(),
             wled_instances: Vec::new(),
             mqtt_broker_configs: Vec::new(),
         }
@@ -185,7 +187,6 @@ pub(crate) struct SubscriptionState {
     pub(crate) node_definitions_requested_once: bool,
     pub(crate) running_graphs_requested_once: bool,
     pub(crate) runtime_graph_subscription: Option<String>,
-    pub(crate) sink_preview_graph_subscription: Option<String>,
     pub(crate) diagnostics_graph_subscriptions: HashSet<String>,
     pub(crate) diagnostics_node_subscription: Option<(String, String)>,
     pub(crate) wled_instances_requested_once: bool,
@@ -207,7 +208,6 @@ impl Default for SubscriptionState {
             node_definitions_requested_once: false,
             running_graphs_requested_once: false,
             runtime_graph_subscription: None,
-            sink_preview_graph_subscription: None,
             diagnostics_graph_subscriptions: HashSet::new(),
             diagnostics_node_subscription: None,
             wled_instances_requested_once: false,

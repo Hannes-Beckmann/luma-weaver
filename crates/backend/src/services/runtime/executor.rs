@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Context;
-use shared::{
-    ColorFrame, InputValue, LedLayout, NodeDiagnostic, NodeDiagnosticSeverity, NodeRuntimeValue,
-    RgbaColor, SinkPreviewFrame,
-};
+use shared::{InputValue, NodeDiagnostic, NodeDiagnosticSeverity, NodeRuntimeValue, RgbaColor};
 
 use crate::node_runtime::nodes::temporal_filters::delay::seeded_initial_value_for_layout;
 use crate::node_runtime::{NodeEvaluation, NodeEvaluationContext, RuntimeNodeEvaluator};
@@ -30,7 +27,6 @@ impl CompiledGraph {
         initialize_delay_previous_outputs(self, execution_state);
         let previous_outputs = execution_state.previous_outputs.clone();
         let mut outputs = HashMap::<(usize, String, String), InputValue>::new();
-        let mut sink_previews = Vec::<SinkPreviewFrame>::new();
 
         let topological_order = self.topological_order.clone();
         for node_index in topological_order {
@@ -38,7 +34,6 @@ impl CompiledGraph {
                 evaluation_contexts_for_node(&self.render_contexts_by_node[node_index]);
             let incoming_edges = self.incoming_edges_by_node[node_index].clone();
             let node = &mut self.nodes[node_index];
-
             for render_context in render_contexts {
                 let context_id = render_context
                     .as_ref()
@@ -148,16 +143,6 @@ impl CompiledGraph {
                     events.node_runtime_update(graph_id.to_owned(), node.id.clone(), node_updates);
                 }
 
-                if let Some(preview) = spatial_sink_preview_for_node(
-                    &node.id,
-                    &node.display_name,
-                    node.node_type.as_str(),
-                    render_context.as_ref().map(|context| &context.layout),
-                    &inputs,
-                ) {
-                    sink_previews.push(preview);
-                }
-
                 let output_names = evaluation.outputs.keys().cloned().collect::<Vec<_>>();
                 tracing::trace!(
                     graph_id,
@@ -175,74 +160,8 @@ impl CompiledGraph {
         }
 
         execution_state.previous_outputs = outputs;
-        events.sink_preview_update(graph_id.to_owned(), sink_previews);
         Ok(())
     }
-}
-
-fn spatial_sink_preview_for_node(
-    node_id: &str,
-    node_name: &str,
-    node_type: &str,
-    layout: Option<&LedLayout>,
-    inputs: &HashMap<String, InputValue>,
-) -> Option<SinkPreviewFrame> {
-    let layout = layout?.clone();
-    let points = layout.points_3d.as_ref()?;
-    if points.len() != layout.pixel_count {
-        return None;
-    }
-    let pixels = match node_type {
-        shared::NodeTypeId::WLED_TARGET => preview_pixels_from_input(inputs, &layout)?,
-        shared::NodeTypeId::WLED_DUMMY_DISPLAY => {
-            if is_disabled_input(inputs) {
-                black_pixels(layout.pixel_count)
-            } else {
-                preview_pixels_from_input(inputs, &layout)?
-            }
-        }
-        _ => return None,
-    };
-    Some(SinkPreviewFrame {
-        sink_node_id: node_id.to_owned(),
-        sink_node_name: node_name.to_owned(),
-        layout,
-        pixels,
-    })
-}
-
-fn preview_pixels_from_input(
-    inputs: &HashMap<String, InputValue>,
-    layout: &LedLayout,
-) -> Option<Vec<RgbaColor>> {
-    match inputs.get("value")? {
-        InputValue::ColorFrame(frame) | InputValue::MappedFrame(frame) => {
-            Some(normalized_pixels(frame, layout.pixel_count))
-        }
-        InputValue::Color(color) => Some(vec![*color; layout.pixel_count]),
-        _ => None,
-    }
-}
-
-fn normalized_pixels(frame: &ColorFrame, pixel_count: usize) -> Vec<RgbaColor> {
-    let mut pixels = frame.pixels.clone();
-    if pixels.len() > pixel_count {
-        pixels.truncate(pixel_count);
-    } else if pixels.len() < pixel_count {
-        pixels.extend(std::iter::repeat_n(
-            black_color(),
-            pixel_count - pixels.len(),
-        ));
-    }
-    pixels
-}
-
-fn is_disabled_input(inputs: &HashMap<String, InputValue>) -> bool {
-    matches!(inputs.get("disable"), Some(InputValue::Float(value)) if *value >= 0.5)
-}
-
-fn black_pixels(pixel_count: usize) -> Vec<RgbaColor> {
-    vec![black_color(); pixel_count]
 }
 
 fn black_color() -> RgbaColor {
@@ -434,9 +353,6 @@ mod tests {
             _values: Vec<shared::NodeRuntimeValue>,
         ) {
         }
-
-        /// Ignores sink preview updates in executor tests.
-        fn sink_preview_update(&self, _graph_id: String, _sinks: Vec<shared::SinkPreviewFrame>) {}
 
         /// Ignores diagnostics emitted during executor tests.
         fn node_diagnostics(

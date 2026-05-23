@@ -38,7 +38,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
     let connected_clients = state.connected_clients.fetch_add(1, Ordering::SeqCst) + 1;
     let mut subscriptions = HashSet::new();
     let mut runtime_graph_subscriptions = HashSet::new();
-    let mut sink_preview_graph_subscriptions = HashSet::new();
     let mut diagnostics_graph_subscriptions = HashSet::new();
     let mut node_diagnostics_subscriptions = HashSet::new();
     let mut event_receiver = state.event_bus.subscribe();
@@ -107,7 +106,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                     client_id,
                     &mut subscriptions,
                     &mut runtime_graph_subscriptions,
-                    &mut sink_preview_graph_subscriptions,
                     &mut diagnostics_graph_subscriptions,
                     &mut node_diagnostics_subscriptions,
                     &text,
@@ -192,21 +190,6 @@ async fn handle_socket(socket: WebSocket, state: AppState) {
                             graph_id,
                             node_id,
                             values,
-                        )
-                        .await
-                        .is_err()
-                        {
-                            break;
-                        }
-                    }
-                    BackendEvent::SinkPreviewUpdate { graph_id, sinks } => {
-                        if !sink_preview_graph_subscriptions.contains(&graph_id) {
-                            continue;
-                        }
-                        if send_server_message(
-                            &mut write,
-                            client_id,
-                            ServerMessage::SinkPreviewUpdate { graph_id, sinks },
                         )
                         .await
                         .is_err()

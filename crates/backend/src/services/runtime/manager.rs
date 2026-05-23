@@ -631,8 +631,6 @@ mod tests {
         ) {
         }
 
-        fn sink_preview_update(&self, _graph_id: String, _sinks: Vec<shared::SinkPreviewFrame>) {}
-
         fn node_diagnostics(
             &self,
             graph_id: String,

@@ -1,6 +1,7 @@
 use eframe::egui;
 use eframe::egui::{Color32, RichText};
 use shared::{GraphRuntimeMode, InputValue, NodeParameter, RgbaColor, SinkPreviewFrame, ValueKind};
+use std::collections::HashMap;
 
 use crate::app::FrontendApp;
 
@@ -178,7 +179,8 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
 
                         if ui.add(secondary_action_button("3D Preview")).clicked() {
                             app.ui.sink_preview_window_open = true;
-                            app.ui.sink_preview_selected_view_key = "all".to_owned();
+                            app.ui.sink_preview_selected_item_keys.clear();
+                            app.ui.sink_preview_selection_context_key = None;
                             app.ui.sink_preview_display_scope_node_id = None;
                         }
 
@@ -299,7 +301,8 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
             if let Some(node_id) = requested_preview_node_id {
                 app.ui.sink_preview_window_open = true;
                 app.ui.sink_preview_display_scope_node_id = Some(node_id.clone());
-                app.ui.sink_preview_selected_view_key = "all".to_owned();
+                app.ui.sink_preview_selected_item_keys.clear();
+                app.ui.sink_preview_selection_context_key = None;
             }
 
             crate::diagnostics_view::render_node_diagnostics_window(ui.ctx(), app);
@@ -362,44 +365,33 @@ fn render_sink_preview_window(ctx: &egui::Context, app: &mut FrontendApp, graph_
         .default_size(egui::vec2(760.0, 560.0))
         .open(&mut open)
         .show(ctx, |ui| {
-            let preview_views = collect_preview_views(
-                app,
-                graph_id,
-                app.ui.sink_preview_display_scope_node_id.as_deref(),
-            );
-            if preview_views.is_empty() {
-                app.ui.sink_preview_selected_view_key = "all".to_owned();
-            } else if !preview_views
+            let scoped_node_id = app.ui.sink_preview_display_scope_node_id.as_deref();
+            let selection_groups = collect_preview_selection_groups(app, graph_id, scoped_node_id);
+            let context_key = preview_selection_context_key(graph_id, scoped_node_id);
+            let context_changed =
+                app.ui.sink_preview_selection_context_key.as_deref() != Some(context_key.as_str());
+            if context_changed {
+                app.ui.sink_preview_selected_item_keys.clear();
+                app.ui.sink_preview_selection_context_key = Some(context_key);
+            }
+            let all_selection_items = selection_groups
                 .iter()
-                .any(|view| view.key == app.ui.sink_preview_selected_view_key)
+                .flat_map(|group| group.items.iter())
+                .collect::<Vec<_>>();
+            app.ui
+                .sink_preview_selected_item_keys
+                .retain(|key| all_selection_items.iter().any(|item| item.key == *key));
+            if context_changed
+                && app.ui.sink_preview_selected_item_keys.is_empty()
+                && !all_selection_items.is_empty()
             {
-                app.ui.sink_preview_selected_view_key = "all".to_owned();
+                app.ui.sink_preview_selected_item_keys = all_selection_items
+                    .iter()
+                    .map(|item| item.key.clone())
+                    .collect();
             }
 
             ui.horizontal(|ui| {
-                ui.label(RichText::new("View").color(Color32::from_gray(150)));
-                egui::ComboBox::from_id_salt("preview_view_select")
-                    .selected_text(
-                        preview_views
-                            .iter()
-                            .find(|view| view.key == app.ui.sink_preview_selected_view_key)
-                            .map(|view| view.label.as_str())
-                            .unwrap_or("All together"),
-                    )
-                    .show_ui(ui, |ui| {
-                        for view in &preview_views {
-                            if ui
-                                .selectable_label(
-                                    app.ui.sink_preview_selected_view_key == view.key,
-                                    &view.label,
-                                )
-                                .clicked()
-                            {
-                                app.ui.sink_preview_selected_view_key = view.key.clone();
-                            }
-                        }
-                    });
-
                 ui.label(RichText::new("LED Size").color(Color32::from_gray(150)));
                 ui.add(
                     egui::DragValue::new(&mut app.ui.sink_preview_led_size)
@@ -415,12 +407,13 @@ fn render_sink_preview_window(ctx: &egui::Context, app: &mut FrontendApp, graph_
                     app.ui.sink_preview_pan_y = 0.0;
                 }
             });
+            render_preview_selection_tree(ui, app, &selection_groups);
 
-            let selected_frames = preview_views
+            let selected_frames = all_selection_items
                 .iter()
-                .find(|view| view.key == app.ui.sink_preview_selected_view_key)
-                .map(|view| view.frames.as_slice())
-                .unwrap_or(&[]);
+                .filter(|item| app.ui.sink_preview_selected_item_keys.contains(&item.key))
+                .flat_map(|item| item.frames.iter().cloned())
+                .collect::<Vec<_>>();
             let mut camera = PreviewCamera {
                 yaw: app.ui.sink_preview_yaw,
                 pitch: app.ui.sink_preview_pitch,
@@ -430,7 +423,7 @@ fn render_sink_preview_window(ctx: &egui::Context, app: &mut FrontendApp, graph_
             };
             draw_sink_preview_scene(
                 ui,
-                selected_frames,
+                &selected_frames,
                 &mut camera,
                 app.ui.sink_preview_show_axes,
             );
@@ -444,53 +437,220 @@ fn render_sink_preview_window(ctx: &egui::Context, app: &mut FrontendApp, graph_
     app.ui.sink_preview_window_open = open;
 }
 
+fn preview_selection_context_key(graph_id: &str, scoped_node_id: Option<&str>) -> String {
+    match scoped_node_id {
+        Some(node_id) => format!("graph:{graph_id}:node:{node_id}"),
+        None => format!("graph:{graph_id}:global"),
+    }
+}
+
+fn render_preview_selection_tree(
+    ui: &mut egui::Ui,
+    app: &mut FrontendApp,
+    selection_groups: &[PreviewSelectionGroup],
+) {
+    let selection_items = selection_groups
+        .iter()
+        .flat_map(|group| group.items.iter())
+        .collect::<Vec<_>>();
+    let section_title = if selection_groups.len() <= 1 {
+        "Displayed Layouts"
+    } else {
+        "Displayed Nodes"
+    };
+    let selection_count = app.ui.sink_preview_selected_item_keys.len();
+    let header = format!(
+        "{section_title} ({selection_count}/{})",
+        selection_items.len()
+    );
+
+    egui::CollapsingHeader::new(header)
+        .id_salt("preview_selection_grid")
+        .default_open(false)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                if ui.button("Select all").clicked() {
+                    app.ui.sink_preview_selected_item_keys = selection_items
+                        .iter()
+                        .map(|item| item.key.clone())
+                        .collect();
+                }
+                if ui.button("Unselect all").clicked() {
+                    app.ui.sink_preview_selected_item_keys.clear();
+                }
+            });
+
+            if selection_items.is_empty() {
+                ui.label(
+                    RichText::new("No preview entries available yet.")
+                        .color(Color32::from_gray(150)),
+                );
+                return;
+            }
+
+            if selection_groups.len() <= 1 {
+                if let Some(group) = selection_groups.first() {
+                    render_preview_selection_items(ui, app, &group.items);
+                }
+                return;
+            }
+
+            for group in selection_groups {
+                render_preview_selection_group(ui, app, group);
+            }
+        });
+}
+
 #[derive(Clone)]
-struct PreviewView {
+struct PreviewSelectionGroup {
+    key: String,
+    label: String,
+    items: Vec<PreviewSelectionItem>,
+}
+
+#[derive(Clone)]
+struct PreviewSelectionItem {
     key: String,
     label: String,
     frames: Vec<SinkPreviewFrame>,
 }
 
-fn collect_preview_views(
+fn render_preview_selection_group(
+    ui: &mut egui::Ui,
+    app: &mut FrontendApp,
+    group: &PreviewSelectionGroup,
+) {
+    let selected_count = group
+        .items
+        .iter()
+        .filter(|item| app.ui.sink_preview_selected_item_keys.contains(&item.key))
+        .count();
+    let total_count = group.items.len();
+    let header = format!("{} ({selected_count}/{total_count})", group.label);
+
+    let response = egui::CollapsingHeader::new(header)
+        .id_salt(format!("preview_group:{}", group.key))
+        .default_open(false)
+        .show(ui, |ui| {
+            render_preview_selection_items(ui, app, &group.items)
+        });
+    response
+        .header_response
+        .on_hover_text("Show or hide this node's layouts");
+}
+
+fn render_preview_selection_items(
+    ui: &mut egui::Ui,
+    app: &mut FrontendApp,
+    selection_items: &[PreviewSelectionItem],
+) {
+    for item in selection_items {
+        let mut checked = app.ui.sink_preview_selected_item_keys.contains(&item.key);
+        if ui.checkbox(&mut checked, &item.label).changed() {
+            if checked {
+                app.ui
+                    .sink_preview_selected_item_keys
+                    .insert(item.key.clone());
+            } else {
+                app.ui.sink_preview_selected_item_keys.remove(&item.key);
+            }
+        }
+    }
+}
+
+fn collect_preview_selection_groups(
     app: &FrontendApp,
     graph_id: &str,
     scoped_node_id: Option<&str>,
-) -> Vec<PreviewView> {
+) -> Vec<PreviewSelectionGroup> {
     if let Some(node_id) = scoped_node_id {
-        return collect_scoped_node_preview_views(app, node_id);
+        return collect_scoped_node_preview_groups(app, node_id);
     }
 
     let sink_frames = app
         .graphs
-        .sink_preview_frames_by_graph
+        .preview_frames_by_graph
         .get(graph_id)
         .cloned()
         .unwrap_or_default();
-    let display_frames = collect_display_preview_frames(app);
 
-    let mut views = Vec::new();
-    let mut all_frames = Vec::new();
-    all_frames.extend(sink_frames.clone());
-    all_frames.extend(display_frames.iter().flat_map(|view| view.frames.clone()));
-    views.push(PreviewView {
-        key: "all".to_owned(),
-        label: "All together".to_owned(),
-        frames: all_frames,
-    });
+    let mut groups = Vec::new();
+    let grouped_frames = group_preview_frames_by_node(&sink_frames);
+    let duplicate_name_counts = grouped_frames
+        .iter()
+        .fold(HashMap::new(), |mut counts, group| {
+            *counts.entry(group.sink_node_name.clone()).or_insert(0usize) += 1;
+            counts
+        });
+    let mut duplicate_name_indices = HashMap::new();
 
-    for frame in &sink_frames {
-        views.push(PreviewView {
-            key: format!("sink:{}", frame.sink_node_id),
-            label: format!("Sink: {}", frame.sink_node_name),
+    for group in grouped_frames {
+        let label = if duplicate_name_counts
+            .get(&group.sink_node_name)
+            .copied()
+            .unwrap_or(0)
+            > 1
+        {
+            let index = duplicate_name_indices
+                .entry(group.sink_node_name.clone())
+                .and_modify(|next| *next += 1)
+                .or_insert(1usize);
+            format!("Sink: {} ({})", group.sink_node_name, index)
+        } else {
+            format!("Sink: {}", group.sink_node_name)
+        };
+        let items = group
+            .frames
+            .iter()
+            .enumerate()
+            .map(|(index, frame)| PreviewSelectionItem {
+                key: format!("sink_layout:{}:{}", group.sink_node_id, index),
+                label: format!("Layout {} ({})", index + 1, preview_frame_size_label(frame)),
+                frames: vec![frame.clone()],
+            })
+            .collect();
+        groups.push(PreviewSelectionGroup {
+            key: format!("sink:{}", group.sink_node_id),
+            label,
+            items,
+        });
+    }
+
+    groups
+}
+
+#[derive(Clone)]
+struct PreviewFrameGroup {
+    sink_node_id: String,
+    sink_node_name: String,
+    frames: Vec<SinkPreviewFrame>,
+}
+
+fn group_preview_frames_by_node(frames: &[SinkPreviewFrame]) -> Vec<PreviewFrameGroup> {
+    let mut groups: Vec<PreviewFrameGroup> = Vec::new();
+    let mut indices_by_node_id: HashMap<String, usize> = HashMap::new();
+
+    for frame in frames {
+        if let Some(index) = indices_by_node_id.get(frame.sink_node_id.as_str()).copied() {
+            groups[index].frames.push(frame.clone());
+            continue;
+        }
+
+        indices_by_node_id.insert(frame.sink_node_id.clone(), groups.len());
+        groups.push(PreviewFrameGroup {
+            sink_node_id: frame.sink_node_id.clone(),
+            sink_node_name: frame.sink_node_name.clone(),
             frames: vec![frame.clone()],
         });
     }
 
-    views.extend(display_frames);
-    views
+    groups
 }
 
-fn collect_scoped_node_preview_views(app: &FrontendApp, node_id: &str) -> Vec<PreviewView> {
+fn collect_scoped_node_preview_groups(
+    app: &FrontendApp,
+    node_id: &str,
+) -> Vec<PreviewSelectionGroup> {
     let Some(document) = app.graphs.loaded_graph_document.as_ref() else {
         return Vec::new();
     };
@@ -501,7 +661,7 @@ fn collect_scoped_node_preview_views(app: &FrontendApp, node_id: &str) -> Vec<Pr
         return Vec::new();
     };
 
-    let mut scoped_views = Vec::new();
+    let mut scoped_items = Vec::new();
     let mut layout_index = 1usize;
     for (name, value) in values {
         let Some(frame) =
@@ -525,106 +685,22 @@ fn collect_scoped_node_preview_views(app: &FrontendApp, node_id: &str) -> Vec<Pr
             layout_index += 1;
             label
         };
-        scoped_views.push(PreviewView {
+        scoped_items.push(PreviewSelectionItem {
             key: format!("node_layout:{}:{}", node.id, name),
             label,
             frames: vec![frame],
         });
     }
 
-    let combined_frames = values
-        .iter()
-        .filter_map(|(_name, value)| {
-            preview_frame_from_input_value(value, node.id.as_str(), node.metadata.name.as_str())
-        })
-        .collect::<Vec<_>>();
-    if !combined_frames.is_empty() {
-        scoped_views.insert(
-            0,
-            PreviewView {
-                key: "all".to_owned(),
-                label: "All together".to_owned(),
-                frames: combined_frames,
-            },
-        );
+    if scoped_items.is_empty() {
+        return Vec::new();
     }
 
-    scoped_views
-}
-
-fn collect_display_preview_frames(app: &FrontendApp) -> Vec<PreviewView> {
-    let Some(document) = app.graphs.loaded_graph_document.as_ref() else {
-        return Vec::new();
-    };
-
-    document
-        .nodes
-        .iter()
-        .filter(|node| node.node_type.as_str() == shared::NodeTypeId::DISPLAY)
-        .flat_map(|node| {
-            app.graphs
-                .runtime_node_values
-                .get(&node.id)
-                .into_iter()
-                .flat_map(move |values| {
-                    let mut layout_index = 1usize;
-                    values.iter().filter_map(move |(name, value)| {
-                        let frame = preview_frame_from_input_value(
-                            value,
-                            node.id.as_str(),
-                            node.metadata.name.as_str(),
-                        )?;
-                        let label = if name == "source_frame" {
-                            format!(
-                                "Display: {} / Mapped Frame ({})",
-                                node.metadata.name,
-                                preview_frame_size_label(&frame)
-                            )
-                        } else {
-                            let label = format!(
-                                "Display: {} / Layout {} ({})",
-                                node.metadata.name,
-                                layout_index,
-                                preview_frame_size_label(&frame)
-                            );
-                            layout_index += 1;
-                            label
-                        };
-                        Some(PreviewView {
-                            key: format!("display_layout:{}:{}", node.id, name),
-                            label,
-                            frames: vec![frame],
-                        })
-                    })
-                })
-                .chain({
-                    let combined_frames = app
-                        .graphs
-                        .runtime_node_values
-                        .get(&node.id)
-                        .map(|values| {
-                            values
-                                .iter()
-                                .filter_map(|(_name, value)| {
-                                    preview_frame_from_input_value(
-                                        value,
-                                        node.id.as_str(),
-                                        node.metadata.name.as_str(),
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                        })
-                        .unwrap_or_default();
-                    (!combined_frames.is_empty())
-                        .then(|| PreviewView {
-                            key: format!("display_node:{}", node.id),
-                            label: format!("Display: {} (all layouts)", node.metadata.name),
-                            frames: combined_frames,
-                        })
-                        .into_iter()
-                })
-        })
-        .collect()
+    vec![PreviewSelectionGroup {
+        key: format!("node:{}", node.id),
+        label: node.metadata.name.clone(),
+        items: scoped_items,
+    }]
 }
 
 fn preview_frame_from_input_value(
@@ -980,5 +1056,72 @@ fn runtime_status_text(runtime_mode: Option<GraphRuntimeMode>) -> RichText {
         None => RichText::new("Stopped")
             .color(Color32::from_gray(130))
             .strong(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::collect_preview_selection_groups;
+    use crate::app::FrontendApp;
+    use shared::{LedLayout, SinkPreviewFrame, Vec3};
+
+    fn preview_frame(node_id: &str, node_name: &str, layout_id: &str) -> SinkPreviewFrame {
+        SinkPreviewFrame {
+            sink_node_id: node_id.to_owned(),
+            sink_node_name: node_name.to_owned(),
+            layout: LedLayout {
+                id: layout_id.to_owned(),
+                role: shared::LedLayoutRole::RenderTarget,
+                pixel_count: 1,
+                width: Some(1),
+                height: Some(1),
+                points_3d: Some(vec![Vec3 {
+                    x: 0.0,
+                    y: 0.0,
+                    z: 0.0,
+                }]),
+            },
+            pixels: vec![],
+        }
+    }
+
+    #[test]
+    fn global_preview_groups_multiple_frames_from_same_node() {
+        let mut app = FrontendApp::default();
+        app.graphs.preview_frames_by_graph.insert(
+            "graph-a".to_owned(),
+            vec![
+                preview_frame("node-1", "Display", "layout-a"),
+                preview_frame("node-1", "Display", "layout-b"),
+            ],
+        );
+
+        let groups = collect_preview_selection_groups(&app, "graph-a", None);
+
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].key, "sink:node-1");
+        assert_eq!(groups[0].label, "Sink: Display");
+        assert_eq!(groups[0].items.len(), 2);
+        assert_eq!(groups[0].items[0].label, "Layout 1 (1x1)");
+        assert_eq!(groups[0].items[1].label, "Layout 2 (1x1)");
+    }
+
+    #[test]
+    fn global_preview_disambiguates_duplicate_node_names() {
+        let mut app = FrontendApp::default();
+        app.graphs.preview_frames_by_graph.insert(
+            "graph-a".to_owned(),
+            vec![
+                preview_frame("node-1", "Display", "layout-a"),
+                preview_frame("node-2", "Display", "layout-b"),
+            ],
+        );
+
+        let groups = collect_preview_selection_groups(&app, "graph-a", None);
+
+        assert_eq!(groups.len(), 2);
+        assert_eq!(groups[0].label, "Sink: Display (1)");
+        assert_eq!(groups[1].label, "Sink: Display (2)");
+        assert_ne!(groups[0].key, groups[1].key);
     }
 }

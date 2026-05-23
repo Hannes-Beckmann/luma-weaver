@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde_json::Value as JsonValue;
 use shared::{
     GraphRuntimeStatus, InputValue, LedLayout, NodeDiagnostic, NodeRuntimeValue, NodeTypeId,
-    RenderLayoutKind, SinkPreviewFrame,
+    RenderLayoutKind,
 };
 
 use crate::node_runtime::NodeRegistry;
@@ -17,8 +17,6 @@ pub(crate) trait RuntimeEventPublisher: Send + Sync {
     fn runtime_statuses_changed(&self, statuses: Vec<GraphRuntimeStatus>);
     /// Publishes runtime-update values for a single node.
     fn node_runtime_update(&self, graph_id: String, node_id: String, values: Vec<NodeRuntimeValue>);
-    /// Publishes the latest live preview frames for spatial sinks in one graph.
-    fn sink_preview_update(&self, graph_id: String, sinks: Vec<SinkPreviewFrame>);
     /// Publishes the current diagnostics for a single node.
     fn node_diagnostics(&self, graph_id: String, node_id: String, diagnostics: Vec<NodeDiagnostic>);
 }

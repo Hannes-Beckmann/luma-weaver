@@ -36,8 +36,8 @@ pub(crate) async fn send_server_message(
 
 /// Sends a node runtime update, using binary transport for frame payloads when possible.
 ///
-/// `ColorFrame` values named `frame` are emitted as binary RGBA payloads to avoid bloating the
-/// JSON channel. Remaining values are sent through the structured `NodeRuntimeUpdate` message.
+/// Frame values are emitted as binary RGBA payloads to avoid bloating the JSON channel.
+/// Remaining values are sent through the structured `NodeRuntimeUpdate` message.
 pub(crate) async fn send_node_runtime_update(
     write: &mut SplitSink<WebSocket, Message>,
     client_id: usize,
@@ -50,7 +50,7 @@ pub(crate) async fn send_node_runtime_update(
     for value in values {
         let NodeRuntimeValue { name, value } = value;
         match value {
-            InputValue::ColorFrame(frame) if name == "frame" => {
+            InputValue::ColorFrame(frame) => {
                 let binary_message = BinaryRuntimeFrameMessage {
                     graph_id: graph_id.clone(),
                     node_id: node_id.clone(),
@@ -115,7 +115,6 @@ fn server_message_kind(message: &ServerMessage) -> &'static str {
         ServerMessage::GraphImported { .. } => "graph_imported",
         ServerMessage::RuntimeStatuses { .. } => "runtime_statuses",
         ServerMessage::NodeRuntimeUpdate { .. } => "node_runtime_update",
-        ServerMessage::SinkPreviewUpdate { .. } => "sink_preview_update",
         ServerMessage::GraphDiagnosticsSummary { .. } => "graph_diagnostics_summary",
         ServerMessage::NodeDiagnosticsDetail { .. } => "node_diagnostics_detail",
         ServerMessage::WledInstances { .. } => "wled_instances",

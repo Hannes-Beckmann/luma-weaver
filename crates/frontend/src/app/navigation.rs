@@ -256,6 +256,7 @@ impl FrontendApp {
         self.graphs.live_snarl = None;
         self.graphs.live_snarl_needs_rebuild = false;
         self.graphs.runtime_node_values.clear();
+        self.graphs.preview_frames_by_graph.clear();
         self.ui.diagnostics_window_graph_id = None;
         self.ui.diagnostics_window_node_id = None;
         self.ui.active_view = AppView::Editor;

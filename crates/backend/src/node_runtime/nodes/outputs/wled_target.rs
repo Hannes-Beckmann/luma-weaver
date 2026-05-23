@@ -6,8 +6,8 @@ use serde_json::Value as JsonValue;
 use shared::{ColorFrame, InputValue, LedLayout, NodeDiagnostic, NodeDiagnosticSeverity};
 
 use crate::node_runtime::{
-    AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters,
-    TypedNodeEvaluation,
+    AnyInputValue, NodeEvaluationContext, NodeFrontendUpdate, RuntimeNode,
+    RuntimeNodeFromParameters, TypedNodeEvaluation,
 };
 use crate::services::wled::ddp;
 use crate::spatial_layout::{MatrixStripMode, spatial_points_for_mode};
@@ -140,9 +140,29 @@ impl RuntimeNode for WledTargetNode {
             }
         }
 
+        let preview_frame = if disabled {
+            ColorFrame {
+                layout: frame_for_transport.layout.clone(),
+                pixels: vec![
+                    shared::RgbaColor {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    };
+                    frame_for_transport.layout.pixel_count
+                ],
+            }
+        } else {
+            normalize_frame_for_preview(frame_for_transport)
+        };
+
         Ok(TypedNodeEvaluation {
             outputs: (),
-            frontend_updates: Vec::new(),
+            frontend_updates: vec![NodeFrontendUpdate {
+                name: "frame".to_owned(),
+                value: InputValue::ColorFrame(preview_frame),
+            }],
             diagnostics,
         })
     }
@@ -182,6 +202,24 @@ impl WledTargetNode {
 
 fn is_disabled(value: f32) -> bool {
     value >= 0.5
+}
+
+fn normalize_frame_for_preview(mut frame: ColorFrame) -> ColorFrame {
+    let pixel_count = frame.layout.pixel_count;
+    if frame.pixels.len() > pixel_count {
+        frame.pixels.truncate(pixel_count);
+    } else if frame.pixels.len() < pixel_count {
+        frame.pixels.extend(std::iter::repeat_n(
+            shared::RgbaColor {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            pixel_count - frame.pixels.len(),
+        ));
+    }
+    frame
 }
 
 struct WledDdpTransport {
