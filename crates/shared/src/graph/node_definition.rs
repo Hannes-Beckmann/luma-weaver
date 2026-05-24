@@ -49,6 +49,7 @@ impl NodeTypeId {
     pub const SET_CHANNEL: &'static str = "frame_operations.set_channel";
     pub const COLORIZE: &'static str = "frame_operations.colorize";
     pub const TINT_FRAME: &'static str = "frame_operations.tint_frame";
+    pub const TRANSFORM: &'static str = "frame_operations.transform";
     pub const MAP_TO_LAYOUT: &'static str = "frame_operations.map_to_layout";
     pub const FILL_FROM_FRAME: &'static str = "frame_operations.fill_from_frame";
     pub const MASK_FRAME: &'static str = "frame_operations.mask_frame";
@@ -811,6 +812,16 @@ mod tests {
             definition.output_port("frame").map(|port| port.value_kind),
             Some(ValueKind::MappedFrame)
         );
+    }
+
+    #[test]
+    fn transform_preserves_mapped_frame_output_kind() {
+        let definition = node_definition(NodeTypeId::TRANSFORM).expect("transform definition");
+
+        let inferred =
+            definition.infer_output_kind("frame", &[("frame", ValueKind::MappedFrame)], &[]);
+
+        assert_eq!(inferred, Some(ValueKind::MappedFrame));
     }
 
     #[test]

@@ -414,6 +414,10 @@ fn render_sink_preview_window(ctx: &egui::Context, app: &mut FrontendApp, graph_
                 .filter(|item| app.ui.sink_preview_selected_item_keys.contains(&item.key))
                 .flat_map(|item| item.frames.iter().cloned())
                 .collect::<Vec<_>>();
+            let reference_frames = all_selection_items
+                .iter()
+                .flat_map(|item| item.frames.iter().cloned())
+                .collect::<Vec<_>>();
             let mut camera = PreviewCamera {
                 yaw: app.ui.sink_preview_yaw,
                 pitch: app.ui.sink_preview_pitch,
@@ -424,6 +428,7 @@ fn render_sink_preview_window(ctx: &egui::Context, app: &mut FrontendApp, graph_
             draw_sink_preview_scene(
                 ui,
                 &selected_frames,
+                &reference_frames,
                 &mut camera,
                 app.ui.sink_preview_show_axes,
             );
@@ -746,7 +751,8 @@ struct PreviewCamera {
 
 fn draw_sink_preview_scene(
     ui: &mut egui::Ui,
-    frames: &[SinkPreviewFrame],
+    selected_frames: &[SinkPreviewFrame],
+    reference_frames: &[SinkPreviewFrame],
     camera: &mut PreviewCamera,
     show_axes: bool,
 ) {
@@ -782,8 +788,8 @@ fn draw_sink_preview_scene(
         }
     }
 
-    let points = collect_spatial_preview_points(frames);
-    if points.is_empty() {
+    let reference_points = collect_spatial_preview_points(reference_frames);
+    if reference_points.is_empty() {
         painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
@@ -794,9 +800,21 @@ fn draw_sink_preview_scene(
         return;
     }
 
-    let bounds = world_bounds(&points);
+    let points = collect_spatial_preview_points(selected_frames);
+    if points.is_empty() {
+        painter.text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            "No layouts selected.",
+            egui::FontId::proportional(15.0),
+            Color32::from_gray(155),
+        );
+        return;
+    }
+
+    let bounds = world_bounds(&reference_points);
     let target = bounds.center();
-    let radius = bounds.radius(&points).max(0.001);
+    let radius = bounds.radius(&reference_points).max(0.001);
     let scale = rect.width().min(rect.height()) * 0.42 / radius * camera.zoom.max(0.1);
     let mut sorted_samples = project_preview_points(&points, target, camera);
     sorted_samples.sort_by(|a, b| a.z.total_cmp(&b.z));

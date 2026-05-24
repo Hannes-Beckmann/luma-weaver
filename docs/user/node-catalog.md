@@ -64,6 +64,7 @@ These nodes manipulate frame or color data.
 Examples:
 
 - Tint Frame
+- Transform
 - Extract Channels
 - Set Channel
 - Colorize
@@ -86,6 +87,10 @@ matching `FloatTensor`.
 `Map To Layout` behaves like a local layout sink: it requests a concrete render layout from
 upstream using its configured width, height, and optional spatial parameters, then emits the
 result as a self-contained `MappedFrame`.
+
+`Transform` offsets and rotates spatial layouts. On `ColorFrame` branches it changes the planned
+target layout upstream, so generators render as if the sink had moved. On `MappedFrame` branches
+it rewrites the frame's embedded source geometry directly.
 
 `Fill From Frame` maps an incoming `MappedFrame` into the active render-target layout.
 `WLED Sink` emits source frames with optional strip or matrix source geometry configured on the

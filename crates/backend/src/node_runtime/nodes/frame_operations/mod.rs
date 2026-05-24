@@ -10,3 +10,4 @@ pub(crate) mod multiply_color;
 pub(crate) mod scale_color;
 pub(crate) mod set_channel;
 pub(crate) mod tint_frame;
+pub(crate) mod transform;

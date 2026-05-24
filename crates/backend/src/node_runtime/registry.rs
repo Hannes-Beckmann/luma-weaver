@@ -248,6 +248,14 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         NodeTypeId::TINT_FRAME,
         nodes::frame_operations::tint_frame::TintFrameNode
     );
+    registry.register(RegisteredNodeType {
+        definition: definitions_by_id
+            .get(NodeTypeId::TRANSFORM)
+            .cloned()
+            .expect("node definition must exist"),
+        evaluator_factory: nodes::frame_operations::transform::build_transform_evaluator,
+        diagnostics_factory: nodes::frame_operations::transform::transform_construction_diagnostics,
+    })?;
     register_node!(
         NodeTypeId::MAP_TO_LAYOUT,
         nodes::frame_operations::map_to_layout::MapToLayoutNode

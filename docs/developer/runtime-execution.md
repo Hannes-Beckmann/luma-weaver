@@ -183,6 +183,13 @@ own fixed layout. The planner therefore does not propagate the destination conte
 input. This lets nodes like `WLED Sink` or `Map To Layout` publish pixels with intrinsic source
 geometry once, while `Fill From Frame` remaps that mapped frame into each downstream sink layout.
 
+`Transform` is special in the opposite direction: on `ColorFrame` edges it does participate in
+render-context backpropagation, but it rewrites the propagated context with the inverse of its
+configured translation and rotation. That lets upstream render nodes target the pre-transform
+coordinate system while the runtime node itself remains a pixel pass-through. On `MappedFrame`
+edges no render context is propagated; the runtime node instead forward-transforms the mapped
+layout's embedded `points_3d`.
+
 ## Forward Fill For Observer Branches
 
 Backpropagation alone is not enough.

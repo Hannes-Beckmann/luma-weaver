@@ -183,9 +183,17 @@ fn resolve_input_value(
     context_id: &str,
     default_context_id: &str,
 ) -> Option<InputValue> {
+    let source_context_id = if incoming.participates_in_render_context {
+        match &incoming.source_context_suffix {
+            Some(suffix) => format!("{context_id}{suffix}"),
+            None => context_id.to_owned(),
+        }
+    } else {
+        context_id.to_owned()
+    };
     let context_key = (
         incoming.from_node_index,
-        context_id.to_owned(),
+        source_context_id,
         incoming.from_output_name.clone(),
     );
     if let Some(value) = outputs.get(&context_key) {
@@ -882,6 +890,7 @@ mod tests {
             from_output_name: "frame".to_owned(),
             to_input_name: "frame".to_owned(),
             participates_in_render_context: false,
+            source_context_suffix: None,
             use_previous_tick: false,
         };
 
@@ -1011,6 +1020,101 @@ mod tests {
         let frame = match filled {
             InputValue::ColorFrame(frame) => frame,
             other => panic!("expected color frame output, got {other:?}"),
+        };
+        assert_eq!(frame.pixels.len(), 16);
+        assert!(frame.pixels.iter().any(|pixel| {
+            *pixel
+                != RgbaColor {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.0,
+                }
+        }));
+    }
+
+    #[test]
+    fn transform_color_frame_flow_resolves_upstream_derived_context() {
+        let document: GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "transform-color-frame",
+                "name": "transform color frame",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "circle",
+                    "metadata": { "name": "Circle" },
+                    "node_type": "generators.circle_sweep"
+                },
+                {
+                    "id": "transform",
+                    "metadata": { "name": "Transform" },
+                    "node_type": "frame_operations.transform",
+                    "parameters": [
+                        { "name": "translation_x", "value": 10.0 }
+                    ]
+                },
+                {
+                    "id": "dummy",
+                    "metadata": { "name": "Dummy" },
+                    "node_type": "debug.wled_dummy_display",
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 },
+                        { "name": "use_spatial", "value": true }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "circle",
+                    "from_output_name": "frame",
+                    "to_node_id": "transform",
+                    "to_input_name": "frame"
+                },
+                {
+                    "from_node_id": "transform",
+                    "from_output_name": "frame",
+                    "to_node_id": "dummy",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse transform color-frame graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile transform graph");
+        let mut execution_state = GraphExecutionState::default();
+
+        graph
+            .execute_tick(
+                "transform-color-frame",
+                &NoopEvents,
+                0.0,
+                &mut execution_state,
+            )
+            .expect("execute transform graph tick");
+
+        let transform_index = graph
+            .nodes
+            .iter()
+            .position(|node| node.id == "transform")
+            .expect("transform node index");
+        let transform_context = graph.render_contexts_by_node[transform_index]
+            .first()
+            .expect("transform render context")
+            .id
+            .clone();
+        let frame = execution_state
+            .previous_outputs
+            .get(&(transform_index, transform_context, "frame".to_owned()))
+            .cloned()
+            .expect("transform frame output");
+
+        let InputValue::ColorFrame(frame) = frame else {
+            panic!("expected color frame output");
         };
         assert_eq!(frame.pixels.len(), 16);
         assert!(frame.pixels.iter().any(|pixel| {

@@ -4,7 +4,8 @@ use shared::{LedLayout, NodeTypeId, RenderLayoutKind};
 
 use crate::services::runtime::types::{CompiledIncomingEdge, CompiledNode, RenderContext};
 use crate::spatial_layout::{
-    MatrixStripMode, spatial_layout_dimensions, spatial_layout_pixel_count, spatial_points_for_mode,
+    MatrixStripMode, SpatialTransform, spatial_layout_dimensions, spatial_layout_pixel_count,
+    spatial_points_for_mode,
 };
 
 /// Plans the render contexts that each compiled node should evaluate in.
@@ -68,7 +69,10 @@ fn backpropagate_from_sinks(
             if !incoming.participates_in_render_context {
                 continue;
             }
-            queue.push_back((incoming.from_node_index, context.clone()));
+            queue.push_back((
+                incoming.from_node_index,
+                context_for_upstream_node(&nodes[node_index], &context),
+            ));
         }
     }
 
@@ -164,6 +168,23 @@ fn topological_order(outgoing_edges_by_node: &[Vec<usize>]) -> Vec<usize> {
 /// Returns whether `contexts` already contains `context_id`.
 fn contains_context(contexts: &[RenderContext], context_id: &str) -> bool {
     contexts.iter().any(|known| known.id == context_id)
+}
+
+fn context_for_upstream_node(node: &CompiledNode, context: &RenderContext) -> RenderContext {
+    if node.node_type.as_str() != NodeTypeId::TRANSFORM {
+        return context.clone();
+    }
+
+    let transform = SpatialTransform::from_parameters(&node.parameters);
+    let mut derived = context.clone();
+    derived.id = format!("{}|transform:{}", context.id, node.id);
+    derived.layout.id = format!("{}|transform:{}", context.layout.id, node.id);
+    if let Some(points) = derived.layout.points_3d.as_mut() {
+        for point in points.iter_mut() {
+            *point = transform.inverse_transform_point(*point);
+        }
+    }
+    derived
 }
 
 /// Sorts render contexts by ID and removes duplicate entries.
@@ -328,6 +349,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
                 participates_in_render_context: true,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
             vec![CompiledIncomingEdge {
@@ -335,6 +357,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
                 participates_in_render_context: true,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
         ];
@@ -378,6 +401,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
                 participates_in_render_context: true,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
             vec![CompiledIncomingEdge {
@@ -385,6 +409,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
                 participates_in_render_context: true,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
         ];
@@ -421,6 +446,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "frame".to_owned(),
                 participates_in_render_context: false,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
             vec![CompiledIncomingEdge {
@@ -428,6 +454,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "value".to_owned(),
                 participates_in_render_context: true,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
         ];
@@ -461,6 +488,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "frame".to_owned(),
                 participates_in_render_context: true,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
         ];
@@ -494,6 +522,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "frame".to_owned(),
                 participates_in_render_context: true,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
             vec![CompiledIncomingEdge {
@@ -501,6 +530,7 @@ mod tests {
                 from_output_name: "frame".to_owned(),
                 to_input_name: "frame".to_owned(),
                 participates_in_render_context: false,
+                source_context_suffix: None,
                 use_previous_tick: false,
             }],
         ];
@@ -513,5 +543,147 @@ mod tests {
         assert_eq!(planned[0][0].id, "sink:map_to_layout:map");
         assert_eq!(planned[1][0].id, "sink:map_to_layout:map");
         assert_eq!(planned[2][0].id, "sink:map_to_layout:map");
+    }
+
+    #[test]
+    fn transform_backpropagates_inverse_spatial_layout_and_derived_context_id() {
+        let nodes = vec![
+            compiled_node("solid", NodeTypeId::SOLID_FRAME, &[]),
+            compiled_node(
+                "transform",
+                NodeTypeId::TRANSFORM,
+                &[("translation_x", JsonValue::from(5.0))],
+            ),
+            compiled_node(
+                "dummy",
+                NodeTypeId::WLED_DUMMY_DISPLAY,
+                &[
+                    ("width", JsonValue::from(2)),
+                    ("height", JsonValue::from(1)),
+                    ("use_spatial", JsonValue::from(true)),
+                ],
+            ),
+        ];
+        let incoming = vec![
+            Vec::new(),
+            vec![CompiledIncomingEdge {
+                from_node_index: 0,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "frame".to_owned(),
+                participates_in_render_context: true,
+                source_context_suffix: None,
+                use_previous_tick: false,
+            }],
+            vec![CompiledIncomingEdge {
+                from_node_index: 1,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "value".to_owned(),
+                participates_in_render_context: true,
+                source_context_suffix: None,
+                use_previous_tick: false,
+            }],
+        ];
+
+        let planned = plan_render_contexts(&nodes, &incoming);
+
+        assert_eq!(planned[0].len(), 1);
+        assert_eq!(planned[1].len(), 1);
+        assert_eq!(planned[2].len(), 1);
+        assert_eq!(planned[2][0].id, "sink:dummy:dummy");
+        assert_eq!(planned[1][0].id, "sink:dummy:dummy");
+        assert_eq!(planned[0][0].id, "sink:dummy:dummy|transform:transform");
+        let points = planned[0][0]
+            .layout
+            .points_3d
+            .as_ref()
+            .expect("spatial points");
+        assert!((points[0].x + 5.0).abs() < 1e-5);
+        assert!((points[1].x + 4.0).abs() < 1e-5);
+    }
+
+    #[test]
+    fn reconverging_transform_branches_keep_distinct_context_ids_upstream() {
+        let nodes = vec![
+            compiled_node("solid", NodeTypeId::SOLID_FRAME, &[]),
+            compiled_node(
+                "transform_left",
+                NodeTypeId::TRANSFORM,
+                &[("translation_x", JsonValue::from(-2.0))],
+            ),
+            compiled_node(
+                "transform_right",
+                NodeTypeId::TRANSFORM,
+                &[("translation_x", JsonValue::from(2.0))],
+            ),
+            compiled_node("alpha", NodeTypeId::ALPHA_OVER, &[]),
+            compiled_node(
+                "dummy",
+                NodeTypeId::WLED_DUMMY_DISPLAY,
+                &[
+                    ("width", JsonValue::from(2)),
+                    ("height", JsonValue::from(1)),
+                    ("use_spatial", JsonValue::from(true)),
+                ],
+            ),
+        ];
+        let incoming = vec![
+            Vec::new(),
+            vec![CompiledIncomingEdge {
+                from_node_index: 0,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "frame".to_owned(),
+                participates_in_render_context: true,
+                source_context_suffix: None,
+                use_previous_tick: false,
+            }],
+            vec![CompiledIncomingEdge {
+                from_node_index: 0,
+                from_output_name: "frame".to_owned(),
+                to_input_name: "frame".to_owned(),
+                participates_in_render_context: true,
+                source_context_suffix: None,
+                use_previous_tick: false,
+            }],
+            vec![
+                CompiledIncomingEdge {
+                    from_node_index: 1,
+                    from_output_name: "frame".to_owned(),
+                    to_input_name: "foreground".to_owned(),
+                    participates_in_render_context: true,
+                    source_context_suffix: None,
+                    use_previous_tick: false,
+                },
+                CompiledIncomingEdge {
+                    from_node_index: 2,
+                    from_output_name: "frame".to_owned(),
+                    to_input_name: "background".to_owned(),
+                    participates_in_render_context: true,
+                    source_context_suffix: None,
+                    use_previous_tick: false,
+                },
+            ],
+            vec![CompiledIncomingEdge {
+                from_node_index: 3,
+                from_output_name: "color".to_owned(),
+                to_input_name: "value".to_owned(),
+                participates_in_render_context: true,
+                source_context_suffix: None,
+                use_previous_tick: false,
+            }],
+        ];
+
+        let planned = plan_render_contexts(&nodes, &incoming);
+
+        assert_eq!(planned[0].len(), 2);
+        assert_eq!(
+            planned[0]
+                .iter()
+                .map(|context| context.id.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                "sink:dummy:dummy|transform:transform_left".to_owned(),
+                "sink:dummy:dummy|transform:transform_right".to_owned(),
+            ]
+        );
     }
 }

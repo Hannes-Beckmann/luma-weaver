@@ -59,6 +59,7 @@ pub(crate) struct CompiledIncomingEdge {
     pub(crate) from_output_name: String,
     pub(crate) to_input_name: String,
     pub(crate) participates_in_render_context: bool,
+    pub(crate) source_context_suffix: Option<String>,
     pub(crate) use_previous_tick: bool,
 }
 

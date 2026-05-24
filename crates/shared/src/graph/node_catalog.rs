@@ -1645,6 +1645,94 @@ static TINT_FRAME_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema 
     runtime_updates: None,
 });
 
+static TRANSFORM_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
+    id: NodeTypeId::TRANSFORM.to_owned(),
+    display_name: "Transform".to_owned(),
+    category: NodeCategory::FrameOperations,
+    needs_io: false,
+    render_layouts: all_render_layouts(),
+    inputs: vec![NodeInputDefinition {
+        name: "frame".to_owned(),
+        display_name: title_case_name("frame"),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![ValueKind::MappedFrame],
+        default_value: None,
+    }],
+    outputs: vec![NodeOutputDefinition {
+        name: "frame".to_owned(),
+        display_name: title_case_name("frame"),
+        value_kind: ValueKind::ColorFrame,
+        accepted_kinds: vec![ValueKind::MappedFrame],
+    }],
+    parameters: vec![
+        NodeParameterDefinition::new(
+            "translation_x",
+            "Translation X".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.05,
+                min: -10_000.0,
+                max: 10_000.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "translation_y",
+            "Translation Y".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.05,
+                min: -10_000.0,
+                max: 10_000.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "translation_z",
+            "Translation Z".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.05,
+                min: -10_000.0,
+                max: 10_000.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "rotation_roll",
+            "Rotation Roll".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.25,
+                min: -360.0,
+                max: 360.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "rotation_pitch",
+            "Rotation Pitch".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.25,
+                min: -360.0,
+                max: 360.0,
+            },
+        ),
+        NodeParameterDefinition::new(
+            "rotation_yaw",
+            "Rotation Yaw".to_owned(),
+            ParameterDefaultValue::Float(0.0),
+            ParameterUiHint::DragFloat {
+                speed: 0.25,
+                min: -360.0,
+                max: 360.0,
+            },
+        ),
+    ],
+    connection: NodeConnectionDefinition {
+        max_input_connections: 1,
+        require_value_kind_match: true,
+    },
+    runtime_updates: None,
+});
+
 static MAP_TO_LAYOUT_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {
     id: NodeTypeId::MAP_TO_LAYOUT.to_owned(),
     display_name: "Map To Layout".to_owned(),
@@ -3078,6 +3166,11 @@ default_node_definition!(
     TINT_FRAME_NODE_TYPE
 );
 default_node_definition!(
+    TRANSFORM_NODE_DEFINITION,
+    TransformNodeDefinition,
+    TRANSFORM_NODE_TYPE
+);
+default_node_definition!(
     MAP_TO_LAYOUT_NODE_DEFINITION,
     MapToLayoutNodeDefinition,
     MAP_TO_LAYOUT_NODE_TYPE
@@ -3577,6 +3670,7 @@ pub fn node_definitions() -> Vec<NodeSchema> {
         SCALE_COLOR_NODE_DEFINITION.schema().clone(),
         MULTIPLY_COLOR_NODE_DEFINITION.schema().clone(),
         TINT_FRAME_NODE_DEFINITION.schema().clone(),
+        TRANSFORM_NODE_DEFINITION.schema().clone(),
         MAP_TO_LAYOUT_NODE_DEFINITION.schema().clone(),
         FILL_FROM_FRAME_NODE_DEFINITION.schema().clone(),
         EXTRACT_CHANNELS_NODE_DEFINITION.schema().clone(),
@@ -3639,6 +3733,7 @@ pub fn node_definition_impl(node_type_id: &str) -> Option<&'static dyn NodeDefin
         NodeTypeId::SCALE_COLOR => Some(&SCALE_COLOR_NODE_DEFINITION),
         NodeTypeId::MULTIPLY_COLOR => Some(&MULTIPLY_COLOR_NODE_DEFINITION),
         NodeTypeId::TINT_FRAME => Some(&TINT_FRAME_NODE_DEFINITION),
+        NodeTypeId::TRANSFORM => Some(&TRANSFORM_NODE_DEFINITION),
         NodeTypeId::MAP_TO_LAYOUT => Some(&MAP_TO_LAYOUT_NODE_DEFINITION),
         NodeTypeId::FILL_FROM_FRAME => Some(&FILL_FROM_FRAME_NODE_DEFINITION),
         NodeTypeId::EXTRACT_CHANNELS => Some(&EXTRACT_CHANNELS_NODE_DEFINITION),

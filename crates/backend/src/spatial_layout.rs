@@ -6,6 +6,73 @@ use serde_json::Value as JsonValue;
 use shared::Vec3;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct SpatialTransform {
+    pub(crate) translation: Vec3,
+    pub(crate) roll_degrees: f32,
+    pub(crate) pitch_degrees: f32,
+    pub(crate) yaw_degrees: f32,
+}
+
+impl Default for SpatialTransform {
+    fn default() -> Self {
+        Self {
+            translation: Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            roll_degrees: 0.0,
+            pitch_degrees: 0.0,
+            yaw_degrees: 0.0,
+        }
+    }
+}
+
+impl SpatialTransform {
+    pub(crate) fn from_parameters(parameters: &HashMap<String, JsonValue>) -> Self {
+        Self {
+            translation: Vec3 {
+                x: float_parameter(parameters, "translation_x", 0.0),
+                y: float_parameter(parameters, "translation_y", 0.0),
+                z: float_parameter(parameters, "translation_z", 0.0),
+            },
+            roll_degrees: float_parameter(parameters, "rotation_roll", 0.0),
+            pitch_degrees: float_parameter(parameters, "rotation_pitch", 0.0),
+            yaw_degrees: float_parameter(parameters, "rotation_yaw", 0.0),
+        }
+    }
+
+    pub(crate) fn transform_point(&self, point: Vec3) -> Vec3 {
+        let rotated = rotate_xyz(
+            point,
+            self.roll_degrees.to_radians(),
+            self.pitch_degrees.to_radians(),
+            self.yaw_degrees.to_radians(),
+        );
+
+        Vec3 {
+            x: rotated.x + self.translation.x,
+            y: rotated.y + self.translation.y,
+            z: rotated.z + self.translation.z,
+        }
+    }
+
+    pub(crate) fn inverse_transform_point(&self, point: Vec3) -> Vec3 {
+        let translated = Vec3 {
+            x: point.x - self.translation.x,
+            y: point.y - self.translation.y,
+            z: point.z - self.translation.z,
+        };
+        inverse_rotate_xyz(
+            translated,
+            self.roll_degrees.to_radians(),
+            self.pitch_degrees.to_radians(),
+            self.yaw_degrees.to_radians(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct SpatialPlacement {
     pub(crate) origin: Vec3,
     pub(crate) roll_degrees: f32,
@@ -438,6 +505,29 @@ fn rotate_xyz(point: Vec3, roll: f32, pitch: f32, yaw: f32) -> Vec3 {
     }
 }
 
+fn inverse_rotate_xyz(point: Vec3, roll: f32, pitch: f32, yaw: f32) -> Vec3 {
+    let (yaw_sin, yaw_cos) = (-yaw).sin_cos();
+    let after_yaw = Vec3 {
+        x: point.x * yaw_cos - point.y * yaw_sin,
+        y: point.x * yaw_sin + point.y * yaw_cos,
+        z: point.z,
+    };
+
+    let (pitch_sin, pitch_cos) = (-pitch).sin_cos();
+    let after_pitch = Vec3 {
+        x: after_yaw.x * pitch_cos + after_yaw.z * pitch_sin,
+        y: after_yaw.y,
+        z: -after_yaw.x * pitch_sin + after_yaw.z * pitch_cos,
+    };
+
+    let (roll_sin, roll_cos) = (-roll).sin_cos();
+    Vec3 {
+        x: after_pitch.x,
+        y: after_pitch.y * roll_cos - after_pitch.z * roll_sin,
+        z: after_pitch.y * roll_sin + after_pitch.z * roll_cos,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
@@ -445,8 +535,8 @@ mod tests {
     use serde_json::json;
 
     use super::{
-        MatrixStripMode, SpatialPlacement, arc_points, imported_points, matrix_points,
-        rectangle_perimeter_points, spatial_points_for_mode, strip_points,
+        MatrixStripMode, SpatialPlacement, SpatialTransform, arc_points, imported_points,
+        matrix_points, rectangle_perimeter_points, spatial_points_for_mode, strip_points,
     };
     use shared::Vec3;
 
@@ -520,6 +610,30 @@ mod tests {
         );
 
         assert_vec3(points[0], 1.0, 3.0, 3.0);
+    }
+
+    #[test]
+    fn spatial_transform_forward_and_inverse_round_trip() {
+        let transform = SpatialTransform {
+            translation: Vec3 {
+                x: 3.0,
+                y: -2.0,
+                z: 1.0,
+            },
+            roll_degrees: 15.0,
+            pitch_degrees: 25.0,
+            yaw_degrees: -35.0,
+        };
+        let original = Vec3 {
+            x: 1.5,
+            y: -0.25,
+            z: 2.0,
+        };
+
+        let transformed = transform.transform_point(original);
+        let restored = transform.inverse_transform_point(transformed);
+
+        assert_vec3(restored, original.x, original.y, original.z);
     }
 
     #[test]
