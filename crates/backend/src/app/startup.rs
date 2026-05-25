@@ -12,7 +12,6 @@ use crate::node_runtime::build_node_registry;
 use crate::services::graph_store::GraphStore;
 use crate::services::image_asset_store::{ImageAssetStore, set_global_image_asset_store};
 use crate::services::layout_asset_store::{LayoutAssetStore, set_global_layout_asset_store};
-use crate::services::mqtt::{HomeAssistantMqttService, set_global_home_assistant_mqtt_service};
 use crate::services::mqtt::{
     HaMqttGraphControlCommand, HomeAssistantMqttService, set_global_home_assistant_mqtt_service,
 };
