@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-#[cfg(not(target_arch = "wasm32"))]
-use crate::services::layout_asset_store::global_layout_asset_store;
 use serde_json::Value as JsonValue;
 use shared::Vec3;
 
@@ -165,6 +163,7 @@ enum SpatialLayoutPattern {
 }
 
 pub(crate) fn spatial_points_for_mode(
+    layout_assets: &HashMap<String, Vec<Vec3>>,
     parameters: &HashMap<String, JsonValue>,
     prefix: &str,
     pixel_count: usize,
@@ -196,7 +195,7 @@ pub(crate) fn spatial_points_for_mode(
             placement,
         ),
         SpatialLayoutPattern::Imported => imported_points(
-            imported_layout_points(parameters, prefix)
+            imported_layout_points(layout_assets, parameters, prefix)
                 .unwrap_or_else(|| matrix_strip_points.clone()),
             pixel_count,
             placement,
@@ -205,6 +204,7 @@ pub(crate) fn spatial_points_for_mode(
 }
 
 pub(crate) fn spatial_layout_pixel_count(
+    layout_assets: &HashMap<String, Vec<Vec3>>,
     parameters: &HashMap<String, JsonValue>,
     prefix: &str,
     width: usize,
@@ -218,13 +218,14 @@ pub(crate) fn spatial_layout_pixel_count(
     match layout_pattern(parameters, prefix) {
         SpatialLayoutPattern::MatrixStrip => width.max(1) * height.max(1),
         SpatialLayoutPattern::CircleArc | SpatialLayoutPattern::Rectangle => width.max(1),
-        SpatialLayoutPattern::Imported => imported_layout_points(parameters, prefix)
+        SpatialLayoutPattern::Imported => imported_layout_points(layout_assets, parameters, prefix)
             .map(|points| points.len().max(1))
             .unwrap_or_else(|| width.max(1) * height.max(1)),
     }
 }
 
 pub(crate) fn spatial_layout_dimensions(
+    _layout_assets: &HashMap<String, Vec<Vec3>>,
     parameters: &HashMap<String, JsonValue>,
     prefix: &str,
     width: usize,
@@ -436,6 +437,7 @@ fn resample_points(points: &[Vec3], count: usize) -> Vec<Vec3> {
 }
 
 fn imported_layout_points(
+    layout_assets: &HashMap<String, Vec<Vec3>>,
     parameters: &HashMap<String, JsonValue>,
     prefix: &str,
 ) -> Option<Vec<Vec3>> {
@@ -447,17 +449,7 @@ fn imported_layout_points(
     if asset_id.is_empty() {
         return None;
     }
-    load_imported_layout_points(asset_id)
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-fn load_imported_layout_points(asset_id: &str) -> Option<Vec<Vec3>> {
-    global_layout_asset_store().and_then(|store| store.load_layout_points(asset_id).ok())
-}
-
-#[cfg(target_arch = "wasm32")]
-fn load_imported_layout_points(_asset_id: &str) -> Option<Vec<Vec3>> {
-    None
+    layout_assets.get(asset_id).cloned()
 }
 
 fn layout_pattern(parameters: &HashMap<String, JsonValue>, prefix: &str) -> SpatialLayoutPattern {
@@ -644,6 +636,7 @@ mod tests {
         ]);
 
         let points = spatial_points_for_mode(
+            &HashMap::new(),
             &parameters,
             "",
             4,

@@ -11,7 +11,6 @@ use crate::messaging::event_bus::{BackendEvent, EventBus};
 use crate::node_runtime::build_node_registry;
 use crate::services::graph_store::GraphStore;
 use crate::services::image_asset_store::{ImageAssetStore, set_global_image_asset_store};
-use crate::services::layout_asset_store::{LayoutAssetStore, set_global_layout_asset_store};
 use crate::services::mqtt::{
     HaMqttGraphControlCommand, HomeAssistantMqttService, set_global_home_assistant_mqtt_service,
 };
@@ -29,12 +28,10 @@ pub(crate) async fn build_app_state() -> anyhow::Result<AppState> {
     let node_registry = build_node_registry()?;
     let graph_store = Arc::new(GraphStore::new(&data_dir, Arc::new(event_bus.clone())));
     let image_asset_store = Arc::new(ImageAssetStore::new(&data_dir)?);
-    let layout_asset_store = Arc::new(LayoutAssetStore::new(&data_dir)?);
     let mqtt_broker_store = Arc::new(MqttBrokerStore::new(&data_dir));
     let mqtt_service = HomeAssistantMqttService::new();
     mqtt_service.sync_brokers(mqtt_broker_store.list().await?)?;
     set_global_image_asset_store(image_asset_store.clone())?;
-    set_global_layout_asset_store(layout_asset_store.clone())?;
     set_global_home_assistant_mqtt_service(mqtt_service.clone())?;
     let runtime_manager = Arc::new(GraphRuntimeManager::new(
         &data_dir,
@@ -61,7 +58,6 @@ pub(crate) async fn build_app_state() -> anyhow::Result<AppState> {
         node_registry,
         graph_store,
         image_asset_store,
-        layout_asset_store,
         mqtt_broker_store,
         mqtt_service,
         runtime_manager,

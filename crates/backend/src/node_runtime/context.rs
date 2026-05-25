@@ -1,6 +1,7 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
-use ::shared::{InputValue, LedLayout, NodeDiagnostic};
+use ::shared::{InputValue, LedLayout, NodeDiagnostic, Vec3};
 use serde::Serialize;
 
 use super::serialize_outputs;
@@ -11,6 +12,7 @@ pub(crate) struct NodeEvaluationContext {
     pub(crate) graph_name: String,
     pub(crate) elapsed_seconds: f64,
     pub(crate) render_layout: Option<LedLayout>,
+    pub(crate) graph_layout_assets: Arc<HashMap<String, Vec<Vec3>>>,
 }
 
 /// Represents the untyped result of evaluating a runtime node.

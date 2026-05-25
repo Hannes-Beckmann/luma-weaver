@@ -62,6 +62,7 @@ impl CompiledGraph {
                     graph_name: self.graph_name.clone(),
                     elapsed_seconds,
                     render_layout: render_context.as_ref().map(|ctx| ctx.layout.clone()),
+                    graph_layout_assets: self.layout_assets.clone(),
                 };
                 tracing::trace!(
                     graph_id,
@@ -646,6 +647,7 @@ mod tests {
                         graph_name: graph.graph_name.clone(),
                         elapsed_seconds,
                         render_layout: render_context.as_ref().map(|ctx| ctx.layout.clone()),
+                        graph_layout_assets: graph.layout_assets.clone(),
                     };
                     let evaluator = execution_state
                         .evaluators

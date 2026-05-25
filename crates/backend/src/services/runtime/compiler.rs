@@ -19,6 +19,13 @@ pub(crate) fn compile_graph_document(
     document: GraphDocument,
     node_registry: Arc<NodeRegistry>,
 ) -> anyhow::Result<CompiledGraph> {
+    let layout_assets = Arc::new(
+        document
+            .layout_assets
+            .iter()
+            .map(|asset| (asset.id.clone(), asset.points.clone()))
+            .collect::<HashMap<_, _>>(),
+    );
     let graph_nodes = document.nodes.clone();
     let graph_id = document.metadata.id.clone();
     let graph_name = document.metadata.name.clone();
@@ -107,7 +114,8 @@ pub(crate) fn compile_graph_document(
 
     validate_transform_cycles(&nodes, &full_adjacency).map_err(anyhow::Error::new)?;
     let topological_order = topological_order(&adjacency, &in_degree)?;
-    let render_contexts_by_node = plan_render_contexts(&nodes, &incoming_edges_by_node);
+    let render_contexts_by_node =
+        plan_render_contexts(&nodes, &incoming_edges_by_node, layout_assets.as_ref());
     validate_render_layout_capabilities(
         &nodes,
         &incoming_edges_by_node,
@@ -127,6 +135,7 @@ pub(crate) fn compile_graph_document(
         graph_id,
         graph_name,
         execution_frequency_hz: document.metadata.execution_frequency_hz,
+        layout_assets,
         node_registry,
         nodes,
         incoming_edges_by_node,
@@ -470,6 +479,7 @@ mod tests {
                 height: Some(8),
                 points_3d: None,
             }),
+            graph_layout_assets: Default::default(),
         };
         let mut clamp_findings = Vec::new();
 
@@ -482,6 +492,7 @@ mod tests {
                     home_assistant_broker_id: String::new(),
                 },
                 viewport: shared::GraphViewport::default(),
+                layout_assets: Vec::new(),
                 nodes: vec![GraphNode {
                     id: "node_1".to_owned(),
                     metadata: NodeMetadata {

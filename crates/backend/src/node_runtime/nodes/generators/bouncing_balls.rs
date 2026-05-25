@@ -1132,6 +1132,7 @@ mod tests {
                         height: Some(1),
                         points_3d: None,
                     }),
+                    graph_layout_assets: Default::default(),
                 },
                 inputs,
             )

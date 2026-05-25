@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::graph::{GraphDocument, GraphNode, ValueKind, node_definition};
+use crate::graph::{
+    GraphDocument, GraphNode, ValueKind, layout_asset_id_from_parameter, node_definition,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Describes one validation problem found while checking a persisted graph document.
@@ -14,6 +16,8 @@ pub struct GraphValidationIssue {
 /// Classifies the kind of validation problem found in a graph document.
 pub enum GraphValidationIssueCode {
     DuplicateNodeId,
+    DuplicateLayoutAssetId,
+    MissingLayoutAssetReference,
     UnknownNodeType,
     DuplicateNodeInputName,
     UnknownNodeInputName,
@@ -33,6 +37,17 @@ pub fn validate_graph_document(document: &GraphDocument) -> Vec<GraphValidationI
     let mut issues = Vec::new();
     let mut node_ids = HashSet::new();
     let mut nodes_by_id = HashMap::new();
+    let mut layout_asset_ids = HashSet::new();
+
+    for (asset_index, asset) in document.layout_assets.iter().enumerate() {
+        if !layout_asset_ids.insert(asset.id.clone()) {
+            issues.push(GraphValidationIssue {
+                code: GraphValidationIssueCode::DuplicateLayoutAssetId,
+                path: format!("layout_assets[{asset_index}].id"),
+                message: format!("duplicate embedded layout asset id '{}'", asset.id),
+            });
+        }
+    }
 
     for (node_index, node) in document.nodes.iter().enumerate() {
         let node_path = format!("nodes[{node_index}]");
@@ -86,6 +101,22 @@ pub fn validate_graph_document(document: &GraphDocument) -> Vec<GraphValidationI
                         input.name,
                         port.value_kind,
                         input.value.value_kind()
+                    ),
+                });
+            }
+        }
+
+        for (parameter_index, parameter) in node.parameters.iter().enumerate() {
+            let Some(layout_asset_id) = layout_asset_id_from_parameter(parameter) else {
+                continue;
+            };
+            if !layout_asset_ids.contains(layout_asset_id) {
+                issues.push(GraphValidationIssue {
+                    code: GraphValidationIssueCode::MissingLayoutAssetReference,
+                    path: format!("{node_path}.parameters[{parameter_index}].value"),
+                    message: format!(
+                        "layout asset '{}' referenced by parameter '{}' is missing from the graph document",
+                        layout_asset_id, parameter.name
                     ),
                 });
             }
@@ -250,6 +281,7 @@ mod tests {
                 home_assistant_broker_id: String::new(),
             },
             viewport: crate::GraphViewport::default(),
+            layout_assets: Vec::new(),
             nodes: vec![
                 extract,
                 node("min_max", NodeTypeId::MIN_MAX),
@@ -289,6 +321,7 @@ mod tests {
                 home_assistant_broker_id: String::new(),
             },
             viewport: crate::GraphViewport::default(),
+            layout_assets: Vec::new(),
             nodes: vec![
                 node("float", NodeTypeId::FLOAT_CONSTANT),
                 node("min_max", NodeTypeId::MIN_MAX),
@@ -348,6 +381,7 @@ mod tests {
                 home_assistant_broker_id: String::new(),
             },
             viewport: crate::GraphViewport::default(),
+            layout_assets: Vec::new(),
             nodes: vec![
                 extract,
                 node("float", NodeTypeId::FLOAT_CONSTANT),
@@ -393,6 +427,7 @@ mod tests {
                 home_assistant_broker_id: String::new(),
             },
             viewport: crate::GraphViewport::default(),
+            layout_assets: Vec::new(),
             nodes: vec![
                 node("source", NodeTypeId::WLED_SINK),
                 node("target", NodeTypeId::WLED_TARGET),

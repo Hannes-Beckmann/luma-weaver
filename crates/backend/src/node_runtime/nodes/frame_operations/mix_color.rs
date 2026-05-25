@@ -167,6 +167,7 @@ mod tests {
             graph_name: "Test Graph".to_owned(),
             elapsed_seconds: 0.0,
             render_layout: None,
+            graph_layout_assets: Default::default(),
         };
 
         let mut warmup_node = MixColorNode;

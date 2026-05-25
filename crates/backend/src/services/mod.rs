@@ -7,9 +7,6 @@ pub(crate) mod image_asset_store;
 /// Shared image decoding helpers used by uploads and runtime nodes.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod image_codec;
-/// Persistent storage for uploaded layout assets used by spatial layout configuration.
-#[cfg(not(target_arch = "wasm32"))]
-pub(crate) mod layout_asset_store;
 /// Home Assistant MQTT discovery, broker tasks, and entity synchronization.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod mqtt;

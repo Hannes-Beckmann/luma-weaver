@@ -171,7 +171,7 @@ impl RuntimeNode for WledSinkNode {
     /// Polls the DDP socket, reassembles the latest frame, and exposes it as a `MappedFrame`.
     fn evaluate(
         &mut self,
-        _context: &NodeEvaluationContext,
+        context: &NodeEvaluationContext,
         _inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let mut diagnostics = self.refresh_socket_if_needed();
@@ -189,6 +189,7 @@ impl RuntimeNode for WledSinkNode {
             &self.latest_pixels,
             self,
             self.port,
+            context.graph_layout_assets.as_ref(),
         ));
 
         let output_pixels = frame
@@ -472,7 +473,12 @@ fn normalize_frame(
     }
 }
 
-fn source_frame_from_pixels(pixels: &[RgbaColor], node: &WledSinkNode, port: u16) -> ColorFrame {
+fn source_frame_from_pixels(
+    pixels: &[RgbaColor],
+    node: &WledSinkNode,
+    port: u16,
+    graph_layout_assets: &HashMap<String, Vec<shared::Vec3>>,
+) -> ColorFrame {
     let pixel_count = pixels.len();
     let mode = match node.source_shape {
         SourceShape::Matrix => MatrixStripMode::Matrix {
@@ -507,6 +513,7 @@ fn source_frame_from_pixels(pixels: &[RgbaColor], node: &WledSinkNode, port: u16
         width,
         height,
         points_3d: Some(spatial_points_for_mode(
+            graph_layout_assets,
             &node.parameters,
             "source_",
             pixel_count,
@@ -665,6 +672,7 @@ mod tests {
                 has_received_frame: false,
             },
             ddp::DDP_PORT,
+            &HashMap::new(),
         );
 
         assert_eq!(frame.pixels.len(), 3);
@@ -707,6 +715,7 @@ mod tests {
                 has_received_frame: false,
             },
             ddp::DDP_PORT,
+            &HashMap::new(),
         );
 
         assert_eq!(frame.pixels.len(), 5);

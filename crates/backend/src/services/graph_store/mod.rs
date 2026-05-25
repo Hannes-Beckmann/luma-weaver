@@ -60,6 +60,7 @@ impl GraphStore {
             let document = GraphDocument {
                 metadata: metadata.clone(),
                 viewport: shared::GraphViewport::default(),
+                layout_assets: Vec::new(),
                 nodes: Vec::new(),
                 edges: Vec::new(),
             };
@@ -467,6 +468,7 @@ mod tests {
                 home_assistant_broker_id: String::new(),
             },
             viewport: shared::GraphViewport::default(),
+            layout_assets: Vec::new(),
             nodes: Vec::new(),
             edges: Vec::new(),
         }
@@ -571,6 +573,7 @@ mod tests {
                 home_assistant_broker_id: String::new(),
             },
             viewport: shared::GraphViewport::default(),
+            layout_assets: Vec::new(),
             nodes: vec![GraphNode {
                 id: "node-1".to_owned(),
                 metadata: NodeMetadata {

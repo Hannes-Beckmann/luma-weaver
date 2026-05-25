@@ -93,6 +93,7 @@ impl RuntimeNode for WledTargetNode {
             height: Some(1),
             points_3d: self.use_spatial.then(|| {
                 spatial_points_for_mode(
+                    context.graph_layout_assets.as_ref(),
                     &self.parameters,
                     "",
                     self.led_count,
@@ -279,6 +280,7 @@ mod tests {
             graph_name: "Graph".to_owned(),
             elapsed_seconds: 0.0,
             render_layout: None,
+            graph_layout_assets: Default::default(),
         }
     }
 

@@ -283,6 +283,7 @@ mod tests {
             graph_name: "Test Graph".to_owned(),
             elapsed_seconds,
             render_layout: None,
+            graph_layout_assets: Default::default(),
         }
     }
 
