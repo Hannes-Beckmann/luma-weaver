@@ -86,6 +86,10 @@ pub enum ClientMessage {
         id: String,
         execution_frequency_hz: u32,
     },
+    UpdateGraphHomeAssistantBroker {
+        id: String,
+        broker_id: String,
+    },
     GetNodeDefinitions,
     GetGraphMetadata,
     StartGraph {

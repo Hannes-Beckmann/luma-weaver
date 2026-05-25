@@ -9,6 +9,8 @@ pub struct GraphMetadata {
     pub name: String,
     #[serde(default = "default_execution_frequency_hz")]
     pub execution_frequency_hz: u32,
+    #[serde(default)]
+    pub home_assistant_broker_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -31,6 +33,7 @@ impl Default for GraphDocument {
                 id: String::new(),
                 name: String::new(),
                 execution_frequency_hz: default_execution_frequency_hz(),
+                home_assistant_broker_id: String::new(),
             },
             viewport: GraphViewport::default(),
             nodes: Vec::new(),

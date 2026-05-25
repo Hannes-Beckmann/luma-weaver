@@ -418,6 +418,7 @@ mod tests {
                 id: "graph-a".to_owned(),
                 name: "Graph A".to_owned(),
                 execution_frequency_hz: 60,
+                home_assistant_broker_id: String::new(),
             },
             nodes: vec![GraphNode {
                 id: "node-1".to_owned(),

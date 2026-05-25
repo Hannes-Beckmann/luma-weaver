@@ -227,6 +227,38 @@ pub(super) async fn handle(
                 }
             }
         }
+        ClientMessage::UpdateGraphHomeAssistantBroker { id, broker_id: _ }
+            if id.trim().is_empty() =>
+        {
+            Some(ServerMessage::Error {
+                message: "Graph document id must not be empty".to_owned(),
+            })
+        }
+        ClientMessage::UpdateGraphHomeAssistantBroker { id, broker_id } => {
+            let id = id.trim().to_owned();
+            match context
+                .state
+                .graph_store
+                .update_home_assistant_broker(&id, broker_id)
+                .await
+            {
+                Ok(true) => None,
+                Ok(false) => Some(ServerMessage::Error {
+                    message: format!("Graph document {id} does not exist"),
+                }),
+                Err(error) => {
+                    tracing::error!(
+                        client_id = context.client_id,
+                        %error,
+                        %id,
+                        "failed to update graph Home Assistant broker"
+                    );
+                    Some(ServerMessage::Error {
+                        message: format!("Failed to update graph Home Assistant broker: {error}"),
+                    })
+                }
+            }
+        }
         ClientMessage::GetNodeDefinitions => Some(ServerMessage::NodeDefinitions {
             definitions: context.state.node_registry.definitions().to_vec(),
         }),

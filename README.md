@@ -10,7 +10,7 @@ Luma Weaver is a node-based lighting and animation editor built with Rust. It co
   <img src="assets/example.gif" alt="Luma Weaver editor demo" width="900" />
 </p>
 
-Luma Weaver is designed for programmable LED workflows and reactive visuals, with built-in support for WLED discovery/output and Home Assistant MQTT number entities.
+Luma Weaver is designed for programmable LED workflows and reactive visuals, with built-in support for WLED discovery/output and Home Assistant MQTT graph controls and number entities.
 
 ## Start Here
 
@@ -40,7 +40,7 @@ Current building blocks include:
 - frame and color processing nodes such as tint, mix, fill from frame, blur, Laplacian edge/detail filtering, mask, brightness, and filters
 - temporal nodes such as delay, differentiate, integrate, fade, moving average, and moving median
 - runtime/debug nodes such as plot, display, and a WLED dummy display
-- network nodes for WLED output, WLED frame input with optional source geometry, audio FFT receive, and Home Assistant MQTT numbers
+- network nodes for WLED output, WLED frame input with optional source geometry, audio FFT receive, and Home Assistant MQTT graph controls/numbers
 - optional spatial render layouts on LED sinks, with compatibility checks so legacy frame nodes remain protected from unsupported 3D layouts
 
 The editor also supports multi-select graph editing with node-group dragging plus clipboard copy and paste via `Ctrl/Cmd+C` and `Ctrl/Cmd+V`.
