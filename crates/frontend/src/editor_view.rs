@@ -73,6 +73,15 @@ pub(crate) fn snarl_node_parameter_value(
 /// Renders the graph editor view, including header controls, the node canvas, and diagnostics UI.
 pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
     app.ui.editor_canvas_hovered = false;
+    let now_secs = ui.ctx().input(|input| input.time);
+    if app.ui.connection_guidance_message.is_some()
+        && app.ui.connection_guidance_expires_at_secs <= now_secs
+    {
+        app.ui.connection_guidance_target_node_id = None;
+        app.ui.connection_guidance_target_input_name = None;
+        app.ui.connection_guidance_message = None;
+        app.ui.connection_guidance_expires_at_secs = 0.0;
+    }
     let selected_graph = app.selected_graph().cloned();
     match selected_graph {
         Some(graph) => {
@@ -214,6 +223,10 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 });
             });
             ui.add_space(8.0);
+            if let Some(message) = app.ui.connection_guidance_message.as_deref() {
+                render_connection_guidance_banner(ui, message);
+                ui.add_space(8.0);
+            }
 
             app.ensure_selected_graph_document_requested();
 
@@ -234,9 +247,16 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 .ui
                 .node_menu_graph_position
                 .map(|(x, y)| egui::pos2(x, y));
+            let highlighted_connection_target = app
+                .ui
+                .connection_guidance_target_node_id
+                .clone()
+                .zip(app.ui.connection_guidance_target_input_name.clone());
+            let highlighted_connection_message = app.ui.connection_guidance_message.clone();
             let mut requested_image_upload = None;
             let mut requested_layout_upload = None;
             let mut requested_preview_node_id = None;
+            let mut rejected_connection = None;
             app.ensure_live_snarl_for_active_graph();
             if let Some((document, snarl)) = app.active_graph_document_and_snarl_mut() {
                 if available_node_definitions.is_empty() {
@@ -266,6 +286,7 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                     image_upload_request,
                     layout_upload_request,
                     preview_node_request,
+                    connection_rejection,
                 ) = viewer::show_snarl_canvas(
                     ui,
                     snarl,
@@ -277,6 +298,8 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                     &mqtt_broker_configs,
                     &node_menu_search,
                     node_menu_graph_position,
+                    highlighted_connection_target.as_ref(),
+                    highlighted_connection_message.as_deref(),
                     apply_document_viewport,
                     focus_clicked,
                 );
@@ -294,6 +317,7 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
                 requested_image_upload = image_upload_request;
                 requested_layout_upload = layout_upload_request;
                 requested_preview_node_id = preview_node_request;
+                rejected_connection = connection_rejection;
             } else {
                 egui::Frame::group(ui.style()).show(ui, |ui| {
                     ui.set_min_height(100.0);
@@ -308,6 +332,16 @@ pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
             }
             if initialized_viewport_for_graph {
                 app.graphs.snarl_viewport_initialized_graph_id = Some(graph.id.clone());
+            }
+            if let Some(connection_rejection) = rejected_connection {
+                app.ui.status = connection_rejection.message.clone();
+                app.ui.connection_guidance_target_node_id =
+                    Some(connection_rejection.target_node_id);
+                app.ui.connection_guidance_target_input_name =
+                    Some(connection_rejection.target_input_name);
+                app.ui.connection_guidance_message = Some(connection_rejection.message);
+                app.ui.connection_guidance_expires_at_secs = now_secs + 3.0;
+                ui.ctx().request_repaint();
             }
             if let Some((node_id, parameter_name)) = requested_image_upload {
                 app.begin_image_asset_upload(node_id, parameter_name);
@@ -1092,6 +1126,24 @@ fn runtime_status_text(runtime_mode: Option<GraphRuntimeMode>) -> RichText {
             .color(Color32::from_gray(130))
             .strong(),
     }
+}
+
+fn render_connection_guidance_banner(ui: &mut egui::Ui, message: &str) {
+    egui::Frame::new()
+        .fill(Color32::from_rgb(56, 24, 24))
+        .stroke(egui::Stroke::new(1.0, Color32::from_rgb(196, 92, 92)))
+        .corner_radius(8.0)
+        .inner_margin(egui::Margin::symmetric(12, 8))
+        .show(ui, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(
+                    RichText::new("Connection blocked")
+                        .strong()
+                        .color(Color32::from_rgb(236, 170, 170)),
+                );
+                ui.label(RichText::new(message).color(Color32::from_gray(225)));
+            });
+        });
 }
 
 #[cfg(test)]

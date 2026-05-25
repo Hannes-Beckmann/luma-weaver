@@ -59,6 +59,10 @@ pub(crate) struct UiState {
     pub(crate) sink_preview_selected_item_keys: HashSet<String>,
     pub(crate) sink_preview_selection_context_key: Option<String>,
     pub(crate) sink_preview_display_scope_node_id: Option<String>,
+    pub(crate) connection_guidance_target_node_id: Option<String>,
+    pub(crate) connection_guidance_target_input_name: Option<String>,
+    pub(crate) connection_guidance_message: Option<String>,
+    pub(crate) connection_guidance_expires_at_secs: f64,
     #[cfg(target_arch = "wasm32")]
     pub(crate) browser_asset_upload_events:
         Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserAssetUploadEvent>>,
@@ -104,6 +108,10 @@ impl Default for UiState {
             sink_preview_selected_item_keys: HashSet::new(),
             sink_preview_selection_context_key: None,
             sink_preview_display_scope_node_id: None,
+            connection_guidance_target_node_id: None,
+            connection_guidance_target_input_name: None,
+            connection_guidance_message: None,
+            connection_guidance_expires_at_secs: 0.0,
             #[cfg(target_arch = "wasm32")]
             browser_asset_upload_events: None,
         }
