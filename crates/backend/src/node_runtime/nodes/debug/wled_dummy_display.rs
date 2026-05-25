@@ -72,6 +72,7 @@ impl RuntimeNode for WledDummyDisplayNode {
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let pixel_count = spatial_layout_pixel_count(
+            context.graph_layout_assets.as_ref(),
             &self.parameters,
             "",
             self.width,
@@ -79,6 +80,7 @@ impl RuntimeNode for WledDummyDisplayNode {
             self.use_spatial,
         );
         let (layout_width, layout_height) = spatial_layout_dimensions(
+            context.graph_layout_assets.as_ref(),
             &self.parameters,
             "",
             self.width,
@@ -93,6 +95,7 @@ impl RuntimeNode for WledDummyDisplayNode {
             height: layout_height,
             points_3d: self.use_spatial.then(|| {
                 spatial_points_for_mode(
+                    context.graph_layout_assets.as_ref(),
                     &self.parameters,
                     "",
                     pixel_count,
@@ -177,6 +180,7 @@ mod tests {
             graph_name: "Graph".to_owned(),
             elapsed_seconds: 0.0,
             render_layout: None,
+            graph_layout_assets: Default::default(),
         }
     }
 

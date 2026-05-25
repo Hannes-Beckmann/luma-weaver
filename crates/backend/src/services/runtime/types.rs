@@ -4,7 +4,7 @@ use std::sync::Arc;
 use serde_json::Value as JsonValue;
 use shared::{
     GraphRuntimeStatus, InputValue, LedLayout, NodeDiagnostic, NodeRuntimeValue, NodeTypeId,
-    RenderLayoutKind,
+    RenderLayoutKind, Vec3,
 };
 
 use crate::node_runtime::NodeRegistry;
@@ -26,6 +26,7 @@ pub(crate) struct CompiledGraph {
     pub(crate) graph_id: String,
     pub(crate) graph_name: String,
     pub(crate) execution_frequency_hz: u32,
+    pub(crate) layout_assets: Arc<HashMap<String, Vec<Vec3>>>,
     pub(crate) node_registry: Arc<NodeRegistry>,
     pub(crate) nodes: Vec<CompiledNode>,
     pub(crate) incoming_edges_by_node: Vec<Vec<CompiledIncomingEdge>>,

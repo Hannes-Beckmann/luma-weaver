@@ -1,14 +1,14 @@
-use super::{GraphDocument, GraphEdge, GraphNode, NodePosition};
+use super::{EmbeddedLayoutAsset, GraphDocument, GraphEdge, GraphNode, NodePosition};
 use serde::{Deserialize, Serialize};
 
 /// Stable file-format identifier for exported graph documents.
 pub const GRAPH_EXCHANGE_FORMAT: &str = "luma_weaver_graph";
 /// Current version of the single-graph exchange file format.
-pub const GRAPH_EXCHANGE_VERSION: u32 = 1;
+pub const GRAPH_EXCHANGE_VERSION: u32 = 2;
 /// Stable clipboard-format identifier for copied graph fragments.
 pub const GRAPH_CLIPBOARD_FRAGMENT_FORMAT: &str = "animation_builder_graph_fragment";
 /// Current version of the clipboard fragment format.
-pub const GRAPH_CLIPBOARD_FRAGMENT_VERSION: u32 = 1;
+pub const GRAPH_CLIPBOARD_FRAGMENT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -34,6 +34,8 @@ pub struct GraphClipboardFragment {
     pub version: u32,
     pub origin: NodePosition,
     #[serde(default)]
+    pub layout_assets: Vec<EmbeddedLayoutAsset>,
+    #[serde(default)]
     pub nodes: Vec<GraphNode>,
     #[serde(default)]
     pub edges: Vec<GraphEdge>,
@@ -41,11 +43,17 @@ pub struct GraphClipboardFragment {
 
 impl GraphClipboardFragment {
     /// Wraps a copied node fragment in the current clipboard header.
-    pub fn new(origin: NodePosition, nodes: Vec<GraphNode>, edges: Vec<GraphEdge>) -> Self {
+    pub fn new(
+        origin: NodePosition,
+        layout_assets: Vec<EmbeddedLayoutAsset>,
+        nodes: Vec<GraphNode>,
+        edges: Vec<GraphEdge>,
+    ) -> Self {
         Self {
             format: GRAPH_CLIPBOARD_FRAGMENT_FORMAT.to_owned(),
             version: GRAPH_CLIPBOARD_FRAGMENT_VERSION,
             origin,
+            layout_assets,
             nodes,
             edges,
         }
@@ -158,8 +166,12 @@ mod graph_exchange_tests {
 
     #[test]
     fn graph_clipboard_fragment_round_trips_through_json() {
-        let fragment =
-            GraphClipboardFragment::new(NodePosition { x: 12.0, y: 34.0 }, Vec::new(), Vec::new());
+        let fragment = GraphClipboardFragment::new(
+            NodePosition { x: 12.0, y: 34.0 },
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
         let json = serde_json::to_string(&fragment).expect("serialize graph clipboard fragment");
         let decoded: GraphClipboardFragment =
             serde_json::from_str(&json).expect("deserialize graph clipboard fragment");
@@ -172,6 +184,7 @@ mod graph_exchange_tests {
             format: "other_format".to_owned(),
             version: GRAPH_CLIPBOARD_FRAGMENT_VERSION,
             origin: NodePosition::default(),
+            layout_assets: Vec::new(),
             nodes: Vec::new(),
             edges: Vec::new(),
         };
@@ -188,6 +201,7 @@ mod graph_exchange_tests {
             format: GRAPH_CLIPBOARD_FRAGMENT_FORMAT.to_owned(),
             version: GRAPH_CLIPBOARD_FRAGMENT_VERSION + 1,
             origin: NodePosition::default(),
+            layout_assets: Vec::new(),
             nodes: Vec::new(),
             edges: Vec::new(),
         };

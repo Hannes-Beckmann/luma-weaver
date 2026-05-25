@@ -91,7 +91,11 @@ impl RuntimeNode for MapToLayoutNode {
             }));
         };
 
-        let layout = mapped_layout(context.render_layout.as_ref(), self);
+        let layout = mapped_layout(
+            context.render_layout.as_ref(),
+            context.graph_layout_assets.as_ref(),
+            self,
+        );
         if frame.pixels.len() != layout.pixel_count {
             return Ok(TypedNodeEvaluation {
                 outputs: MapToLayoutOutputs { frame: None },
@@ -115,7 +119,11 @@ impl RuntimeNode for MapToLayoutNode {
     }
 }
 
-fn mapped_layout(render_layout: Option<&LedLayout>, node: &MapToLayoutNode) -> LedLayout {
+fn mapped_layout(
+    render_layout: Option<&LedLayout>,
+    graph_layout_assets: &HashMap<String, Vec<shared::Vec3>>,
+    node: &MapToLayoutNode,
+) -> LedLayout {
     match render_layout {
         Some(layout) => LedLayout {
             id: format!("mapped:{}", layout.id),
@@ -129,6 +137,7 @@ fn mapped_layout(render_layout: Option<&LedLayout>, node: &MapToLayoutNode) -> L
             id: format!("mapped:{}x{}", node.width, node.height),
             role: LedLayoutRole::Source,
             pixel_count: spatial_layout_pixel_count(
+                graph_layout_assets,
                 &node.parameters,
                 "",
                 node.width,
@@ -136,6 +145,7 @@ fn mapped_layout(render_layout: Option<&LedLayout>, node: &MapToLayoutNode) -> L
                 node.use_spatial,
             ),
             width: spatial_layout_dimensions(
+                graph_layout_assets,
                 &node.parameters,
                 "",
                 node.width,
@@ -144,6 +154,7 @@ fn mapped_layout(render_layout: Option<&LedLayout>, node: &MapToLayoutNode) -> L
             )
             .0,
             height: spatial_layout_dimensions(
+                graph_layout_assets,
                 &node.parameters,
                 "",
                 node.width,
@@ -153,6 +164,7 @@ fn mapped_layout(render_layout: Option<&LedLayout>, node: &MapToLayoutNode) -> L
             .1,
             points_3d: node.use_spatial.then(|| {
                 let pixel_count = spatial_layout_pixel_count(
+                    graph_layout_assets,
                     &node.parameters,
                     "",
                     node.width,
@@ -160,6 +172,7 @@ fn mapped_layout(render_layout: Option<&LedLayout>, node: &MapToLayoutNode) -> L
                     node.use_spatial,
                 );
                 spatial_points_for_mode(
+                    graph_layout_assets,
                     &node.parameters,
                     "",
                     pixel_count,
@@ -220,11 +233,12 @@ mod tests {
         let evaluation = node
             .evaluate(
                 &NodeEvaluationContext {
-                    graph_id: "graph".to_owned(),
-                    graph_name: "Graph".to_owned(),
-                    elapsed_seconds: 0.0,
-                    render_layout: Some(render_target_layout(8, 8)),
-                },
+            graph_id: "graph".to_owned(),
+            graph_name: "Graph".to_owned(),
+            elapsed_seconds: 0.0,
+            render_layout: Some(render_target_layout(8, 8)),
+            graph_layout_assets: Default::default(),
+        },
                 MapToLayoutInputs {
                     frame: Some(test_frame(8, 8)),
                 },
@@ -247,6 +261,7 @@ mod tests {
     fn falls_back_to_parameter_layout_when_context_is_missing() {
         let layout = mapped_layout(
             None,
+            &HashMap::new(),
             &MapToLayoutNode {
                 width: 4,
                 height: 2,
@@ -277,6 +292,7 @@ mod tests {
                     graph_name: "Graph".to_owned(),
                     elapsed_seconds: 0.0,
                     render_layout: Some(render_target_layout(8, 8)),
+                    graph_layout_assets: Default::default(),
                 },
                 MapToLayoutInputs {
                     frame: Some(test_frame(2, 2)),

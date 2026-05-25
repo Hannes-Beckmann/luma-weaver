@@ -2,9 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use egui_snarl::{NodeId, Snarl};
 use shared::{
-    GraphClipboardFragment, GraphDocument, GraphEdge, GraphNode, InputValue, NodeInputValue,
-    NodeMetadata, NodeParameter, NodeParameterDefinition, NodePosition, NodeSchema, NodeTypeId,
-    ValueKind,
+    EmbeddedLayoutAsset, GraphClipboardFragment, GraphDocument, GraphEdge, GraphNode, InputValue,
+    NodeInputValue, NodeMetadata, NodeParameter, NodeParameterDefinition, NodePosition,
+    NodeSchema, NodeTypeId, ValueKind, is_layout_asset_parameter_name,
 };
 use uuid::Uuid;
 
@@ -657,6 +657,20 @@ pub(crate) fn clipboard_fragment_from_document(
     }
 
     let origin = clipboard_fragment_origin(&nodes);
+    let referenced_layout_asset_ids = nodes
+        .iter()
+        .flat_map(|node| node.parameters.iter())
+        .filter(|parameter| is_layout_asset_parameter_name(&parameter.name))
+        .filter_map(|parameter| parameter.value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .collect::<HashSet<_>>();
+    let layout_assets = document
+        .layout_assets
+        .iter()
+        .filter(|asset| referenced_layout_asset_ids.contains(asset.id.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
     let edges = document
         .edges
         .iter()
@@ -667,7 +681,7 @@ pub(crate) fn clipboard_fragment_from_document(
         .cloned()
         .collect::<Vec<_>>();
 
-    Some(GraphClipboardFragment::new(origin, nodes, edges))
+    Some(GraphClipboardFragment::new(origin, layout_assets, nodes, edges))
 }
 
 /// Pastes a clipboard fragment into the graph document, generating fresh node IDs.
@@ -689,7 +703,9 @@ pub(crate) fn paste_clipboard_fragment_into_document(
         .map(|definition| definition.id.as_str())
         .collect::<HashSet<_>>();
     let mut id_map = HashMap::<String, String>::new();
+    let mut layout_asset_id_map = HashMap::<String, String>::new();
     let mut skipped_node_type_ids = Vec::<String>::new();
+    let mut used_fragment_layout_ids = HashSet::<String>::new();
 
     for node in &fragment.nodes {
         if !available_node_type_ids.contains(node.node_type.as_str()) {
@@ -709,7 +725,26 @@ pub(crate) fn paste_clipboard_fragment_into_document(
         pasted_node.id = new_node_id.clone();
         pasted_node.viewport.position.x += delta_x;
         pasted_node.viewport.position.y += delta_y;
+        remap_pasted_layout_parameter_ids(
+            &mut pasted_node.parameters,
+            &fragment.layout_assets,
+            &mut layout_asset_id_map,
+            &mut used_fragment_layout_ids,
+        );
         document.nodes.push(pasted_node);
+    }
+
+    for asset in &fragment.layout_assets {
+        if !used_fragment_layout_ids.contains(asset.id.as_str()) {
+            continue;
+        }
+        let Some(new_asset_id) = layout_asset_id_map.get(asset.id.as_str()) else {
+            continue;
+        };
+        document.layout_assets.push(EmbeddedLayoutAsset {
+            id: new_asset_id.clone(),
+            points: asset.points.clone(),
+        });
     }
 
     for edge in &fragment.edges {
@@ -746,6 +781,36 @@ pub(crate) fn paste_clipboard_fragment_into_document(
     PasteClipboardFragmentResult {
         inserted_node_ids: id_map.into_values().collect(),
         skipped_node_type_ids,
+    }
+}
+
+fn remap_pasted_layout_parameter_ids(
+    parameters: &mut [NodeParameter],
+    fragment_layout_assets: &[EmbeddedLayoutAsset],
+    layout_asset_id_map: &mut HashMap<String, String>,
+    used_fragment_layout_ids: &mut HashSet<String>,
+) {
+    let known_layout_ids = fragment_layout_assets
+        .iter()
+        .map(|asset| asset.id.as_str())
+        .collect::<HashSet<_>>();
+
+    for parameter in parameters {
+        if !is_layout_asset_parameter_name(&parameter.name) {
+            continue;
+        }
+        let Some(current_id) = parameter.value.as_str().map(str::trim) else {
+            continue;
+        };
+        if current_id.is_empty() || !known_layout_ids.contains(current_id) {
+            continue;
+        }
+        used_fragment_layout_ids.insert(current_id.to_owned());
+        let new_asset_id = layout_asset_id_map
+            .entry(current_id.to_owned())
+            .or_insert_with(|| Uuid::new_v4().to_string())
+            .clone();
+        parameter.value = serde_json::Value::from(new_asset_id);
     }
 }
 
@@ -899,6 +964,7 @@ mod tests {
                 home_assistant_broker_id: String::new(),
             },
             viewport: shared::GraphViewport::default(),
+            layout_assets: Vec::new(),
             nodes: vec![
                 test_graph_node("node-a", "test.visibility", 10.0, 20.0),
                 test_graph_node("node-b", "test.visibility", 30.0, 60.0),
@@ -951,6 +1017,7 @@ mod tests {
         };
         let fragment = GraphClipboardFragment::new(
             NodePosition { x: 10.0, y: 20.0 },
+            Vec::new(),
             vec![
                 test_graph_node("node-a", "test.visibility", 10.0, 20.0),
                 test_graph_node("node-c", "test.unknown", 90.0, 120.0),

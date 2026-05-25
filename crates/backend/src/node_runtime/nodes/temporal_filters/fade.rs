@@ -155,6 +155,7 @@ mod tests {
                 graph_name: "Test Graph".to_owned(),
                 elapsed_seconds: 0.0,
                 render_layout: None,
+                graph_layout_assets: Default::default(),
             },
             FadeInputs {
                 value: AnyInputValue(InputValue::Color(RgbaColor {
@@ -184,6 +185,7 @@ mod tests {
                 graph_name: "Test Graph".to_owned(),
                 elapsed_seconds: 1.0,
                 render_layout: None,
+                graph_layout_assets: Default::default(),
             },
             FadeInputs {
                 value: AnyInputValue(InputValue::Color(RgbaColor {
@@ -219,6 +221,7 @@ mod tests {
                 graph_name: "Test Graph".to_owned(),
                 elapsed_seconds: 0.0,
                 render_layout: None,
+                graph_layout_assets: Default::default(),
             },
             FadeInputs {
                 value: AnyInputValue(InputValue::FloatTensor(FloatTensor {
@@ -237,6 +240,7 @@ mod tests {
                 graph_name: "Test Graph".to_owned(),
                 elapsed_seconds: 1.0,
                 render_layout: None,
+                graph_layout_assets: Default::default(),
             },
             FadeInputs {
                 value: AnyInputValue(InputValue::FloatTensor(FloatTensor {

@@ -1,6 +1,6 @@
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 
-use shared::{LedLayout, NodeTypeId, RenderLayoutKind};
+use shared::{LedLayout, NodeTypeId, RenderLayoutKind, Vec3};
 
 use crate::services::runtime::types::{CompiledIncomingEdge, CompiledNode, RenderContext};
 use crate::spatial_layout::{
@@ -16,10 +16,11 @@ use crate::spatial_layout::{
 pub(crate) fn plan_render_contexts(
     nodes: &[CompiledNode],
     incoming_edges_by_node: &[Vec<CompiledIncomingEdge>],
+    layout_assets: &HashMap<String, Vec<Vec3>>,
 ) -> Vec<Vec<RenderContext>> {
     tracing::debug!(node_count = nodes.len(), "planning render contexts");
 
-    let mut by_node = backpropagate_from_sinks(nodes, incoming_edges_by_node);
+    let mut by_node = backpropagate_from_sinks(nodes, incoming_edges_by_node, layout_assets);
     forward_fill_from_inputs(incoming_edges_by_node, &mut by_node);
 
     for (node_index, planned_contexts) in by_node.iter().enumerate() {
@@ -41,12 +42,13 @@ pub(crate) fn plan_render_contexts(
 fn backpropagate_from_sinks(
     nodes: &[CompiledNode],
     incoming_edges_by_node: &[Vec<CompiledIncomingEdge>],
+    layout_assets: &HashMap<String, Vec<Vec3>>,
 ) -> Vec<Vec<RenderContext>> {
     let mut by_node = vec![Vec::<RenderContext>::new(); nodes.len()];
     let mut queue = VecDeque::<(usize, RenderContext)>::new();
 
     for (node_index, node) in nodes.iter().enumerate() {
-        if let Some(context) = sink_context_for_node(node) {
+        if let Some(context) = sink_context_for_node(node, layout_assets) {
             queue.push_back((node_index, context));
         }
     }
@@ -196,7 +198,10 @@ fn sort_and_dedup_contexts(contexts: &mut Vec<RenderContext>) {
 /// Returns the sink-owned render context for a compiled node, if it is a sink node.
 ///
 /// Sink contexts encode the LED layout that upstream render nodes should produce for.
-fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
+fn sink_context_for_node(
+    node: &CompiledNode,
+    layout_assets: &HashMap<String, Vec<Vec3>>,
+) -> Option<RenderContext> {
     match node.node_type.as_str() {
         NodeTypeId::WLED_TARGET => {
             let target = node
@@ -227,6 +232,7 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                     height: Some(1),
                     points_3d: use_spatial.then(|| {
                         spatial_points_for_mode(
+                            layout_assets,
                             &node.parameters,
                             "",
                             led_count,
@@ -256,9 +262,9 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                 .max(1) as usize;
             let use_spatial = bool_parameter(node, "use_spatial");
             let pixel_count =
-                spatial_layout_pixel_count(&node.parameters, "", width, height, use_spatial);
+                spatial_layout_pixel_count(layout_assets, &node.parameters, "", width, height, use_spatial);
             let (layout_width, layout_height) =
-                spatial_layout_dimensions(&node.parameters, "", width, height, use_spatial);
+                spatial_layout_dimensions(layout_assets, &node.parameters, "", width, height, use_spatial);
             let id = if node.node_type.as_str() == NodeTypeId::MAP_TO_LAYOUT {
                 format!("sink:map_to_layout:{}", node.id)
             } else {
@@ -274,6 +280,7 @@ fn sink_context_for_node(node: &CompiledNode) -> Option<RenderContext> {
                     height: layout_height,
                     points_3d: use_spatial.then(|| {
                         spatial_points_for_mode(
+                            layout_assets,
                             &node.parameters,
                             "",
                             pixel_count,
@@ -362,7 +369,7 @@ mod tests {
             }],
         ];
 
-        let planned = plan_render_contexts(&nodes, &incoming);
+        let planned = plan_render_contexts(&nodes, &incoming, &HashMap::new());
 
         assert_eq!(planned[0].len(), 1);
         assert_eq!(planned[1].len(), 1);
@@ -414,7 +421,7 @@ mod tests {
             }],
         ];
 
-        let planned = plan_render_contexts(&nodes, &incoming);
+        let planned = plan_render_contexts(&nodes, &incoming, &HashMap::new());
 
         assert_eq!(planned[0].len(), 2);
         assert_eq!(planned[1].len(), 1);
@@ -459,7 +466,7 @@ mod tests {
             }],
         ];
 
-        let planned = plan_render_contexts(&nodes, &incoming);
+        let planned = plan_render_contexts(&nodes, &incoming, &HashMap::new());
 
         assert!(planned[0].is_empty());
         assert_eq!(planned[1].len(), 1);
@@ -493,7 +500,7 @@ mod tests {
             }],
         ];
 
-        let planned = plan_render_contexts(&nodes, &incoming);
+        let planned = plan_render_contexts(&nodes, &incoming, &HashMap::new());
 
         assert_eq!(planned[0].len(), 1);
         assert_eq!(planned[1].len(), 1);
@@ -535,7 +542,7 @@ mod tests {
             }],
         ];
 
-        let planned = plan_render_contexts(&nodes, &incoming);
+        let planned = plan_render_contexts(&nodes, &incoming, &HashMap::new());
 
         assert_eq!(planned[0].len(), 1);
         assert_eq!(planned[1].len(), 1);
@@ -584,7 +591,7 @@ mod tests {
             }],
         ];
 
-        let planned = plan_render_contexts(&nodes, &incoming);
+        let planned = plan_render_contexts(&nodes, &incoming, &HashMap::new());
 
         assert_eq!(planned[0].len(), 1);
         assert_eq!(planned[1].len(), 1);
@@ -672,7 +679,7 @@ mod tests {
             }],
         ];
 
-        let planned = plan_render_contexts(&nodes, &incoming);
+        let planned = plan_render_contexts(&nodes, &incoming, &HashMap::new());
 
         assert_eq!(planned[0].len(), 2);
         assert_eq!(

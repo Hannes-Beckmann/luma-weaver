@@ -1,4 +1,5 @@
 use serde_json::Value as JsonValue;
+use uuid::Uuid;
 
 use super::FrontendApp;
 
@@ -59,7 +60,7 @@ impl FrontendApp {
         }
     }
 
-    /// Drains pending browser asset-upload events and applies successful asset ids into the graph.
+    /// Drains pending browser asset-upload events and applies successful uploads into the graph.
     pub(super) fn drain_browser_asset_upload_events(&mut self) {
         #[cfg(not(target_arch = "wasm32"))]
         {
@@ -97,8 +98,8 @@ impl FrontendApp {
                         kind,
                         node_id,
                         parameter_name,
-                        asset_id,
-                    } => self.apply_uploaded_asset(kind.into(), node_id, parameter_name, asset_id),
+                        payload,
+                    } => self.apply_uploaded_asset(kind.into(), node_id, parameter_name, payload),
                     crate::browser_file::BrowserAssetUploadEvent::Error(message) => {
                         self.ui.status = message;
                     }
@@ -126,7 +127,7 @@ impl FrontendApp {
         kind: AssetUploadKind,
         node_id: String,
         parameter_name: String,
-        asset_id: String,
+        payload: crate::browser_file::UploadedAssetPayload,
     ) {
         let Some(document) = self.active_graph_document_mut() else {
             self.ui.status = match kind {
@@ -144,76 +145,44 @@ impl FrontendApp {
             return;
         };
 
-        let previous_asset_id = node
-            .parameters
-            .iter()
-            .find(|parameter| parameter.name == parameter_name)
-            .and_then(|parameter| parameter.value.as_str())
-            .map(str::to_owned);
+        let parameter_value = match (kind, payload) {
+            (AssetUploadKind::Image, crate::browser_file::UploadedAssetPayload::ImageAssetId(asset_id)) => {
+                JsonValue::from(asset_id)
+            }
+            (AssetUploadKind::Layout, crate::browser_file::UploadedAssetPayload::LayoutPoints(points)) => {
+                let layout_asset_id = Uuid::new_v4().to_string();
+                document.layout_assets.push(shared::EmbeddedLayoutAsset {
+                    id: layout_asset_id.clone(),
+                    points,
+                });
+                JsonValue::from(layout_asset_id)
+            }
+            (AssetUploadKind::Image, crate::browser_file::UploadedAssetPayload::LayoutPoints(_))
+            | (AssetUploadKind::Layout, crate::browser_file::UploadedAssetPayload::ImageAssetId(_)) => {
+                self.ui.status = "Uploaded asset type did not match the edited parameter".to_owned();
+                return;
+            }
+        };
 
         if let Some(parameter) = node
             .parameters
             .iter_mut()
             .find(|parameter| parameter.name == parameter_name)
         {
-            parameter.value = JsonValue::from(asset_id.clone());
+            parameter.value = parameter_value;
         } else {
             node.parameters.push(shared::NodeParameter {
                 name: parameter_name.clone(),
-                value: JsonValue::from(asset_id.clone()),
+                value: parameter_value,
             });
         }
 
-        let replaced_layout_asset_id =
-            orphaned_layout_asset_id(document, kind, &parameter_name, previous_asset_id, &asset_id);
+        if matches!(kind, AssetUploadKind::Layout) {
+            document.prune_unreferenced_layout_assets();
+        }
         self.sync_live_snarl_from_loaded_document();
         self.ui.status = kind.success_status().to_owned();
-        self.delete_replaced_layout_asset(replaced_layout_asset_id);
     }
-
-    fn delete_replaced_layout_asset(&mut self, asset_id: Option<String>) {
-        #[cfg(not(target_arch = "wasm32"))]
-        {
-            let _ = asset_id;
-        }
-
-        #[cfg(target_arch = "wasm32")]
-        if let Some(asset_id) = asset_id {
-            use wasm_bindgen_futures::spawn_local;
-
-            spawn_local(async move {
-                let _ =
-                    crate::browser_file::delete_asset(crate::browser_file::AssetUploadKind::Layout, asset_id)
-                        .await;
-            });
-        }
-    }
-}
-
-fn orphaned_layout_asset_id(
-    document: &shared::GraphDocument,
-    kind: AssetUploadKind,
-    parameter_name: &str,
-    previous_asset_id: Option<String>,
-    uploaded_asset_id: &str,
-) -> Option<String> {
-    if !matches!(kind, AssetUploadKind::Layout) {
-        return None;
-    }
-
-    let previous_asset_id = previous_asset_id?;
-    if previous_asset_id.is_empty() || previous_asset_id == uploaded_asset_id {
-        return None;
-    }
-
-    let still_referenced = document.nodes.iter().flat_map(|node| node.parameters.iter()).any(
-        |parameter| {
-            parameter.name == parameter_name
-                && parameter.value.as_str() == Some(previous_asset_id.as_str())
-        },
-    );
-
-    (!still_referenced).then_some(previous_asset_id)
 }
 
 impl From<AssetUploadKind> for crate::browser_file::AssetUploadKind {
@@ -241,9 +210,9 @@ mod tests {
         build_snarl_from_document, snarl_node_parameter_value, snarl_node_titles,
     };
     use shared::{
-        GraphDocument, GraphMetadata, NodeCategory, NodeConnectionDefinition, NodeMetadata,
-        NodeParameter, NodeParameterDefinition, NodeSchema, NodeTypeId, ParameterDefaultValue,
-        ParameterUiHint,
+        EmbeddedLayoutAsset, GraphDocument, GraphMetadata, NodeCategory,
+        NodeConnectionDefinition, NodeMetadata, NodeParameter, NodeParameterDefinition,
+        NodeSchema, NodeTypeId, ParameterDefaultValue, ParameterUiHint, Vec3,
     };
 
     fn layout_upload_definition() -> NodeSchema {
@@ -317,7 +286,11 @@ mod tests {
             super::AssetUploadKind::Layout,
             "node-1".to_owned(),
             "layout_asset_id".to_owned(),
-            "asset-123".to_owned(),
+            crate::browser_file::UploadedAssetPayload::LayoutPoints(vec![Vec3 {
+                x: 1.0,
+                y: 2.0,
+                z: 3.0,
+            }]),
         );
 
         let updated_value = app
@@ -327,36 +300,74 @@ mod tests {
             .and_then(|document| document.nodes.first())
             .and_then(|node| node.parameters.first())
             .and_then(|parameter| parameter.value.as_str());
-        assert_eq!(updated_value, Some("asset-123"));
+        let embedded_asset_id = updated_value.expect("embedded layout asset id");
+        assert_eq!(
+            app.graphs
+                .loaded_graph_document
+                .as_ref()
+                .expect("updated document")
+                .embedded_layout_points(embedded_asset_id),
+            Some(
+                &[Vec3 {
+                    x: 1.0,
+                    y: 2.0,
+                    z: 3.0
+                }][..]
+            )
+        );
 
         let live_snarl = app.graphs.live_snarl.as_ref().expect("live snarl");
         let parameter_value = snarl_node_parameter_value(live_snarl, "node-1", "layout_asset_id")
             .and_then(|value| value.as_str().map(str::to_owned));
-        assert_eq!(parameter_value.as_deref(), Some("asset-123"));
+        assert_eq!(parameter_value.as_deref(), Some(embedded_asset_id));
         assert_eq!(snarl_node_titles(live_snarl), vec!["Target".to_owned()]);
     }
 
     #[test]
-    fn replacing_unique_layout_asset_marks_old_asset_for_deletion() {
+    fn replacing_unique_layout_asset_prunes_the_old_embedded_layout() {
         let mut document = graph_document();
+        document.layout_assets.push(EmbeddedLayoutAsset {
+            id: "old-layout".to_owned(),
+            points: vec![Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            }],
+        });
         document.nodes[0].parameters[0].value = serde_json::Value::from("old-layout");
+        document.layout_assets.push(EmbeddedLayoutAsset {
+            id: "new-layout".to_owned(),
+            points: vec![Vec3 {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+            }],
+        });
 
         document.nodes[0].parameters[0].value = serde_json::Value::from("new-layout");
+        document.prune_unreferenced_layout_assets();
 
-        let deleted_asset = super::orphaned_layout_asset_id(
-            &document,
-            super::AssetUploadKind::Layout,
-            "layout_asset_id",
-            Some("old-layout".to_owned()),
-            "new-layout",
+        assert_eq!(
+            document
+                .layout_assets
+                .iter()
+                .map(|asset| asset.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["new-layout"]
         );
-
-        assert_eq!(deleted_asset.as_deref(), Some("old-layout"));
     }
 
     #[test]
-    fn replacing_shared_layout_asset_keeps_old_asset() {
+    fn replacing_shared_layout_asset_keeps_still_referenced_embedded_layout() {
         let mut document = graph_document();
+        document.layout_assets.push(EmbeddedLayoutAsset {
+            id: "shared-layout".to_owned(),
+            points: vec![Vec3 {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            }],
+        });
         document.nodes.push(shared::GraphNode {
             id: "node-2".to_owned(),
             metadata: NodeMetadata {
@@ -370,16 +381,24 @@ mod tests {
                 value: serde_json::Value::from("shared-layout"),
             }],
         });
+        document.layout_assets.push(EmbeddedLayoutAsset {
+            id: "replacement-layout".to_owned(),
+            points: vec![Vec3 {
+                x: 2.0,
+                y: 2.0,
+                z: 2.0,
+            }],
+        });
         document.nodes[0].parameters[0].value = serde_json::Value::from("replacement-layout");
+        document.prune_unreferenced_layout_assets();
 
-        let deleted_asset = super::orphaned_layout_asset_id(
-            &document,
-            super::AssetUploadKind::Layout,
-            "layout_asset_id",
-            Some("shared-layout".to_owned()),
-            "replacement-layout",
+        assert_eq!(
+            document
+                .layout_assets
+                .iter()
+                .map(|asset| asset.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["shared-layout", "replacement-layout"]
         );
-
-        assert!(deleted_asset.is_none());
     }
 }
