@@ -58,6 +58,17 @@ impl LayoutAssetStore {
         parse_layout_points(&bytes)
     }
 
+    /// Deletes a previously uploaded layout asset when it is no longer referenced by any graph.
+    pub(crate) fn delete_layout_asset(&self, asset_id: &str) -> anyhow::Result<()> {
+        let path = self.asset_path(asset_id)?;
+        match fs::remove_file(&path) {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(error)
+                .with_context(|| format!("delete layout asset {}", path.display())),
+        }
+    }
+
     fn asset_path(&self, asset_id: &str) -> anyhow::Result<PathBuf> {
         let parsed = Uuid::parse_str(asset_id)
             .with_context(|| format!("layout asset id '{asset_id}' is invalid"))?;
@@ -200,6 +211,39 @@ mod tests {
             .expect("load stored layout asset");
 
         assert_eq!(loaded, bytes);
+
+        let _ = fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn deletes_uploaded_layout_asset() {
+        let data_dir = temp_test_dir("deletes-uploaded-layout-asset");
+        let store = LayoutAssetStore::new(&data_dir).expect("create layout asset store");
+        let asset_id = store
+            .store_layout_bytes(b"x,y,z\n0,1,2\n")
+            .expect("store layout asset");
+
+        store
+            .delete_layout_asset(&asset_id)
+            .expect("delete layout asset");
+
+        let error = store
+            .load_layout_bytes(&asset_id)
+            .expect_err("deleted layout asset should not load");
+        assert!(error.to_string().contains("read layout asset"));
+
+        let _ = fs::remove_dir_all(data_dir);
+    }
+
+    #[test]
+    fn deleting_missing_layout_asset_is_ok() {
+        let data_dir = temp_test_dir("deleting-missing-layout-asset-is-ok");
+        let store = LayoutAssetStore::new(&data_dir).expect("create layout asset store");
+        let asset_id = uuid::Uuid::new_v4().to_string();
+
+        store
+            .delete_layout_asset(&asset_id)
+            .expect("missing asset delete should be idempotent");
 
         let _ = fs::remove_dir_all(data_dir);
     }

@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, stream::SplitSink};
 use shared::{
-    BinaryRuntimeFrameMessage, EventMessage, EventScope, EventTopic, InputValue,
+    BinaryFrameValueKind, BinaryRuntimeFrameMessage, EventMessage, EventScope, EventTopic, InputValue,
     NodeRuntimeUpdateValue, NodeRuntimeValue, ServerMessage, ServerState,
 };
 use tracing::{info, trace};
@@ -55,6 +55,26 @@ pub(crate) async fn send_node_runtime_update(
                     graph_id: graph_id.clone(),
                     node_id: node_id.clone(),
                     name,
+                    value_kind: BinaryFrameValueKind::ColorFrame,
+                    layout: frame.layout,
+                    rgba: encode_rgba_bytes(&frame.pixels),
+                };
+                let payload = binary_message.encode();
+                trace!(
+                    client_id,
+                    graph_id,
+                    node_id,
+                    payload_bytes = payload.len(),
+                    "sending binary frame runtime update"
+                );
+                write.send(Message::Binary(payload.into())).await?;
+            }
+            InputValue::MappedFrame(frame) => {
+                let binary_message = BinaryRuntimeFrameMessage {
+                    graph_id: graph_id.clone(),
+                    node_id: node_id.clone(),
+                    name,
+                    value_kind: BinaryFrameValueKind::MappedFrame,
                     layout: frame.layout,
                     rgba: encode_rgba_bytes(&frame.pixels),
                 };

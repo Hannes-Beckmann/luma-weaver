@@ -354,7 +354,15 @@ static FLOAT_CONSTANT_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSch
         max_input_connections: 1,
         require_value_kind_match: true,
     },
-    runtime_updates: None,
+    runtime_updates: Some(NodeRuntimeUpdateDefinition {
+        auto_subscribe_in_editor: true,
+        values: vec![NodeRuntimeValueDefinition {
+            name: "frame".to_owned(),
+            display_name: title_case_name("frame"),
+            value_kind: ValueKind::ColorFrame,
+            accepted_kinds: vec![],
+        }],
+    }),
 });
 
 static COLOR_CONSTANT_NODE_TYPE: LazyLock<NodeSchema> = LazyLock::new(|| NodeSchema {

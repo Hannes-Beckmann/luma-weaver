@@ -53,6 +53,23 @@ pub(crate) fn snarl_node_titles(snarl: &egui_snarl::Snarl<EditorSnarlNode>) -> V
     snarl.nodes().map(|node| node.title.clone()).collect()
 }
 
+#[cfg(test)]
+pub(crate) fn snarl_node_parameter_value(
+    snarl: &egui_snarl::Snarl<EditorSnarlNode>,
+    node_id: &str,
+    parameter_name: &str,
+) -> Option<serde_json::Value> {
+    snarl
+        .nodes()
+        .find(|node| node.graph_node_id == node_id)
+        .and_then(|node| {
+            node.parameters
+                .iter()
+                .find(|parameter| parameter.name == parameter_name)
+        })
+        .map(|parameter| parameter.value.clone())
+}
+
 /// Renders the graph editor view, including header controls, the node canvas, and diagnostics UI.
 pub(crate) fn render(ui: &mut egui::Ui, app: &mut FrontendApp) {
     app.ui.editor_canvas_hovered = false;

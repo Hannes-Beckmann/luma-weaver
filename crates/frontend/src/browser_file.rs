@@ -34,6 +34,13 @@ impl AssetUploadKind {
             Self::Layout => "layout",
         }
     }
+
+    fn delete_endpoint(self, asset_id: &str) -> String {
+        match self {
+            Self::Image => format!("/api/assets/images/{asset_id}"),
+            Self::Layout => format!("/api/assets/layouts/{asset_id}"),
+        }
+    }
 }
 
 /// Represents the outcome of a browser-managed asset upload.
@@ -433,6 +440,59 @@ async fn upload_asset(kind: AssetUploadKind, bytes: Vec<u8>) -> Result<String, S
         })
 }
 
+#[cfg(target_arch = "wasm32")]
+/// Deletes a previously uploaded asset through the backend asset API.
+pub(crate) async fn delete_asset(kind: AssetUploadKind, asset_id: String) -> Result<(), String> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+
+    let init = web_sys::RequestInit::new();
+    init.set_method("DELETE");
+
+    let request =
+        web_sys::Request::new_with_str_and_init(&kind.delete_endpoint(&asset_id), &init)
+            .map_err(|_| "Failed to build asset delete request".to_owned())?;
+
+    let Some(window) = web_sys::window() else {
+        return Err("Browser window is unavailable".to_owned());
+    };
+    let response_value = JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .map_err(|_| format!("{} delete request failed", capitalize(kind.display_name())))?;
+    let response = response_value
+        .dyn_into::<web_sys::Response>()
+        .map_err(|_| {
+            format!(
+                "{} delete response was invalid",
+                capitalize(kind.display_name())
+            )
+        })?;
+    if response.ok() {
+        return Ok(());
+    }
+
+    let response_text = JsFuture::from(
+        response
+            .text()
+            .map_err(|_| format!("Failed to read {} delete response", kind.display_name()))?,
+    )
+    .await
+    .map_err(|_| format!("Failed to read {} delete response", kind.display_name()))?
+    .as_string()
+    .unwrap_or_default();
+
+    let fallback = format!(
+        "{} delete failed with status {}",
+        capitalize(kind.display_name()),
+        response.status()
+    );
+    Err(if response_text.trim().is_empty() {
+        fallback
+    } else {
+        response_text
+    })
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 /// Reports that asset uploads via the browser file picker are unavailable on non-wasm builds.
 pub(crate) fn pick_and_upload_asset(
@@ -441,6 +501,12 @@ pub(crate) fn pick_and_upload_asset(
     _parameter_name: String,
 ) -> Result<mpsc::UnboundedReceiver<BrowserAssetUploadEvent>, String> {
     Err("Asset uploads are only available in the browser build".to_owned())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Reports that asset deletion via the browser API is unavailable on non-wasm builds.
+pub(crate) async fn delete_asset(_kind: AssetUploadKind, _asset_id: String) -> Result<(), String> {
+    Err("Asset deletion is only available in the browser build".to_owned())
 }
 
 fn capitalize(value: &str) -> String {
