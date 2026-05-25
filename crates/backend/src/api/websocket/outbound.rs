@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{SinkExt, stream::SplitSink};
 use shared::{
-    BinaryRuntimeFrameMessage, EventMessage, EventScope, EventTopic, InputValue,
+    BinaryFrameValueKind, BinaryRuntimeFrameMessage, EventMessage, EventScope, EventTopic, InputValue,
     NodeRuntimeUpdateValue, NodeRuntimeValue, ServerMessage, ServerState,
 };
 use tracing::{info, trace};
@@ -36,8 +36,8 @@ pub(crate) async fn send_server_message(
 
 /// Sends a node runtime update, using binary transport for frame payloads when possible.
 ///
-/// `ColorFrame` values named `frame` are emitted as binary RGBA payloads to avoid bloating the
-/// JSON channel. Remaining values are sent through the structured `NodeRuntimeUpdate` message.
+/// Frame values are emitted as binary RGBA payloads to avoid bloating the JSON channel.
+/// Remaining values are sent through the structured `NodeRuntimeUpdate` message.
 pub(crate) async fn send_node_runtime_update(
     write: &mut SplitSink<WebSocket, Message>,
     client_id: usize,
@@ -50,11 +50,31 @@ pub(crate) async fn send_node_runtime_update(
     for value in values {
         let NodeRuntimeValue { name, value } = value;
         match value {
-            InputValue::ColorFrame(frame) if name == "frame" => {
+            InputValue::ColorFrame(frame) => {
                 let binary_message = BinaryRuntimeFrameMessage {
                     graph_id: graph_id.clone(),
                     node_id: node_id.clone(),
                     name,
+                    value_kind: BinaryFrameValueKind::ColorFrame,
+                    layout: frame.layout,
+                    rgba: encode_rgba_bytes(&frame.pixels),
+                };
+                let payload = binary_message.encode();
+                trace!(
+                    client_id,
+                    graph_id,
+                    node_id,
+                    payload_bytes = payload.len(),
+                    "sending binary frame runtime update"
+                );
+                write.send(Message::Binary(payload.into())).await?;
+            }
+            InputValue::MappedFrame(frame) => {
+                let binary_message = BinaryRuntimeFrameMessage {
+                    graph_id: graph_id.clone(),
+                    node_id: node_id.clone(),
+                    name,
+                    value_kind: BinaryFrameValueKind::MappedFrame,
                     layout: frame.layout,
                     rgba: encode_rgba_bytes(&frame.pixels),
                 };
@@ -151,9 +171,12 @@ mod tests {
         let frame = ColorFrame {
             layout: shared::LedLayout {
                 id: "frame".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
+                points_3d: None,
             },
             pixels: vec![
                 RgbaColor {

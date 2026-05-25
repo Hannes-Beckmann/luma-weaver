@@ -49,6 +49,9 @@ impl NodeTypeId {
     pub const SET_CHANNEL: &'static str = "frame_operations.set_channel";
     pub const COLORIZE: &'static str = "frame_operations.colorize";
     pub const TINT_FRAME: &'static str = "frame_operations.tint_frame";
+    pub const TRANSFORM: &'static str = "frame_operations.transform";
+    pub const MAP_TO_LAYOUT: &'static str = "frame_operations.map_to_layout";
+    pub const FILL_FROM_FRAME: &'static str = "frame_operations.fill_from_frame";
     pub const MASK_FRAME: &'static str = "frame_operations.mask_frame";
     pub const MIX_COLOR: &'static str = "frame_operations.mix";
     pub const ALPHA_OVER: &'static str = "frame_operations.alpha_over";
@@ -126,6 +129,15 @@ pub enum NodeExecutionTarget {
     FrontendDemo,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[serde(rename_all = "snake_case")]
+/// Declares the render-layout families a node can evaluate under.
+pub enum RenderLayoutKind {
+    Index1d,
+    Matrix2d,
+    Spatial3d,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes the shared schema for a single node type.
 ///
@@ -137,6 +149,7 @@ pub struct NodeSchema {
     pub category: NodeCategory,
     #[serde(default)]
     pub needs_io: bool,
+    pub render_layouts: Vec<RenderLayoutKind>,
     pub inputs: Vec<NodeInputDefinition>,
     pub outputs: Vec<NodeOutputDefinition>,
     pub parameters: Vec<NodeParameterDefinition>,
@@ -150,13 +163,31 @@ pub trait NodeDefinition: Sync {
     fn infer_output(
         &self,
         output_name: &str,
-        _input_kinds: &[InputKindRef<'_>],
+        input_kinds: &[InputKindRef<'_>],
         _parameters: &[NodeParameter],
     ) -> OutputInference {
-        self.schema()
-            .output_port(output_name)
-            .map(|output| OutputInference::Resolved(output.value_kind))
-            .unwrap_or(OutputInference::Unavailable)
+        let Some(output) = self.schema().output_port(output_name) else {
+            return OutputInference::Unavailable;
+        };
+        if output.value_kind == ValueKind::ColorFrame
+            && output.accepted_kinds.contains(&ValueKind::MappedFrame)
+        {
+            let inferred_kind = self
+                .schema()
+                .inputs
+                .iter()
+                .filter_map(|input| {
+                    input_kinds
+                        .iter()
+                        .find(|candidate| candidate.name == input.name)
+                        .map(|candidate| candidate.kind)
+                })
+                .find(|kind| kind.is_frame() && output.accepts_kind(*kind))
+                .unwrap_or(output.value_kind);
+            OutputInference::Resolved(inferred_kind)
+        } else {
+            OutputInference::Resolved(output.value_kind)
+        }
     }
 }
 
@@ -190,6 +221,11 @@ impl NodeSchema {
             NodeExecutionTarget::Backend => true,
             NodeExecutionTarget::FrontendDemo => !self.needs_io,
         }
+    }
+
+    /// Returns whether this node can evaluate under the requested render layout kind.
+    pub fn supports_render_layout(&self, kind: RenderLayoutKind) -> bool {
+        self.render_layouts.contains(&kind)
     }
 
     /// Returns the named input port definition, if present.
@@ -463,6 +499,8 @@ pub enum ParameterUiHint {
     Checkbox,
     TextSingleLine,
     ImageAssetUpload,
+    Hidden,
+    SpatialLayoutSetup,
     EnumSelect { options: Vec<EnumOption> },
     IntegerDrag { speed: f64, min: i64, max: i64 },
     WledInstanceOrHost,
@@ -615,6 +653,7 @@ mod tests {
             display_name: "Test IO".to_owned(),
             category: NodeCategory::Inputs,
             needs_io: true,
+            render_layouts: vec![RenderLayoutKind::Index1d, RenderLayoutKind::Matrix2d],
             inputs: vec![],
             outputs: vec![],
             parameters: vec![],
@@ -629,6 +668,7 @@ mod tests {
             display_name: "Test Portable".to_owned(),
             category: NodeCategory::Inputs,
             needs_io: false,
+            render_layouts: vec![RenderLayoutKind::Index1d, RenderLayoutKind::Matrix2d],
             inputs: vec![],
             outputs: vec![],
             parameters: vec![],
@@ -642,6 +682,28 @@ mod tests {
         assert!(backend_only.supports_execution_target(NodeExecutionTarget::Backend));
         assert!(!backend_only.supports_execution_target(NodeExecutionTarget::FrontendDemo));
         assert!(portable.supports_execution_target(NodeExecutionTarget::FrontendDemo));
+    }
+
+    #[test]
+    fn supports_render_layout_uses_declared_capabilities() {
+        let definition = NodeSchema {
+            id: "test.render".to_owned(),
+            display_name: "Test Render".to_owned(),
+            category: NodeCategory::Debug,
+            needs_io: false,
+            render_layouts: vec![RenderLayoutKind::Spatial3d],
+            inputs: vec![],
+            outputs: vec![],
+            parameters: vec![],
+            connection: NodeConnectionDefinition {
+                max_input_connections: 1,
+                require_value_kind_match: true,
+            },
+            runtime_updates: None,
+        };
+
+        assert!(definition.supports_render_layout(RenderLayoutKind::Spatial3d));
+        assert!(!definition.supports_render_layout(RenderLayoutKind::Matrix2d));
     }
 
     #[test]
@@ -715,6 +777,100 @@ mod tests {
         );
 
         assert_eq!(inferred, Some(ValueKind::ColorFrame));
+    }
+
+    #[test]
+    fn wled_sink_frame_output_is_mapped_frame() {
+        let definition = node_definition(NodeTypeId::WLED_SINK).expect("wled sink definition");
+
+        let frame = definition.output_port("frame").expect("frame output");
+
+        assert_eq!(frame.value_kind, ValueKind::MappedFrame);
+    }
+
+    #[test]
+    fn fill_from_frame_input_requires_mapped_frame() {
+        let definition =
+            node_definition(NodeTypeId::FILL_FROM_FRAME).expect("fill from frame definition");
+
+        assert_eq!(
+            definition.input_port("frame").map(|port| port.value_kind),
+            Some(ValueKind::MappedFrame)
+        );
+    }
+
+    #[test]
+    fn map_to_layout_converts_color_frame_to_mapped_frame() {
+        let definition =
+            node_definition(NodeTypeId::MAP_TO_LAYOUT).expect("map to layout definition");
+
+        assert_eq!(
+            definition.input_port("frame").map(|port| port.value_kind),
+            Some(ValueKind::ColorFrame)
+        );
+        assert_eq!(
+            definition.output_port("frame").map(|port| port.value_kind),
+            Some(ValueKind::MappedFrame)
+        );
+    }
+
+    #[test]
+    fn transform_preserves_mapped_frame_output_kind() {
+        let definition = node_definition(NodeTypeId::TRANSFORM).expect("transform definition");
+
+        let inferred =
+            definition.infer_output_kind("frame", &[("frame", ValueKind::MappedFrame)], &[]);
+
+        assert_eq!(inferred, Some(ValueKind::MappedFrame));
+    }
+
+    #[test]
+    fn fill_from_frame_method_hides_irrelevant_parameters() {
+        let definition =
+            node_definition(NodeTypeId::FILL_FROM_FRAME).expect("fill from frame definition");
+        let nearest = [NodeParameter {
+            name: "method".to_owned(),
+            value: serde_json::json!("nearest"),
+        }];
+        let smooth_distance = [NodeParameter {
+            name: "method".to_owned(),
+            value: serde_json::json!("smooth_distance"),
+        }];
+        let radius = [NodeParameter {
+            name: "method".to_owned(),
+            value: serde_json::json!("radius"),
+        }];
+
+        assert!(
+            !definition
+                .parameter("sample_count")
+                .expect("sample_count parameter")
+                .is_visible(&nearest)
+        );
+        assert!(
+            definition
+                .parameter("sample_count")
+                .expect("sample_count parameter")
+                .is_visible(&smooth_distance)
+        );
+        assert!(
+            !definition
+                .parameter("radius")
+                .expect("radius parameter")
+                .is_visible(&smooth_distance)
+        );
+        assert!(
+            definition
+                .parameter("radius")
+                .expect("radius parameter")
+                .is_visible(&radius)
+        );
+        assert!(
+            definition
+                .parameter("fallback_color")
+                .expect("fallback_color parameter")
+                .is_visible(&radius)
+        );
     }
 
     #[test]

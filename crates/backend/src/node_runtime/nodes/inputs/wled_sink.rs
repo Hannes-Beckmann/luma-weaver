@@ -4,12 +4,16 @@ use std::net::{Ipv4Addr, SocketAddrV4, UdpSocket};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use shared::{ColorFrame, LedLayout, NodeDiagnostic, NodeDiagnosticSeverity, RgbaColor};
+use shared::{
+    ColorFrame, InputValue, LedLayout, LedLayoutRole, NodeDiagnostic, NodeDiagnosticSeverity,
+    RgbaColor,
+};
 
 use crate::node_runtime::{
     NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, TypedNodeEvaluation,
 };
 use crate::services::wled::ddp;
+use crate::spatial_layout::{MatrixStripMode, spatial_points_for_mode};
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -76,6 +80,10 @@ impl WledSinkProtocol {
 pub(crate) struct WledSinkNode {
     protocol: WledSinkProtocol,
     port: u16,
+    source_shape: SourceShape,
+    source_width: usize,
+    source_height: usize,
+    parameters: HashMap<String, JsonValue>,
     socket: Option<UdpSocket>,
     assembler: DdpFrameAssembler,
     latest_pixels: Vec<RgbaColor>,
@@ -91,11 +99,13 @@ struct DdpFrameAssembler {
 struct WledSinkParameters {
     protocol: WledSinkProtocol,
     port: u16,
+    source_shape: SourceShape,
 }
 
 crate::node_runtime::impl_runtime_parameters!(WledSinkParameters {
     protocol: WledSinkProtocol = WledSinkProtocol::Ddp,
     port: u64 => |value| crate::node_runtime::clamp_u64_to_u16(value, 1, 65_535), default ddp::DDP_PORT,
+    source_shape: SourceShape = SourceShape::Strip,
 });
 
 impl WledSinkNode {
@@ -105,6 +115,10 @@ impl WledSinkNode {
         Self {
             protocol: config.protocol,
             port,
+            source_shape: config.source_shape,
+            source_width: 8,
+            source_height: 8,
+            parameters: HashMap::new(),
             socket: match bind_socket(port) {
                 Ok(socket) => {
                     log_socket_bound(port, &socket, "bound WLED sink socket during node init");
@@ -130,27 +144,34 @@ impl RuntimeNodeFromParameters for WledSinkNode {
             node: config,
             diagnostics,
         } = WledSinkParameters::from_parameters(parameters);
-        crate::node_runtime::NodeConstruction {
-            node: WledSinkNode::from_config(config),
-            diagnostics,
-        }
+        let mut node = WledSinkNode::from_config(config);
+        node.source_width = usize_parameter(parameters, "source_width", 8).clamp(1, 512);
+        node.source_height = usize_parameter(parameters, "source_height", 8).clamp(1, 512);
+        node.parameters = parameters.clone();
+        crate::node_runtime::NodeConstruction { node, diagnostics }
     }
 }
 
 pub(crate) struct WledSinkOutputs {
-    frame: ColorFrame,
+    frame: InputValue,
 }
 
-crate::node_runtime::impl_runtime_outputs!(WledSinkOutputs { frame });
+impl crate::node_runtime::RuntimeOutputs for WledSinkOutputs {
+    fn into_runtime_outputs(self) -> anyhow::Result<HashMap<String, InputValue>> {
+        let mut outputs = HashMap::new();
+        outputs.insert("frame".to_owned(), self.frame);
+        Ok(outputs)
+    }
+}
 
 impl RuntimeNode for WledSinkNode {
     type Inputs = ();
     type Outputs = WledSinkOutputs;
 
-    /// Polls the DDP socket, reassembles the latest frame, and exposes it as a `ColorFrame`.
+    /// Polls the DDP socket, reassembles the latest frame, and exposes it as a `MappedFrame`.
     fn evaluate(
         &mut self,
-        context: &NodeEvaluationContext,
+        _context: &NodeEvaluationContext,
         _inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let mut diagnostics = self.refresh_socket_if_needed();
@@ -164,19 +185,27 @@ impl RuntimeNode for WledSinkNode {
             });
         }
 
-        let frame = normalize_frame(
+        let frame = InputValue::MappedFrame(source_frame_from_pixels(
             &self.latest_pixels,
-            context.render_layout.as_ref(),
+            self,
             self.port,
-        );
+        ));
 
+        let output_pixels = frame
+            .as_frame()
+            .map(|value| value.pixels.len())
+            .unwrap_or_default();
+        let layout_id = frame
+            .as_frame()
+            .map(|value| value.layout.id.as_str())
+            .unwrap_or("");
         tracing::trace!(
             protocol = self.protocol.label(),
             port = self.port,
             socket_bound = self.socket.is_some(),
             received_pixels = self.latest_pixels.len(),
-            output_pixels = frame.pixels.len(),
-            layout_id = %frame.layout.id,
+            output_pixels,
+            layout_id,
             "WLED sink output frame"
         );
 
@@ -185,6 +214,19 @@ impl RuntimeNode for WledSinkNode {
             frontend_updates: Vec::new(),
             diagnostics,
         })
+    }
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum SourceShape {
+    Strip,
+    Matrix,
+}
+
+impl Default for SourceShape {
+    fn default() -> Self {
+        Self::Strip
     }
 }
 
@@ -394,6 +436,7 @@ fn log_socket_bound(port: u16, socket: &UdpSocket, message: &str) {
 }
 
 /// Adapts received pixels to the requested render layout by cropping or padding as needed.
+#[cfg(test)]
 fn normalize_frame(
     pixels: &[RgbaColor],
     render_layout: Option<&LedLayout>,
@@ -401,9 +444,11 @@ fn normalize_frame(
 ) -> ColorFrame {
     let layout = render_layout.cloned().unwrap_or_else(|| LedLayout {
         id: format!("wled_sink:{port}"),
+        role: LedLayoutRole::RenderTarget,
         pixel_count: pixels.len(),
         width: None,
         height: None,
+        points_3d: None,
     });
 
     let mut frame_pixels = pixels.to_vec();
@@ -427,6 +472,62 @@ fn normalize_frame(
     }
 }
 
+fn source_frame_from_pixels(pixels: &[RgbaColor], node: &WledSinkNode, port: u16) -> ColorFrame {
+    let pixel_count = pixels.len();
+    let mode = match node.source_shape {
+        SourceShape::Matrix => MatrixStripMode::Matrix {
+            width: node.source_width.max(1),
+            height: node.source_height.max(1),
+        },
+        SourceShape::Strip => MatrixStripMode::Strip,
+    };
+    let pattern = node
+        .parameters
+        .get("source_layout_pattern")
+        .and_then(|value| value.as_str())
+        .unwrap_or("matrix_strip");
+    let (width, height) =
+        if pattern == "matrix_strip" && matches!(node.source_shape, SourceShape::Matrix) {
+            let width = node.source_width.max(1);
+            let height = if node.source_width.saturating_mul(node.source_height) == pixel_count {
+                node.source_height.max(1)
+            } else {
+                pixel_count.div_ceil(width).max(1)
+            };
+            (Some(width), Some(height))
+        } else if pattern == "matrix_strip" {
+            (Some(pixel_count), Some(1))
+        } else {
+            (None, None)
+        };
+    let layout = LedLayout {
+        id: format!("source:wled_sink:{port}"),
+        role: LedLayoutRole::Source,
+        pixel_count,
+        width,
+        height,
+        points_3d: Some(spatial_points_for_mode(
+            &node.parameters,
+            "source_",
+            pixel_count,
+            mode,
+        )),
+    };
+
+    ColorFrame {
+        layout,
+        pixels: pixels.to_vec(),
+    }
+}
+
+fn usize_parameter(parameters: &HashMap<String, JsonValue>, name: &str, default: usize) -> usize {
+    parameters
+        .get(name)
+        .and_then(|value| value.as_u64())
+        .map(|value| value as usize)
+        .unwrap_or(default)
+}
+
 /// Converts packed RGB transport bytes into opaque shared color values.
 fn rgb_to_pixels(rgb: &[u8]) -> Vec<RgbaColor> {
     rgb.chunks_exact(ddp::CHANNELS_PER_PIXEL)
@@ -441,10 +542,15 @@ fn rgb_to_pixels(rgb: &[u8]) -> Vec<RgbaColor> {
 
 #[cfg(test)]
 mod tests {
-    use crate::services::wled::ddp;
-    use shared::LedLayout;
+    use std::collections::HashMap;
 
-    use super::{DdpFrameAssembler, normalize_frame, process_udp_raw_packet, rgb_to_pixels};
+    use crate::services::wled::ddp;
+    use shared::{LedLayout, LedLayoutRole, RgbaColor};
+
+    use super::{
+        DdpFrameAssembler, SourceShape, WledSinkNode, WledSinkProtocol, normalize_frame,
+        process_udp_raw_packet, rgb_to_pixels, source_frame_from_pixels,
+    };
 
     /// Builds a minimal DDP packet for sink-assembler tests.
     fn ddp_packet(offset_pixels: u32, rgb: &[u8], push: bool) -> Vec<u8> {
@@ -505,9 +611,11 @@ mod tests {
             &pixels,
             Some(&LedLayout {
                 id: "crop".to_owned(),
+                role: LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: None,
                 height: None,
+                points_3d: None,
             }),
             ddp::DDP_PORT,
         );
@@ -517,14 +625,95 @@ mod tests {
             &pixels[..1],
             Some(&LedLayout {
                 id: "pad".to_owned(),
+                role: LedLayoutRole::RenderTarget,
                 pixel_count: 3,
                 width: None,
                 height: None,
+                points_3d: None,
             }),
             ddp::DDP_PORT,
         );
         assert_eq!(padded.pixels.len(), 3);
         assert_eq!(padded.pixels[1].a, 1.0);
         assert_eq!(padded.pixels[1].r, 0.0);
+    }
+
+    #[test]
+    fn source_frame_uses_received_pixel_count_for_strip_geometry() {
+        let pixels = vec![
+            RgbaColor {
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            };
+            3
+        ];
+
+        let frame = source_frame_from_pixels(
+            &pixels,
+            &WledSinkNode {
+                protocol: WledSinkProtocol::Ddp,
+                port: ddp::DDP_PORT,
+                source_shape: SourceShape::Strip,
+                source_width: 8,
+                source_height: 8,
+                parameters: HashMap::new(),
+                socket: None,
+                assembler: DdpFrameAssembler::default(),
+                latest_pixels: Vec::new(),
+                has_received_frame: false,
+            },
+            ddp::DDP_PORT,
+        );
+
+        assert_eq!(frame.pixels.len(), 3);
+        assert_eq!(frame.layout.role, LedLayoutRole::Source);
+        assert_eq!(frame.layout.pixel_count, 3);
+        assert_eq!(frame.layout.width, Some(3));
+        assert_eq!(frame.layout.height, Some(1));
+        assert_eq!(frame.layout.points_3d.as_ref().map(Vec::len), Some(3));
+    }
+
+    #[test]
+    fn source_frame_matrix_geometry_is_truncated_to_received_pixels() {
+        let pixels = vec![
+            RgbaColor {
+                r: 1.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            };
+            5
+        ];
+
+        let mut parameters = HashMap::new();
+        parameters.insert(
+            "source_layout_origin_x".to_owned(),
+            serde_json::Value::from(1.0),
+        );
+        let frame = source_frame_from_pixels(
+            &pixels,
+            &WledSinkNode {
+                protocol: WledSinkProtocol::Ddp,
+                port: ddp::DDP_PORT,
+                source_shape: SourceShape::Matrix,
+                source_width: 3,
+                source_height: 2,
+                parameters,
+                socket: None,
+                assembler: DdpFrameAssembler::default(),
+                latest_pixels: Vec::new(),
+                has_received_frame: false,
+            },
+            ddp::DDP_PORT,
+        );
+
+        assert_eq!(frame.pixels.len(), 5);
+        assert_eq!(frame.layout.role, LedLayoutRole::Source);
+        assert_eq!(frame.layout.width, Some(3));
+        assert_eq!(frame.layout.height, Some(2));
+        assert_eq!(frame.layout.points_3d.as_ref().map(Vec::len), Some(5));
+        assert_eq!(frame.layout.points_3d.as_ref().expect("points")[0].x, 1.0);
     }
 }

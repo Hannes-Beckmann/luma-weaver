@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use axum::{
     Json, Router,
     body::Bytes,
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use serde::Serialize;
 use tower_http::{
@@ -28,6 +28,8 @@ pub(crate) fn router(state: AppState) -> Router {
         .route("/health", get(|| async { "ok" }))
         .route("/ws", get(websocket_handler))
         .route("/api/assets/images", post(upload_image_asset))
+        .route("/api/assets/layouts", post(upload_layout_asset))
+        .route("/api/assets/layouts/{asset_id}", delete(delete_layout_asset))
         .fallback_service(
             ServeDir::new(dist_dir)
                 .append_index_html_on_directories(true)
@@ -42,6 +44,17 @@ struct UploadImageAssetResponse {
     asset_id: String,
 }
 
+#[derive(Debug, Serialize)]
+struct UploadLayoutAssetResponse {
+    asset_id: String,
+}
+
+#[derive(Clone, Copy)]
+enum UploadKind {
+    Image,
+    Layout,
+}
+
 /// Persists an uploaded image asset and returns the stable id the graph should reference.
 async fn upload_image_asset(
     State(state): State<AppState>,
@@ -50,13 +63,60 @@ async fn upload_image_asset(
     let asset_id = state
         .image_asset_store
         .store_image_bytes(body.as_ref())
-        .map_err(invalid_upload_response)?;
+        .map_err(|error| invalid_upload_response(error, UploadKind::Image))?;
     Ok(Json(UploadImageAssetResponse { asset_id }))
 }
 
-fn invalid_upload_response(error: anyhow::Error) -> (StatusCode, String) {
+/// Persists an uploaded layout asset and returns the stable id the graph should reference.
+async fn upload_layout_asset(
+    State(state): State<AppState>,
+    body: Bytes,
+) -> Result<Json<UploadLayoutAssetResponse>, (StatusCode, String)> {
+    let asset_id = state
+        .layout_asset_store
+        .store_layout_bytes(body.as_ref())
+        .map_err(|error| invalid_upload_response(error, UploadKind::Layout))?;
+    Ok(Json(UploadLayoutAssetResponse { asset_id }))
+}
+
+/// Deletes a previously uploaded layout asset.
+async fn delete_layout_asset(
+    State(state): State<AppState>,
+    Path(asset_id): Path<String>,
+) -> Result<StatusCode, (StatusCode, String)> {
+    state
+        .layout_asset_store
+        .delete_layout_asset(asset_id.trim())
+        .map_err(invalid_layout_delete_response)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+fn invalid_upload_response(error: anyhow::Error, kind: UploadKind) -> (StatusCode, String) {
     let message = error.to_string();
-    let status = if message.contains("decode uploaded image") || message.contains("empty") {
+    let is_bad_request = match kind {
+        UploadKind::Image => {
+            message.contains("decode uploaded image")
+                || message.contains("uploaded image is empty")
+        }
+        UploadKind::Layout => {
+            message.contains("uploaded layout")
+                || message.contains("parse uploaded layout")
+                || message.contains("decode uploaded layout as UTF-8")
+        }
+    };
+    let status = if is_bad_request {
+        StatusCode::BAD_REQUEST
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+    (status, message)
+}
+
+fn invalid_layout_delete_response(error: anyhow::Error) -> (StatusCode, String) {
+    let message = error.to_string();
+    let status = if message.contains("layout asset id")
+        && message.contains("is invalid")
+    {
         StatusCode::BAD_REQUEST
     } else {
         StatusCode::INTERNAL_SERVER_ERROR

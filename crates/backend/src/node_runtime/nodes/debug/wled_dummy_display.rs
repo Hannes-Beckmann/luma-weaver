@@ -1,20 +1,56 @@
 use anyhow::Result;
+use serde_json::Value as JsonValue;
 use shared::{ColorFrame, InputValue, LedLayout, RgbaColor};
 
 use crate::node_runtime::{
-    AnyInputValue, NodeEvaluationContext, NodeFrontendUpdate, RuntimeNode, TypedNodeEvaluation,
+    AnyInputValue, NodeEvaluationContext, NodeFrontendUpdate, RuntimeNode,
+    RuntimeNodeFromParameters, TypedNodeEvaluation,
+};
+use crate::spatial_layout::{
+    MatrixStripMode, spatial_layout_dimensions, spatial_layout_pixel_count, spatial_points_for_mode,
 };
 
 #[derive(Default)]
 pub(crate) struct WledDummyDisplayNode {
     width: usize,
     height: usize,
+    use_spatial: bool,
+    parameters: std::collections::HashMap<String, JsonValue>,
 }
 
-crate::node_runtime::impl_runtime_parameters!(WledDummyDisplayNode {
+#[derive(Default)]
+struct WledDummyDisplayParameters {
+    width: usize,
+    height: usize,
+    use_spatial: bool,
+}
+
+crate::node_runtime::impl_runtime_parameters!(WledDummyDisplayParameters {
     width: u64 => |value| crate::node_runtime::max_u64_to_usize(value, 1), default 8usize,
     height: u64 => |value| crate::node_runtime::max_u64_to_usize(value, 1), default 8usize,
+    use_spatial: bool = false,
 });
+
+impl RuntimeNodeFromParameters for WledDummyDisplayNode {
+    fn from_parameters(
+        parameters: &std::collections::HashMap<String, serde_json::Value>,
+    ) -> crate::node_runtime::NodeConstruction<Self> {
+        let crate::node_runtime::NodeConstruction {
+            node: config,
+            diagnostics,
+        } = WledDummyDisplayParameters::from_parameters(parameters);
+
+        crate::node_runtime::NodeConstruction {
+            node: Self {
+                width: config.width,
+                height: config.height,
+                use_spatial: config.use_spatial,
+                parameters: parameters.clone(),
+            },
+            diagnostics,
+        }
+    }
+}
 
 pub(crate) struct WledDummyDisplayInputs {
     value: Option<AnyInputValue>,
@@ -35,12 +71,37 @@ impl RuntimeNode for WledDummyDisplayNode {
         context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
-        let pixel_count = self.width * self.height;
+        let pixel_count = spatial_layout_pixel_count(
+            &self.parameters,
+            "",
+            self.width,
+            self.height,
+            self.use_spatial,
+        );
+        let (layout_width, layout_height) = spatial_layout_dimensions(
+            &self.parameters,
+            "",
+            self.width,
+            self.height,
+            self.use_spatial,
+        );
         let layout = context.render_layout.clone().unwrap_or(LedLayout {
             id: format!("dummy:{}x{}", self.width, self.height),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count,
-            width: Some(self.width),
-            height: Some(self.height),
+            width: layout_width,
+            height: layout_height,
+            points_3d: self.use_spatial.then(|| {
+                spatial_points_for_mode(
+                    &self.parameters,
+                    "",
+                    pixel_count,
+                    MatrixStripMode::Auto {
+                        width: self.width,
+                        height: self.height,
+                    },
+                )
+            }),
         });
 
         let frame = if is_disabled(inputs.disable) {
@@ -131,6 +192,8 @@ mod tests {
         let mut node = WledDummyDisplayNode {
             width: 8,
             height: 8,
+            use_spatial: false,
+            parameters: std::collections::HashMap::new(),
         };
         let evaluation = node
             .evaluate(

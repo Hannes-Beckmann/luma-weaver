@@ -5,10 +5,11 @@ use egui_snarl::ui::{
     NodeLayout, PinInfo, PinPlacement, SelectionStyle, SnarlPin, SnarlStyle, SnarlViewer,
     get_selected_nodes,
 };
-use egui_snarl::{InPin, NodeId, OutPin, Snarl};
+use egui_snarl::{InPin, InPinId, NodeId, OutPin, OutPinId, Snarl};
 use shared::{
-    GraphDocument, MqttBrokerConfig, NodeCategory, NodeDiagnosticSeverity, NodeDiagnosticSummary,
-    NodeSchema, NodeTypeId, OutputInference, ValueKind, WledInstance,
+    GraphDocument, MqttBrokerConfig, NodeCategory, NodeDiagnostic, NodeDiagnosticSeverity,
+    NodeDiagnosticSummary, NodeSchema, NodeTypeId, OutputInference, RenderLayoutKind, ValueKind,
+    WledInstance,
 };
 
 use super::EditorSnarlNode;
@@ -17,8 +18,9 @@ use super::model::{
     visible_parameter_definitions,
 };
 use super::widgets::{
-    draw_color_frame_preview, draw_float_plot, edit_input_value, edit_parameter_value,
-    ensure_parameter_defaults, format_input_value, max_input_label_width, show_runtime_value,
+    ParameterEditRequest, draw_color_frame_preview, draw_float_plot, edit_input_value,
+    edit_parameter_value, ensure_parameter_defaults, format_input_value, max_input_label_width,
+    show_runtime_value,
 };
 
 struct GraphSnarlViewer {
@@ -32,8 +34,26 @@ struct GraphSnarlViewer {
     diagnostic_summaries: std::collections::HashMap<String, NodeDiagnosticSummary>,
     opened_diagnostics_node_id: Option<String>,
     requested_image_upload: Option<(String, String)>,
+    requested_layout_upload: Option<(String, String)>,
+    requested_preview_node_id: Option<String>,
     node_menu_search: String,
     requested_graph_menu_pos: Option<egui::Pos2>,
+    highlighted_invalid_input: Option<(String, String)>,
+    highlighted_invalid_message: Option<String>,
+    rejected_connection: Option<ConnectionRejectionInfo>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct ConnectionRejectionInfo {
+    pub(super) target_node_id: String,
+    pub(super) target_input_name: String,
+    pub(super) message: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ConnectionDiagnostic {
+    node_id: Option<String>,
+    diagnostic: NodeDiagnostic,
 }
 
 const MIN_NODE_WIDTH: f32 = 220.0;
@@ -163,13 +183,27 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
             ui.label("?");
             return PinInfo::default();
         };
+        let highlighted_invalid_input = self
+            .highlighted_invalid_input
+            .as_ref()
+            .is_some_and(|(node_id, input_name)| {
+                node.graph_node_id == *node_id && port.name == *input_name
+            });
 
-        let response = ui.label(&port.display_name);
+        let mut response = ui.label(&port.display_name);
+        if highlighted_invalid_input
+            && let Some(message) = self.highlighted_invalid_message.as_deref()
+        {
+            response = response.on_hover_text(message);
+        }
         let spacing = label_width - response.rect.width();
         ui.add_space(spacing);
 
         if !is_connected {
             edit_input_value(ui, port);
+        }
+        if highlighted_invalid_input {
+            return invalid_connection_pin_info();
         }
         let inferred = connected_kind.unwrap_or_else(|| OutputInference::Resolved(port.value_kind));
         pin_info_for_inference(&inferred)
@@ -215,20 +249,30 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
             return;
         };
 
-        if self.connection_kind_mismatch(from_kind, from_port_definition, to_port_definition) {
-            return;
-        }
-
         let max_input_connections = to_definition.connection.max_input_connections;
-        if max_input_connections == 0 {
+        if let Err(diagnostics) = self.validate_candidate_connection(
+            from.id,
+            to.id,
+            from_kind,
+            from_port_definition,
+            to_port_definition,
+            max_input_connections,
+            to.remotes.len(),
+            snarl,
+        ) {
+            if let Some(diagnostic) = diagnostics.first() {
+                self.rejected_connection = Some(ConnectionRejectionInfo {
+                    target_node_id: to_node.graph_node_id.clone(),
+                    target_input_name: to_port.name.clone(),
+                    message: diagnostic.diagnostic.message.clone(),
+                });
+            }
             return;
         }
         if max_input_connections == 1 {
             for &remote in &to.remotes {
                 snarl.disconnect(remote, to.id);
             }
-        } else if to.remotes.len() >= max_input_connections {
-            return;
         }
 
         snarl.connect(from.id, to.id);
@@ -288,11 +332,16 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
                             &self.wled_instances,
                             &self.mqtt_broker_configs,
                         );
-                        if requested_upload {
-                            self.requested_image_upload = Some((
-                                editor_node.graph_node_id.clone(),
-                                parameter_definition.name.clone(),
-                            ));
+                        match requested_upload {
+                            Some(ParameterEditRequest::UploadImageAsset { parameter_name }) => {
+                                self.requested_image_upload =
+                                    Some((editor_node.graph_node_id.clone(), parameter_name));
+                            }
+                            Some(ParameterEditRequest::UploadLayoutAsset { parameter_name }) => {
+                                self.requested_layout_upload =
+                                    Some((editor_node.graph_node_id.clone(), parameter_name));
+                            }
+                            None => {}
                         }
                         ui.end_row();
                     }
@@ -302,9 +351,23 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
             {
                 ui.separator();
             }
+            if editor_node.node_type_id == NodeTypeId::DISPLAY
+                || editor_node.node_type_id == NodeTypeId::FILL_FROM_FRAME
+            {
+                if ui.button("Open 3D View").clicked() {
+                    self.requested_preview_node_id = Some(editor_node.graph_node_id.clone());
+                }
+                if !editor_node.runtime_values.is_empty() {
+                    ui.separator();
+                }
+            }
             for (_name, value) in &editor_node.runtime_values {
+                if editor_node.node_type_id == NodeTypeId::FILL_FROM_FRAME {
+                    continue;
+                }
                 match value {
-                    shared::InputValue::ColorFrame(frame) => {
+                    shared::InputValue::ColorFrame(frame)
+                    | shared::InputValue::MappedFrame(frame) => {
                         draw_color_frame_preview(ui, frame);
                     }
                     _ => {
@@ -389,20 +452,331 @@ impl SnarlViewer<EditorSnarlNode> for GraphSnarlViewer {
 }
 
 impl GraphSnarlViewer {
-    fn connection_kind_mismatch(
+    fn validate_candidate_connection(
         &self,
+        candidate_from: OutPinId,
+        candidate_to: InPinId,
         from_kind: ValueKind,
         from_port: &shared::NodeOutputDefinition,
         to_port: &shared::NodeInputDefinition,
-    ) -> bool {
-        if !to_port.accepts_kind(from_kind) {
-            return true;
+        max_input_connections: usize,
+        current_input_connection_count: usize,
+        snarl: &Snarl<EditorSnarlNode>,
+    ) -> Result<(), Vec<ConnectionDiagnostic>> {
+        let mut diagnostics = Vec::new();
+        if !to_port.accepts_kind(from_kind) || !from_port.accepts_kind(from_kind) {
+            diagnostics.push(ConnectionDiagnostic {
+                node_id: snarl
+                    .get_node(candidate_to.node)
+                    .map(|node| node.graph_node_id.clone()),
+                diagnostic: NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Warning,
+                    code: Some("editor.connection_kind_mismatch".to_owned()),
+                    message: format!(
+                        "Can't connect: this input does not accept {} values.",
+                        value_kind_label(from_kind)
+                    ),
+                },
+            });
         }
-        if !from_port.accepts_kind(from_kind) {
-            return true;
+
+        let candidate_wires =
+            candidate_wires(snarl, candidate_from, candidate_to, max_input_connections);
+        if let Some(diagnostic) = render_layout_connection_diagnostic(
+            snarl,
+            &candidate_wires,
+            &self.available_node_definitions,
+        ) {
+            diagnostics.push(diagnostic);
         }
-        false
+        if let Some(diagnostic) = transform_cycle_connection_diagnostic(snarl, &candidate_wires) {
+            diagnostics.push(diagnostic);
+        } else if let Some(diagnostic) = cycle_connection_diagnostic(snarl, &candidate_wires) {
+            diagnostics.push(diagnostic);
+        }
+        if max_input_connections == 0 {
+            diagnostics.push(ConnectionDiagnostic {
+                node_id: snarl
+                    .get_node(candidate_to.node)
+                    .map(|node| node.graph_node_id.clone()),
+                diagnostic: NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Warning,
+                    code: Some("editor.connection_input_unavailable".to_owned()),
+                    message: "Can't connect: this input does not accept connections.".to_owned(),
+                },
+            });
+        } else if max_input_connections > 1 && current_input_connection_count >= max_input_connections {
+            diagnostics.push(ConnectionDiagnostic {
+                node_id: snarl
+                    .get_node(candidate_to.node)
+                    .map(|node| node.graph_node_id.clone()),
+                diagnostic: NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Warning,
+                    code: Some("editor.connection_input_full".to_owned()),
+                    message: format!(
+                        "Can't connect: this input already has the maximum of {max_input_connections} connection(s)."
+                    ),
+                },
+            });
+        }
+
+        if diagnostics.is_empty() {
+            Ok(())
+        } else {
+            Err(diagnostics)
+        }
     }
+}
+
+fn candidate_wires(
+    snarl: &Snarl<EditorSnarlNode>,
+    candidate_from: OutPinId,
+    candidate_to: InPinId,
+    max_input_connections: usize,
+) -> Vec<(OutPinId, InPinId)> {
+    let mut wires = snarl.wires().collect::<Vec<_>>();
+    if max_input_connections == 1 {
+        wires.retain(|(_, in_pin)| *in_pin != candidate_to);
+    }
+    wires.push((candidate_from, candidate_to));
+    wires
+}
+
+fn render_layout_connection_diagnostic(
+    snarl: &Snarl<EditorSnarlNode>,
+    wires: &[(OutPinId, InPinId)],
+    available_node_definitions: &[NodeSchema],
+) -> Option<ConnectionDiagnostic> {
+    let mut queue = std::collections::VecDeque::<(NodeId, RenderLayoutKind)>::new();
+    let mut visited = std::collections::HashSet::<(NodeId, RenderLayoutKind)>::new();
+
+    for (node_id, node) in snarl.nodes_ids_data() {
+        if let Some(kind) = sink_render_layout_kind(&node.value) {
+            queue.push_back((node_id, kind));
+        }
+    }
+
+    while let Some((node_id, kind)) = queue.pop_front() {
+        if !visited.insert((node_id, kind)) {
+            continue;
+        }
+        let Some(node) = snarl.get_node(node_id) else {
+            continue;
+        };
+        let Some(definition) = find_node_definition(available_node_definitions, &node.node_type_id)
+        else {
+            continue;
+        };
+        if !definition.supports_render_layout(kind) {
+            return Some(ConnectionDiagnostic {
+                node_id: Some(node.graph_node_id.clone()),
+                diagnostic: NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Warning,
+                    code: Some("editor.connection_render_layout_mismatch".to_owned()),
+                    message: format!(
+                        "Can't connect: this would require {} to run in {}, but {} only supports {}.",
+                        node.title,
+                        render_layout_kind_label(kind),
+                        node.title,
+                        supported_render_layouts_label(&definition.render_layouts)
+                    ),
+                },
+            });
+        }
+
+        for (out_pin, in_pin) in wires {
+            if in_pin.node == node_id {
+                let Some(out_node) = snarl.get_node(out_pin.node) else {
+                    continue;
+                };
+                let Some(output) = out_node.outputs.get(out_pin.output) else {
+                    continue;
+                };
+                if output.value_kind == ValueKind::MappedFrame {
+                    continue;
+                }
+                queue.push_back((out_pin.node, kind));
+            }
+        }
+    }
+
+    None
+}
+
+fn transform_cycle_connection_diagnostic(
+    snarl: &Snarl<EditorSnarlNode>,
+    wires: &[(OutPinId, InPinId)],
+) -> Option<ConnectionDiagnostic> {
+    let adjacency = adjacency_from_wires(snarl, wires, false);
+    for (node_id, node) in snarl.nodes_ids_data() {
+        if node.value.node_type_id != NodeTypeId::TRANSFORM {
+            continue;
+        }
+        if node_is_in_cycle(node_id, &adjacency) {
+            return Some(ConnectionDiagnostic {
+                node_id: Some(node.value.graph_node_id.clone()),
+                diagnostic: NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Warning,
+                    code: Some("editor.connection_transform_cycle".to_owned()),
+                    message: "Can't connect: Transform cannot participate in graph cycles."
+                        .to_owned(),
+                },
+            });
+        }
+    }
+
+    None
+}
+
+fn cycle_connection_diagnostic(
+    snarl: &Snarl<EditorSnarlNode>,
+    wires: &[(OutPinId, InPinId)],
+) -> Option<ConnectionDiagnostic> {
+    let adjacency = adjacency_from_wires(snarl, wires, true);
+    let node_count = snarl.nodes().count();
+    let mut in_degree = vec![0usize; node_count];
+    for edges in &adjacency {
+        for next in edges {
+            in_degree[next.0] += 1;
+        }
+    }
+    let mut queue = std::collections::VecDeque::new();
+    for (node_id, _) in snarl.nodes_ids_data() {
+        if in_degree[node_id.0] == 0 {
+            queue.push_back(node_id);
+        }
+    }
+
+    let mut visited_count = 0usize;
+    while let Some(node_id) = queue.pop_front() {
+        visited_count += 1;
+        for next in &adjacency[node_id.0] {
+            in_degree[next.0] -= 1;
+            if in_degree[next.0] == 0 {
+                queue.push_back(*next);
+            }
+        }
+    }
+
+    (visited_count != node_count).then(|| ConnectionDiagnostic {
+        node_id: None,
+        diagnostic: NodeDiagnostic {
+            severity: NodeDiagnosticSeverity::Warning,
+            code: Some("editor.connection_cycle".to_owned()),
+            message: "Can't connect: this would create an invalid graph cycle.".to_owned(),
+        },
+    })
+}
+
+fn adjacency_from_wires(
+    snarl: &Snarl<EditorSnarlNode>,
+    wires: &[(OutPinId, InPinId)],
+    exclude_delay_edges: bool,
+) -> Vec<Vec<NodeId>> {
+    let mut adjacency = vec![Vec::new(); snarl.nodes().count()];
+    for (from, to) in wires {
+        if exclude_delay_edges && snarl[from.node].node_type_id == NodeTypeId::DELAY {
+            continue;
+        }
+        adjacency[from.node.0].push(to.node);
+    }
+    adjacency
+}
+
+fn node_is_in_cycle(node_id: NodeId, adjacency: &[Vec<NodeId>]) -> bool {
+    let mut stack = adjacency[node_id.0].clone();
+    let mut visited = vec![false; adjacency.len()];
+
+    while let Some(current) = stack.pop() {
+        if current == node_id {
+            return true;
+        }
+        if visited[current.0] {
+            continue;
+        }
+        visited[current.0] = true;
+        stack.extend(adjacency[current.0].iter().copied());
+    }
+
+    false
+}
+
+fn render_layout_kind_label(kind: RenderLayoutKind) -> &'static str {
+    match kind {
+        RenderLayoutKind::Index1d => "Index1d",
+        RenderLayoutKind::Matrix2d => "Matrix2d",
+        RenderLayoutKind::Spatial3d => "Spatial3d",
+    }
+}
+
+fn supported_render_layouts_label(kinds: &[RenderLayoutKind]) -> String {
+    kinds.iter()
+        .map(|kind| render_layout_kind_label(*kind))
+        .collect::<Vec<_>>()
+        .join(" and ")
+}
+
+fn value_kind_label(kind: ValueKind) -> &'static str {
+    match kind {
+        ValueKind::Any => "generic",
+        ValueKind::Float => "float",
+        ValueKind::String => "string",
+        ValueKind::FloatTensor => "tensor",
+        ValueKind::Color => "color",
+        ValueKind::LedLayout => "layout",
+        ValueKind::ColorFrame => "frame",
+        ValueKind::MappedFrame => "mapped frame",
+    }
+}
+
+fn render_layout_requirements_are_invalid(
+    snarl: &Snarl<EditorSnarlNode>,
+    wires: &[(OutPinId, InPinId)],
+    available_node_definitions: &[NodeSchema],
+) -> bool {
+    render_layout_connection_diagnostic(snarl, wires, available_node_definitions).is_some()
+}
+
+fn sink_render_layout_kind(node: &EditorSnarlNode) -> Option<RenderLayoutKind> {
+    match node.node_type_id.as_str() {
+        NodeTypeId::WLED_TARGET => {
+            if bool_parameter(&node.parameters, "use_spatial") {
+                Some(RenderLayoutKind::Spatial3d)
+            } else {
+                Some(RenderLayoutKind::Index1d)
+            }
+        }
+        NodeTypeId::WLED_DUMMY_DISPLAY | NodeTypeId::MAP_TO_LAYOUT => {
+            if bool_parameter(&node.parameters, "use_spatial") {
+                Some(RenderLayoutKind::Spatial3d)
+            } else {
+                let width = integer_parameter(&node.parameters, "width").unwrap_or(8);
+                let height = integer_parameter(&node.parameters, "height").unwrap_or(8);
+                if width > 1 && height > 1 {
+                    Some(RenderLayoutKind::Matrix2d)
+                } else {
+                    Some(RenderLayoutKind::Index1d)
+                }
+            }
+        }
+        _ => None,
+    }
+}
+
+fn bool_parameter(parameters: &[shared::NodeParameter], name: &str) -> bool {
+    parameters
+        .iter()
+        .find(|parameter| parameter.name == name)
+        .and_then(|parameter| parameter.value.as_bool())
+        .unwrap_or(false)
+}
+
+fn integer_parameter(parameters: &[shared::NodeParameter], name: &str) -> Option<usize> {
+    parameters
+        .iter()
+        .find(|parameter| parameter.name == name)
+        .and_then(|parameter| parameter.value.as_u64())
+        .map(|value| value as usize)
 }
 
 fn infer_node_output(
@@ -585,6 +959,8 @@ pub(super) fn show_snarl_canvas(
     mqtt_broker_configs: &[MqttBrokerConfig],
     node_menu_search: &str,
     node_menu_graph_position: Option<egui::Pos2>,
+    highlighted_invalid_input: Option<&(String, String)>,
+    highlighted_invalid_message: Option<&str>,
     apply_document_viewport: bool,
     focus_requested: bool,
 ) -> (
@@ -596,6 +972,9 @@ pub(super) fn show_snarl_canvas(
     String,
     Option<egui::Pos2>,
     Option<(String, String)>,
+    Option<(String, String)>,
+    Option<String>,
+    Option<ConnectionRejectionInfo>,
 ) {
     let canvas_size = ui.available_size();
     if focus_requested {
@@ -625,8 +1004,13 @@ pub(super) fn show_snarl_canvas(
         diagnostic_summaries: diagnostic_summaries.clone(),
         opened_diagnostics_node_id: None,
         requested_image_upload: None,
+        requested_layout_upload: None,
+        requested_preview_node_id: None,
         node_menu_search: node_menu_search.to_owned(),
         requested_graph_menu_pos: None,
+        highlighted_invalid_input: highlighted_invalid_input.cloned(),
+        highlighted_invalid_message: highlighted_invalid_message.map(str::to_owned),
+        rejected_connection: None,
     };
     let style = SnarlStyle {
         collapsible: Some(true),
@@ -711,6 +1095,9 @@ pub(super) fn show_snarl_canvas(
         viewer.node_menu_search,
         next_node_menu_graph_position,
         viewer.requested_image_upload,
+        viewer.requested_layout_upload,
+        viewer.requested_preview_node_id,
+        viewer.rejected_connection,
     )
 }
 
@@ -765,9 +1152,15 @@ fn pin_info_for_inference(inference: &OutputInference) -> PinInfo {
             ValueKind::Color => egui::Color32::from_rgb(198, 120, 221),
             ValueKind::LedLayout => egui::Color32::from_rgb(224, 108, 117),
             ValueKind::ColorFrame => egui::Color32::from_rgb(152, 195, 121),
+            ValueKind::MappedFrame => egui::Color32::from_rgb(86, 156, 214),
         },
     };
 
+    PinInfo::circle().with_fill(color).with_wire_color(color)
+}
+
+fn invalid_connection_pin_info() -> PinInfo {
+    let color = egui::Color32::from_rgb(220, 70, 70);
     PinInfo::circle().with_fill(color).with_wire_color(color)
 }
 
@@ -863,7 +1256,10 @@ mod tests {
     use egui_snarl::Snarl;
 
     use super::{
-        infer_node_output, infer_node_output_kind, node_menu_categories, propagate_inferred_outputs,
+        GraphSnarlViewer, candidate_wires, cycle_connection_diagnostic, infer_node_output,
+        infer_node_output_kind, node_menu_categories, propagate_inferred_outputs,
+        render_layout_connection_diagnostic, render_layout_requirements_are_invalid,
+        transform_cycle_connection_diagnostic,
     };
     use crate::editor_view::model::editor_node_from_definition;
     use shared::{
@@ -877,6 +1273,10 @@ mod tests {
             display_name: display_name.to_owned(),
             category,
             needs_io: false,
+            render_layouts: vec![
+                shared::RenderLayoutKind::Index1d,
+                shared::RenderLayoutKind::Matrix2d,
+            ],
             inputs: vec![NodeInputDefinition {
                 name: "value".to_owned(),
                 display_name: "Value".to_owned(),
@@ -896,6 +1296,31 @@ mod tests {
                 require_value_kind_match: true,
             },
             runtime_updates: None,
+        }
+    }
+
+    fn test_viewer(
+        snarl: &Snarl<crate::editor_view::EditorSnarlNode>,
+        definitions: &[NodeSchema],
+    ) -> GraphSnarlViewer {
+        GraphSnarlViewer {
+            initial_transform: None,
+            current_transform: None,
+            wled_instances: Vec::new(),
+            mqtt_broker_configs: Vec::new(),
+            available_node_definitions: definitions.to_vec(),
+            inferred_outputs: propagate_inferred_outputs(snarl, definitions),
+            plot_history: std::collections::HashMap::new(),
+            diagnostic_summaries: std::collections::HashMap::new(),
+            opened_diagnostics_node_id: None,
+            requested_image_upload: None,
+            requested_layout_upload: None,
+            requested_preview_node_id: None,
+            node_menu_search: String::new(),
+            requested_graph_menu_pos: None,
+            highlighted_invalid_input: None,
+            highlighted_invalid_message: None,
+            rejected_connection: None,
         }
     }
 
@@ -1135,5 +1560,654 @@ mod tests {
         );
 
         assert!(matches!(inferred, Some(OutputInference::Invalid { .. })));
+    }
+
+    #[test]
+    fn render_layout_validation_rejects_legacy_node_for_spatial_sink() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let rainbow = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "rainbow".to_owned(),
+                "Linear Sweep".to_owned(),
+                NodeTypeId::RAINBOW_SWEEP.to_owned(),
+                &definitions,
+            ),
+        );
+        let dummy = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "dummy".to_owned(),
+                "Dummy".to_owned(),
+                NodeTypeId::WLED_DUMMY_DISPLAY.to_owned(),
+                &definitions,
+            ),
+        );
+        snarl[dummy]
+            .parameters
+            .iter_mut()
+            .find(|parameter| parameter.name == "use_spatial")
+            .expect("use_spatial parameter")
+            .value = serde_json::json!(true);
+        let wires = vec![(
+            egui_snarl::OutPinId {
+                node: rainbow,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: dummy,
+                input: 0,
+            },
+        )];
+
+        assert!(render_layout_requirements_are_invalid(
+            &snarl,
+            &wires,
+            &definitions
+        ));
+    }
+
+    #[test]
+    fn render_layout_validation_accepts_spatial_capable_node_for_spatial_sink() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let solid = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "solid".to_owned(),
+                "Solid".to_owned(),
+                NodeTypeId::SOLID_FRAME.to_owned(),
+                &definitions,
+            ),
+        );
+        let dummy = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "dummy".to_owned(),
+                "Dummy".to_owned(),
+                NodeTypeId::WLED_DUMMY_DISPLAY.to_owned(),
+                &definitions,
+            ),
+        );
+        snarl[dummy]
+            .parameters
+            .iter_mut()
+            .find(|parameter| parameter.name == "use_spatial")
+            .expect("use_spatial parameter")
+            .value = serde_json::json!(true);
+        let wires = vec![(
+            egui_snarl::OutPinId {
+                node: solid,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: dummy,
+                input: 0,
+            },
+        )];
+
+        assert!(!render_layout_requirements_are_invalid(
+            &snarl,
+            &wires,
+            &definitions
+        ));
+    }
+
+    #[test]
+    fn mix_color_to_transform_reports_spatial_gaussian_blur_conflict() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let circle = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "circle".to_owned(),
+                "Circle Sweep".to_owned(),
+                NodeTypeId::CIRCLE_SWEEP.to_owned(),
+                &definitions,
+            ),
+        );
+        let mix = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "mix".to_owned(),
+                "Mix Color".to_owned(),
+                NodeTypeId::MIX_COLOR.to_owned(),
+                &definitions,
+            ),
+        );
+        let transform = snarl.insert_node(
+            egui::pos2(200.0, 0.0),
+            editor_node_from_definition(
+                "transform".to_owned(),
+                "Transform".to_owned(),
+                NodeTypeId::TRANSFORM.to_owned(),
+                &definitions,
+            ),
+        );
+        let blur = snarl.insert_node(
+            egui::pos2(100.0, 100.0),
+            editor_node_from_definition(
+                "blur".to_owned(),
+                "Gaussian Blur".to_owned(),
+                NodeTypeId::GAUSSIAN_BLUR.to_owned(),
+                &definitions,
+            ),
+        );
+        let map = snarl.insert_node(
+            egui::pos2(300.0, 0.0),
+            editor_node_from_definition(
+                "map".to_owned(),
+                "Map To Layout".to_owned(),
+                NodeTypeId::MAP_TO_LAYOUT.to_owned(),
+                &definitions,
+            ),
+        );
+
+        snarl[map]
+            .parameters
+            .iter_mut()
+            .find(|parameter| parameter.name == "use_spatial")
+            .expect("use_spatial parameter")
+            .value = serde_json::json!(true);
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: transform,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: map,
+                input: 0,
+            },
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: circle,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: mix,
+                input: 0,
+            },
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: circle,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: blur,
+                input: 0,
+            },
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: blur,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: mix,
+                input: 1,
+            },
+        );
+
+        let wires = candidate_wires(
+            &snarl,
+            egui_snarl::OutPinId {
+                node: mix,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: transform,
+                input: 0,
+            },
+            1,
+        );
+        let diagnostic = render_layout_connection_diagnostic(&snarl, &wires, &definitions)
+            .expect("render-layout diagnostic");
+
+        assert_eq!(
+            diagnostic.diagnostic.code.as_deref(),
+            Some("editor.connection_render_layout_mismatch")
+        );
+        assert!(diagnostic.diagnostic.message.contains("Gaussian Blur"));
+        assert!(diagnostic.diagnostic.message.contains("Spatial3d"));
+    }
+
+    #[test]
+    fn kind_mismatch_returns_connection_diagnostic() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let color = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "color".to_owned(),
+                "Color Constant".to_owned(),
+                NodeTypeId::COLOR_CONSTANT.to_owned(),
+                &definitions,
+            ),
+        );
+        let transform = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "transform".to_owned(),
+                "Transform".to_owned(),
+                NodeTypeId::TRANSFORM.to_owned(),
+                &definitions,
+            ),
+        );
+        let viewer = test_viewer(&snarl, &definitions);
+        let from_definition = definitions
+            .iter()
+            .find(|definition| definition.id == NodeTypeId::COLOR_CONSTANT)
+            .expect("color definition");
+        let to_definition = definitions
+            .iter()
+            .find(|definition| definition.id == NodeTypeId::TRANSFORM)
+            .expect("transform definition");
+        let diagnostics = viewer
+            .validate_candidate_connection(
+                egui_snarl::OutPinId {
+                    node: color,
+                    output: 0,
+                },
+                egui_snarl::InPinId {
+                    node: transform,
+                    input: 0,
+                },
+                ValueKind::Color,
+                from_definition.output_port("color").expect("output"),
+                to_definition.input_port("frame").expect("input"),
+                1,
+                0,
+                &snarl,
+            )
+            .expect_err("kind mismatch");
+
+        assert_eq!(
+            diagnostics[0].diagnostic.code.as_deref(),
+            Some("editor.connection_kind_mismatch")
+        );
+    }
+
+    #[test]
+    fn cycle_without_delay_returns_cycle_rejection() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let add = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "add".to_owned(),
+                "Add".to_owned(),
+                NodeTypeId::ADD.to_owned(),
+                &definitions,
+            ),
+        );
+        let multiply = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "multiply".to_owned(),
+                "Multiply".to_owned(),
+                NodeTypeId::MULTIPLY.to_owned(),
+                &definitions,
+            ),
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: add,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: multiply,
+                input: 0,
+            },
+        );
+
+        let wires = candidate_wires(
+            &snarl,
+            egui_snarl::OutPinId {
+                node: multiply,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: add,
+                input: 0,
+            },
+            1,
+        );
+        let diagnostic = cycle_connection_diagnostic(&snarl, &wires).expect("cycle diagnostic");
+
+        assert_eq!(
+            diagnostic.diagnostic.code.as_deref(),
+            Some("editor.connection_cycle")
+        );
+    }
+
+    #[test]
+    fn transform_cycle_returns_transform_specific_rejection() {
+        let definitions = node_definitions();
+        let mut snarl = Snarl::new();
+        let transform = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "transform".to_owned(),
+                "Transform".to_owned(),
+                NodeTypeId::TRANSFORM.to_owned(),
+                &definitions,
+            ),
+        );
+        let delay = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "delay".to_owned(),
+                "Delay".to_owned(),
+                NodeTypeId::DELAY.to_owned(),
+                &definitions,
+            ),
+        );
+        snarl[delay]
+            .parameters
+            .iter_mut()
+            .find(|parameter| parameter.name == "initial_type")
+            .expect("delay initial_type")
+            .value = serde_json::json!("colorframe");
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: transform,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: delay,
+                input: 0,
+            },
+        );
+
+        let wires = candidate_wires(
+            &snarl,
+            egui_snarl::OutPinId {
+                node: delay,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: transform,
+                input: 0,
+            },
+            1,
+        );
+        let diagnostic =
+            transform_cycle_connection_diagnostic(&snarl, &wires).expect("transform cycle");
+
+        assert_eq!(
+            diagnostic.diagnostic.code.as_deref(),
+            Some("editor.connection_transform_cycle")
+        );
+    }
+
+    #[test]
+    fn input_capacity_returns_full_diagnostic_when_no_higher_priority_failure_exists() {
+        let definitions = vec![
+            NodeSchema {
+                inputs: vec![],
+                outputs: vec![NodeOutputDefinition {
+                    name: "value".to_owned(),
+                    display_name: "Value".to_owned(),
+                    value_kind: ValueKind::Float,
+                    accepted_kinds: vec![],
+                }],
+                ..test_node("inputs.float", NodeCategory::Inputs, "Float Source")
+            },
+            NodeSchema {
+                id: "math.multi_input".to_owned(),
+                display_name: "Multi Input".to_owned(),
+                category: NodeCategory::Math,
+                needs_io: false,
+                render_layouts: vec![
+                    shared::RenderLayoutKind::Index1d,
+                    shared::RenderLayoutKind::Matrix2d,
+                ],
+                inputs: vec![NodeInputDefinition {
+                    name: "value".to_owned(),
+                    display_name: "Value".to_owned(),
+                    value_kind: ValueKind::Float,
+                    accepted_kinds: vec![],
+                    default_value: None,
+                }],
+                outputs: vec![NodeOutputDefinition {
+                    name: "value".to_owned(),
+                    display_name: "Value".to_owned(),
+                    value_kind: ValueKind::Float,
+                    accepted_kinds: vec![],
+                }],
+                parameters: vec![],
+                connection: NodeConnectionDefinition {
+                    max_input_connections: 2,
+                    require_value_kind_match: true,
+                },
+                runtime_updates: None,
+            },
+        ];
+        let mut snarl = Snarl::new();
+        let source_a = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "source_a".to_owned(),
+                "Float Source".to_owned(),
+                "inputs.float".to_owned(),
+                &definitions,
+            ),
+        );
+        let source_b = snarl.insert_node(
+            egui::pos2(0.0, 100.0),
+            editor_node_from_definition(
+                "source_b".to_owned(),
+                "Float Source".to_owned(),
+                "inputs.float".to_owned(),
+                &definitions,
+            ),
+        );
+        let source_c = snarl.insert_node(
+            egui::pos2(0.0, 200.0),
+            editor_node_from_definition(
+                "source_c".to_owned(),
+                "Float Source".to_owned(),
+                "inputs.float".to_owned(),
+                &definitions,
+            ),
+        );
+        let target = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "target".to_owned(),
+                "Multi Input".to_owned(),
+                "math.multi_input".to_owned(),
+                &definitions,
+            ),
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: source_a,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: target,
+                input: 0,
+            },
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: source_b,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: target,
+                input: 0,
+            },
+        );
+        let viewer = test_viewer(&snarl, &definitions);
+        let source_definition = definitions
+            .iter()
+            .find(|definition| definition.id == "inputs.float")
+            .expect("source definition");
+        let target_definition = definitions
+            .iter()
+            .find(|definition| definition.id == "math.multi_input")
+            .expect("target definition");
+        let diagnostics = viewer
+            .validate_candidate_connection(
+                egui_snarl::OutPinId {
+                    node: source_c,
+                    output: 0,
+                },
+                egui_snarl::InPinId {
+                    node: target,
+                    input: 0,
+                },
+                ValueKind::Float,
+                source_definition.output_port("value").expect("output"),
+                target_definition.input_port("value").expect("input"),
+                2,
+                2,
+                &snarl,
+            )
+            .expect_err("input full");
+
+        assert_eq!(
+            diagnostics[0].diagnostic.code.as_deref(),
+            Some("editor.connection_input_full")
+        );
+    }
+
+    #[test]
+    fn reason_priority_prefers_kind_mismatch_over_input_capacity() {
+        let definitions = vec![
+            NodeSchema {
+                inputs: vec![],
+                outputs: vec![NodeOutputDefinition {
+                    name: "color".to_owned(),
+                    display_name: "Color".to_owned(),
+                    value_kind: ValueKind::Color,
+                    accepted_kinds: vec![],
+                }],
+                ..test_node("inputs.color", NodeCategory::Inputs, "Color Source")
+            },
+            NodeSchema {
+                id: "math.multi_input".to_owned(),
+                display_name: "Multi Input".to_owned(),
+                category: NodeCategory::Math,
+                needs_io: false,
+                render_layouts: vec![
+                    shared::RenderLayoutKind::Index1d,
+                    shared::RenderLayoutKind::Matrix2d,
+                ],
+                inputs: vec![NodeInputDefinition {
+                    name: "value".to_owned(),
+                    display_name: "Value".to_owned(),
+                    value_kind: ValueKind::Float,
+                    accepted_kinds: vec![],
+                    default_value: None,
+                }],
+                outputs: vec![NodeOutputDefinition {
+                    name: "value".to_owned(),
+                    display_name: "Value".to_owned(),
+                    value_kind: ValueKind::Float,
+                    accepted_kinds: vec![],
+                }],
+                parameters: vec![],
+                connection: NodeConnectionDefinition {
+                    max_input_connections: 2,
+                    require_value_kind_match: true,
+                },
+                runtime_updates: None,
+            },
+        ];
+        let mut snarl = Snarl::new();
+        let source_a = snarl.insert_node(
+            egui::pos2(0.0, 0.0),
+            editor_node_from_definition(
+                "source_a".to_owned(),
+                "Color Source".to_owned(),
+                "inputs.color".to_owned(),
+                &definitions,
+            ),
+        );
+        let source_b = snarl.insert_node(
+            egui::pos2(0.0, 100.0),
+            editor_node_from_definition(
+                "source_b".to_owned(),
+                "Color Source".to_owned(),
+                "inputs.color".to_owned(),
+                &definitions,
+            ),
+        );
+        let source_c = snarl.insert_node(
+            egui::pos2(0.0, 200.0),
+            editor_node_from_definition(
+                "source_c".to_owned(),
+                "Color Source".to_owned(),
+                "inputs.color".to_owned(),
+                &definitions,
+            ),
+        );
+        let target = snarl.insert_node(
+            egui::pos2(100.0, 0.0),
+            editor_node_from_definition(
+                "target".to_owned(),
+                "Multi Input".to_owned(),
+                "math.multi_input".to_owned(),
+                &definitions,
+            ),
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: source_a,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: target,
+                input: 0,
+            },
+        );
+        snarl.connect(
+            egui_snarl::OutPinId {
+                node: source_b,
+                output: 0,
+            },
+            egui_snarl::InPinId {
+                node: target,
+                input: 0,
+            },
+        );
+        let viewer = test_viewer(&snarl, &definitions);
+        let source_definition = definitions
+            .iter()
+            .find(|definition| definition.id == "inputs.color")
+            .expect("source definition");
+        let target_definition = definitions
+            .iter()
+            .find(|definition| definition.id == "math.multi_input")
+            .expect("target definition");
+        let diagnostics = viewer
+            .validate_candidate_connection(
+                egui_snarl::OutPinId {
+                    node: source_c,
+                    output: 0,
+                },
+                egui_snarl::InPinId {
+                    node: target,
+                    input: 0,
+                },
+                ValueKind::Color,
+                source_definition.output_port("color").expect("output"),
+                target_definition.input_port("value").expect("input"),
+                2,
+                2,
+                &snarl,
+            )
+            .expect_err("rejected connection");
+
+        assert_eq!(
+            diagnostics[0].diagnostic.code.as_deref(),
+            Some("editor.connection_kind_mismatch")
+        );
     }
 }

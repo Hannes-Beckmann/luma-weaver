@@ -1,8 +1,8 @@
 use anyhow::Result;
-use shared::{ColorFrame, NodeDiagnostic, NodeDiagnosticSeverity};
+use shared::{InputValue, NodeDiagnostic, NodeDiagnosticSeverity};
 
 use crate::node_runtime::{
-    NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
+    AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters, RuntimeOutputs,
     TypedNodeEvaluation,
 };
 
@@ -12,7 +12,7 @@ pub(crate) struct FrameBrightnessNode;
 impl RuntimeNodeFromParameters for FrameBrightnessNode {}
 
 pub(crate) struct FrameBrightnessInputs {
-    frame: Option<ColorFrame>,
+    frame: Option<AnyInputValue>,
     factor: f32,
 }
 
@@ -22,7 +22,7 @@ crate::node_runtime::impl_runtime_inputs!(FrameBrightnessInputs {
 });
 
 pub(crate) struct FrameBrightnessOutputs {
-    frame: Option<ColorFrame>,
+    frame: Option<InputValue>,
 }
 
 impl RuntimeOutputs for FrameBrightnessOutputs {
@@ -31,7 +31,7 @@ impl RuntimeOutputs for FrameBrightnessOutputs {
     ) -> anyhow::Result<std::collections::HashMap<String, shared::InputValue>> {
         let mut outputs = std::collections::HashMap::new();
         if let Some(frame) = self.frame {
-            outputs.insert("frame".to_owned(), shared::InputValue::ColorFrame(frame));
+            outputs.insert("frame".to_owned(), frame);
         }
         Ok(outputs)
     }
@@ -47,7 +47,7 @@ impl RuntimeNode for FrameBrightnessNode {
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let mut diagnostics = Vec::new();
-        let Some(mut frame) = inputs.frame else {
+        let Some(mut frame) = inputs.frame.map(|value| value.0) else {
             return Ok(TypedNodeEvaluation::from_outputs(FrameBrightnessOutputs {
                 frame: None,
             }));
@@ -64,7 +64,11 @@ impl RuntimeNode for FrameBrightnessNode {
                 ),
             });
         }
-        for pixel in &mut frame.pixels {
+        for pixel in &mut frame
+            .as_frame_mut()
+            .expect("frame brightness only accepts frame values")
+            .pixels
+        {
             pixel.r = (pixel.r * factor).clamp(0.0, 1.0);
             pixel.g = (pixel.g * factor).clamp(0.0, 1.0);
             pixel.b = (pixel.b * factor).clamp(0.0, 1.0);
@@ -81,7 +85,7 @@ impl RuntimeNode for FrameBrightnessNode {
 #[cfg(test)]
 mod tests {
     use super::{FrameBrightnessInputs, FrameBrightnessNode};
-    use crate::node_runtime::{NodeEvaluationContext, RuntimeNode};
+    use crate::node_runtime::{AnyInputValue, NodeEvaluationContext, RuntimeNode};
     use shared::{ColorFrame, LedLayout, RgbaColor};
 
     #[test]
@@ -90,9 +94,12 @@ mod tests {
         let input_frame = ColorFrame {
             layout: LedLayout {
                 id: "frame-brightness-default".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 1,
                 width: Some(1),
                 height: Some(1),
+                points_3d: None,
             },
             pixels: vec![RgbaColor {
                 r: 0.25,
@@ -111,14 +118,20 @@ mod tests {
                     render_layout: None,
                 },
                 FrameBrightnessInputs {
-                    frame: Some(input_frame.clone()),
+                    frame: Some(AnyInputValue(shared::InputValue::ColorFrame(
+                        input_frame.clone(),
+                    ))),
                     factor: 1.0,
                 },
             )
             .expect("frame brightness evaluation should succeed");
 
         assert_eq!(
-            evaluation.outputs.frame.as_ref(),
+            evaluation
+                .outputs
+                .frame
+                .as_ref()
+                .and_then(shared::InputValue::as_frame),
             Some(&input_frame),
             "default frame brightness factor should be neutral"
         );

@@ -93,7 +93,7 @@ impl FromInputValue for ColorFrame {
     /// Extracts a color-frame input.
     fn from_input_value(value: &InputValue) -> Result<Self> {
         match value {
-            InputValue::ColorFrame(value) => Ok(value.clone()),
+            InputValue::ColorFrame(value) | InputValue::MappedFrame(value) => Ok(value.clone()),
             _ => anyhow::bail!("expected ColorFrame input"),
         }
     }

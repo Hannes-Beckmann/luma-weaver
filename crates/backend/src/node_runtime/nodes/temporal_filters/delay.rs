@@ -175,11 +175,25 @@ fn zero_like(value: &InputValue) -> InputValue {
         }),
         InputValue::LedLayout(layout) => InputValue::LedLayout(LedLayout {
             id: layout.id.clone(),
+            role: layout.role,
             pixel_count: layout.pixel_count,
             width: layout.width,
             height: layout.height,
+            points_3d: layout.points_3d.clone(),
         }),
         InputValue::ColorFrame(frame) => InputValue::ColorFrame(ColorFrame {
+            layout: frame.layout.clone(),
+            pixels: vec![
+                RgbaColor {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 0.0,
+                };
+                frame.pixels.len()
+            ],
+        }),
+        InputValue::MappedFrame(frame) => InputValue::MappedFrame(ColorFrame {
             layout: frame.layout.clone(),
             pixels: vec![
                 RgbaColor {
@@ -197,9 +211,11 @@ fn zero_like(value: &InputValue) -> InputValue {
 fn initial_layout(layout: Option<&LedLayout>) -> LedLayout {
     layout.cloned().unwrap_or(LedLayout {
         id: "delay.initial".to_owned(),
+        role: ::shared::LedLayoutRole::RenderTarget,
         pixel_count: 0,
         width: None,
         height: None,
+        points_3d: None,
     })
 }
 
@@ -242,9 +258,12 @@ mod tests {
         let mut node = DelayNode::default();
         let layout = LedLayout {
             id: "test".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 2,
             width: None,
             height: None,
+            points_3d: None,
         };
         let input = InputValue::ColorFrame(shared::ColorFrame {
             layout: layout.clone(),
@@ -289,9 +308,12 @@ mod tests {
     fn disconnected_delay_uses_selected_tensor_initial_type() {
         let context = evaluation_context(Some(LedLayout {
             id: "panel".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 6,
             width: Some(3),
             height: Some(2),
+            points_3d: None,
         }));
 
         assert_eq!(
@@ -307,9 +329,12 @@ mod tests {
     fn disconnected_delay_uses_selected_frame_initial_type() {
         let context = evaluation_context(Some(LedLayout {
             id: "strip".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 4,
             width: None,
             height: None,
+            points_3d: None,
         }));
 
         assert_eq!(
@@ -317,9 +342,12 @@ mod tests {
             InputValue::ColorFrame(shared::ColorFrame {
                 layout: LedLayout {
                     id: "strip".to_owned(),
+
+                    role: ::shared::LedLayoutRole::RenderTarget,
                     pixel_count: 4,
                     width: None,
                     height: None,
+                    points_3d: None,
                 },
                 pixels: vec![
                     RgbaColor {

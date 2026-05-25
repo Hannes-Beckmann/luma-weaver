@@ -58,11 +58,12 @@ impl RuntimeNode for GaussianBlurNode {
         let radius = inputs.radius.round().clamp(0.0, 255.0) as u32;
         let output = match value.0 {
             InputValue::ColorFrame(frame) => InputValue::ColorFrame(blur_frame(frame, radius)?),
+            InputValue::MappedFrame(frame) => InputValue::MappedFrame(blur_frame(frame, radius)?),
             InputValue::FloatTensor(tensor) => {
                 InputValue::FloatTensor(blur_tensor(tensor, radius)?)
             }
             other => bail!(
-                "gaussian blur expects ColorFrame or FloatTensor input, got {:?}",
+                "gaussian blur expects ColorFrame, MappedFrame, or FloatTensor input, got {:?}",
                 other.value_kind()
             ),
         };

@@ -248,6 +248,22 @@ fn build_registry(target: NodeExecutionTarget) -> anyhow::Result<Arc<NodeRegistr
         NodeTypeId::TINT_FRAME,
         nodes::frame_operations::tint_frame::TintFrameNode
     );
+    registry.register(RegisteredNodeType {
+        definition: definitions_by_id
+            .get(NodeTypeId::TRANSFORM)
+            .cloned()
+            .expect("node definition must exist"),
+        evaluator_factory: nodes::frame_operations::transform::build_transform_evaluator,
+        diagnostics_factory: nodes::frame_operations::transform::transform_construction_diagnostics,
+    })?;
+    register_node!(
+        NodeTypeId::MAP_TO_LAYOUT,
+        nodes::frame_operations::map_to_layout::MapToLayoutNode
+    );
+    register_node!(
+        NodeTypeId::FILL_FROM_FRAME,
+        nodes::frame_operations::fill_from_frame::FillFromFrameNode
+    );
     register_node!(
         NodeTypeId::MASK_FRAME,
         nodes::frame_operations::mask_frame::MaskFrameNode
@@ -432,6 +448,10 @@ mod tests {
                 display_name: "Custom Test".to_owned(),
                 category: NodeCategory::Debug,
                 needs_io: false,
+                render_layouts: vec![
+                    shared::RenderLayoutKind::Index1d,
+                    shared::RenderLayoutKind::Matrix2d,
+                ],
                 inputs: Vec::new(),
                 outputs: vec![shared::NodeOutputDefinition {
                     name: "value".to_owned(),

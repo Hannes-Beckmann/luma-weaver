@@ -199,6 +199,15 @@ pub enum ServerMessage {
     },
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+/// Represents one spatial sink frame for the live all-sink 3D preview.
+pub struct SinkPreviewFrame {
+    pub sink_node_id: String,
+    pub sink_node_name: String,
+    pub layout: LedLayout,
+    pub pixels: Vec<crate::RgbaColor>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
 /// Orders node diagnostics by severity for summaries, UI rendering, and sorting.
@@ -275,9 +284,16 @@ pub enum NodeRuntimeUpdateValue {
 /// Magic bytes that identify the binary frame transport used for large runtime frame updates.
 const BINARY_FRAME_MAGIC: [u8; 4] = *b"AFB1";
 /// Current version of the binary frame message format.
-const BINARY_FRAME_VERSION: u8 = 1;
+const BINARY_FRAME_VERSION: u8 = 3;
 /// Message kind tag for binary runtime frame updates.
 const BINARY_FRAME_KIND_RUNTIME_UPDATE: u8 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Distinguishes the frame-valued variants that can use the binary runtime frame transport.
+pub enum BinaryFrameValueKind {
+    ColorFrame,
+    MappedFrame,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 /// Encodes a frame runtime update in a compact binary format.
@@ -288,6 +304,7 @@ pub struct BinaryRuntimeFrameMessage {
     pub graph_id: String,
     pub node_id: String,
     pub name: String,
+    pub value_kind: BinaryFrameValueKind,
     pub layout: LedLayout,
     pub rgba: Vec<u8>,
 }
@@ -299,13 +316,20 @@ impl BinaryRuntimeFrameMessage {
         let node_id = self.node_id.as_bytes();
         let name = self.name.as_bytes();
         let layout_id = self.layout.id.as_bytes();
+        let layout_points = self.layout.points_3d.as_deref().unwrap_or(&[]);
+        assert!(
+            layout_points.is_empty() || layout_points.len() == self.layout.pixel_count,
+            "binary runtime frame layout points must be empty or match pixel_count"
+        );
         let mut bytes = Vec::with_capacity(
             4 + 2
-                + (5 * 4)
+                + 2
+                + (8 * 4)
                 + graph_id.len()
                 + node_id.len()
                 + name.len()
                 + layout_id.len()
+                + (layout_points.len() * 3 * std::mem::size_of::<f32>())
                 + self.rgba.len(),
         );
         bytes.extend_from_slice(&BINARY_FRAME_MAGIC);
@@ -318,10 +342,18 @@ impl BinaryRuntimeFrameMessage {
         push_u32(&mut bytes, self.layout.width.unwrap_or(0));
         push_u32(&mut bytes, self.layout.height.unwrap_or(0));
         push_u32(&mut bytes, self.layout.pixel_count);
+        bytes.push(encode_frame_value_kind(self.value_kind));
+        bytes.push(encode_layout_role(self.layout.role));
+        push_u32(&mut bytes, layout_points.len());
         bytes.extend_from_slice(graph_id);
         bytes.extend_from_slice(node_id);
         bytes.extend_from_slice(name);
         bytes.extend_from_slice(layout_id);
+        for point in layout_points {
+            push_f32(&mut bytes, point.x);
+            push_f32(&mut bytes, point.y);
+            push_f32(&mut bytes, point.z);
+        }
         bytes.extend_from_slice(&self.rgba);
         bytes
     }
@@ -330,7 +362,7 @@ impl BinaryRuntimeFrameMessage {
     ///
     /// This validates the format magic, version, kind, declared lengths, and RGBA payload size.
     pub fn decode(bytes: &[u8]) -> Result<Self, String> {
-        if bytes.len() < 4 + 2 + (7 * 4) {
+        if bytes.len() < 4 + 2 + 2 + (8 * 4) {
             return Err("binary frame packet too short".to_owned());
         }
         if bytes[..4] != BINARY_FRAME_MAGIC {
@@ -354,11 +386,43 @@ impl BinaryRuntimeFrameMessage {
         let width = read_u32(bytes, &mut offset)?;
         let height = read_u32(bytes, &mut offset)?;
         let pixel_count = read_u32(bytes, &mut offset)? as usize;
+        let value_kind = decode_frame_value_kind(
+            *bytes.get(offset).ok_or_else(|| {
+                "binary frame packet truncated while reading value kind".to_owned()
+            })?,
+        )?;
+        offset += 1;
+        let role = decode_layout_role(
+            *bytes
+                .get(offset)
+                .ok_or_else(|| "binary frame packet truncated while reading role".to_owned())?,
+        )?;
+        offset += 1;
+        let point_count = read_u32(bytes, &mut offset)? as usize;
 
         let graph_id = read_utf8(bytes, &mut offset, graph_id_len, "graph_id")?;
         let node_id = read_utf8(bytes, &mut offset, node_id_len, "node_id")?;
         let name = read_utf8(bytes, &mut offset, name_len, "name")?;
         let layout_id = read_utf8(bytes, &mut offset, layout_id_len, "layout_id")?;
+        if point_count != 0 && point_count != pixel_count {
+            return Err(format!(
+                "binary frame point_count {} does not match pixel_count {}",
+                point_count, pixel_count
+            ));
+        }
+        let points_3d = if point_count == 0 {
+            None
+        } else {
+            let mut points = Vec::with_capacity(point_count);
+            for _ in 0..point_count {
+                points.push(crate::Vec3 {
+                    x: read_f32(bytes, &mut offset)?,
+                    y: read_f32(bytes, &mut offset)?,
+                    z: read_f32(bytes, &mut offset)?,
+                });
+            }
+            Some(points)
+        };
         let rgba = bytes
             .get(offset..)
             .ok_or_else(|| "binary frame rgba payload missing".to_owned())?
@@ -375,8 +439,10 @@ impl BinaryRuntimeFrameMessage {
             graph_id,
             node_id,
             name,
+            value_kind,
             layout: LedLayout {
                 id: layout_id,
+                role,
                 pixel_count,
                 width: if width == 0 {
                     None
@@ -388,6 +454,7 @@ impl BinaryRuntimeFrameMessage {
                 } else {
                     Some(height as usize)
                 },
+                points_3d,
             },
             rgba,
         })
@@ -410,10 +477,18 @@ impl BinaryRuntimeFrameMessage {
             node_id: self.node_id,
             values: vec![NodeRuntimeUpdateValue::Inline {
                 name: self.name,
-                value: InputValue::ColorFrame(crate::ColorFrame {
-                    layout: self.layout,
-                    pixels,
-                }),
+                value: match self.value_kind {
+                    BinaryFrameValueKind::ColorFrame => InputValue::ColorFrame(crate::ColorFrame {
+                        layout: self.layout,
+                        pixels,
+                    }),
+                    BinaryFrameValueKind::MappedFrame => {
+                        InputValue::MappedFrame(crate::ColorFrame {
+                            layout: self.layout,
+                            pixels,
+                        })
+                    }
+                },
             }],
         }
     }
@@ -424,6 +499,11 @@ fn push_u32(bytes: &mut Vec<u8>, value: usize) {
     bytes.extend_from_slice(&(value as u32).to_le_bytes());
 }
 
+/// Appends a little-endian `f32` field to a binary frame payload.
+fn push_f32(bytes: &mut Vec<u8>, value: f32) {
+    bytes.extend_from_slice(&value.to_le_bytes());
+}
+
 /// Reads a little-endian `u32` field from a binary frame payload and advances the cursor.
 fn read_u32(bytes: &[u8], offset: &mut usize) -> Result<u32, String> {
     let end = offset.saturating_add(4);
@@ -432,6 +512,53 @@ fn read_u32(bytes: &[u8], offset: &mut usize) -> Result<u32, String> {
         .ok_or_else(|| "binary frame packet truncated while reading u32".to_owned())?;
     *offset = end;
     Ok(u32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+}
+
+/// Reads a little-endian `f32` field from a binary frame payload and advances the cursor.
+fn read_f32(bytes: &[u8], offset: &mut usize) -> Result<f32, String> {
+    let end = offset.saturating_add(4);
+    let chunk = bytes
+        .get(*offset..end)
+        .ok_or_else(|| "binary frame packet truncated while reading f32".to_owned())?;
+    *offset = end;
+    Ok(f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+}
+
+/// Encodes the frame-valued variant into the binary frame wire format.
+fn encode_frame_value_kind(kind: BinaryFrameValueKind) -> u8 {
+    match kind {
+        BinaryFrameValueKind::ColorFrame => 0,
+        BinaryFrameValueKind::MappedFrame => 1,
+    }
+}
+
+/// Decodes the frame-valued variant from the binary frame wire format.
+fn decode_frame_value_kind(value: u8) -> Result<BinaryFrameValueKind, String> {
+    match value {
+        0 => Ok(BinaryFrameValueKind::ColorFrame),
+        1 => Ok(BinaryFrameValueKind::MappedFrame),
+        _ => Err(format!(
+            "binary frame packet value kind {} unsupported",
+            value
+        )),
+    }
+}
+
+/// Encodes the layout role into the binary frame wire format.
+fn encode_layout_role(role: crate::LedLayoutRole) -> u8 {
+    match role {
+        crate::LedLayoutRole::RenderTarget => 0,
+        crate::LedLayoutRole::Source => 1,
+    }
+}
+
+/// Decodes the layout role from the binary frame wire format.
+fn decode_layout_role(value: u8) -> Result<crate::LedLayoutRole, String> {
+    match value {
+        0 => Ok(crate::LedLayoutRole::RenderTarget),
+        1 => Ok(crate::LedLayoutRole::Source),
+        _ => Err(format!("binary frame packet role {} unsupported", value)),
+    }
 }
 
 /// Reads a UTF-8 string field of the given byte length from a binary frame payload.
@@ -456,8 +583,10 @@ pub struct WledInstance {
 
 #[cfg(test)]
 mod tests {
-    use super::{BinaryRuntimeFrameMessage, NodeRuntimeUpdateValue, ServerMessage};
-    use crate::{InputValue, LedLayout};
+    use super::{
+        BinaryFrameValueKind, BinaryRuntimeFrameMessage, NodeRuntimeUpdateValue, ServerMessage,
+    };
+    use crate::{InputValue, LedLayout, LedLayoutRole, Vec3};
 
     /// Tests that binary frame messages round-trip without losing header or payload data.
     #[test]
@@ -466,11 +595,14 @@ mod tests {
             graph_id: "graph".to_owned(),
             node_id: "node".to_owned(),
             name: "frame".to_owned(),
+            value_kind: BinaryFrameValueKind::ColorFrame,
             layout: LedLayout {
                 id: "layout".to_owned(),
+                role: crate::LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
+                points_3d: None,
             },
             rgba: vec![255, 128, 0, 255, 0, 64, 255, 128],
         };
@@ -487,11 +619,14 @@ mod tests {
             graph_id: "graph".to_owned(),
             node_id: "node".to_owned(),
             name: "frame".to_owned(),
+            value_kind: BinaryFrameValueKind::ColorFrame,
             layout: LedLayout {
                 id: "layout".to_owned(),
+                role: crate::LedLayoutRole::RenderTarget,
                 pixel_count: 1,
                 width: Some(1),
                 height: Some(1),
+                points_3d: None,
             },
             rgba: vec![255, 128, 0, 255],
         };
@@ -521,6 +656,188 @@ mod tests {
             }
             other => panic!("expected node runtime update, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn binary_runtime_frame_message_roundtrips_spatial_layout_metadata() {
+        let message = BinaryRuntimeFrameMessage {
+            graph_id: "graph".to_owned(),
+            node_id: "node".to_owned(),
+            name: "value (spatial-layout)".to_owned(),
+            value_kind: BinaryFrameValueKind::MappedFrame,
+            layout: LedLayout {
+                id: "spatial-layout".to_owned(),
+                role: LedLayoutRole::Source,
+                pixel_count: 2,
+                width: None,
+                height: None,
+                points_3d: Some(vec![
+                    Vec3 {
+                        x: 1.0,
+                        y: 2.0,
+                        z: 3.0,
+                    },
+                    Vec3 {
+                        x: -1.5,
+                        y: 0.25,
+                        z: 4.5,
+                    },
+                ]),
+            },
+            rgba: vec![255, 0, 0, 255, 0, 0, 255, 255],
+        };
+
+        let decoded = BinaryRuntimeFrameMessage::decode(&message.encode())
+            .expect("decode spatial binary runtime frame packet");
+        assert_eq!(decoded, message);
+    }
+
+    #[test]
+    fn binary_runtime_frame_message_converts_mapped_frames_into_server_message() {
+        let message = BinaryRuntimeFrameMessage {
+            graph_id: "graph".to_owned(),
+            node_id: "node".to_owned(),
+            name: "source_frame".to_owned(),
+            value_kind: BinaryFrameValueKind::MappedFrame,
+            layout: LedLayout {
+                id: "source-layout".to_owned(),
+                role: LedLayoutRole::Source,
+                pixel_count: 1,
+                width: Some(1),
+                height: Some(1),
+                points_3d: Some(vec![Vec3 {
+                    x: 1.0,
+                    y: 2.0,
+                    z: 3.0,
+                }]),
+            },
+            rgba: vec![255, 128, 0, 255],
+        };
+
+        let server_message = message.into_server_message();
+        match server_message {
+            ServerMessage::NodeRuntimeUpdate { values, .. } => match &values[0] {
+                NodeRuntimeUpdateValue::Inline { name, value } => {
+                    assert_eq!(name, "source_frame");
+                    match value {
+                        InputValue::MappedFrame(frame) => {
+                            assert_eq!(frame.layout.role, LedLayoutRole::Source);
+                            assert_eq!(frame.layout.points_3d.as_ref().map(Vec::len), Some(1));
+                            assert_eq!(frame.pixels.len(), 1);
+                        }
+                        other => panic!("expected mapped frame, got {other:?}"),
+                    }
+                }
+            },
+            other => panic!("expected node runtime update, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn binary_runtime_frame_message_rejects_invalid_role() {
+        let message = BinaryRuntimeFrameMessage {
+            graph_id: "graph".to_owned(),
+            node_id: "node".to_owned(),
+            name: "frame".to_owned(),
+            value_kind: BinaryFrameValueKind::ColorFrame,
+            layout: LedLayout {
+                id: "layout".to_owned(),
+                role: LedLayoutRole::RenderTarget,
+                pixel_count: 1,
+                width: Some(1),
+                height: Some(1),
+                points_3d: None,
+            },
+            rgba: vec![255, 128, 0, 255],
+        };
+        let mut bytes = message.encode();
+        let role_offset = 4 + 2 + (7 * 4) + 1;
+        bytes[role_offset] = 9;
+
+        let error = BinaryRuntimeFrameMessage::decode(&bytes).expect_err("reject invalid role");
+        assert!(error.contains("role"));
+    }
+
+    #[test]
+    fn binary_runtime_frame_message_rejects_invalid_value_kind() {
+        let message = BinaryRuntimeFrameMessage {
+            graph_id: "graph".to_owned(),
+            node_id: "node".to_owned(),
+            name: "frame".to_owned(),
+            value_kind: BinaryFrameValueKind::ColorFrame,
+            layout: LedLayout {
+                id: "layout".to_owned(),
+                role: LedLayoutRole::RenderTarget,
+                pixel_count: 1,
+                width: Some(1),
+                height: Some(1),
+                points_3d: None,
+            },
+            rgba: vec![255, 128, 0, 255],
+        };
+        let mut bytes = message.encode();
+        let value_kind_offset = 4 + 2 + (7 * 4);
+        bytes[value_kind_offset] = 9;
+
+        let error =
+            BinaryRuntimeFrameMessage::decode(&bytes).expect_err("reject invalid value kind");
+        assert!(error.contains("value kind"));
+    }
+
+    #[test]
+    fn binary_runtime_frame_message_rejects_mismatched_point_count() {
+        let message = BinaryRuntimeFrameMessage {
+            graph_id: "graph".to_owned(),
+            node_id: "node".to_owned(),
+            name: "frame".to_owned(),
+            value_kind: BinaryFrameValueKind::ColorFrame,
+            layout: LedLayout {
+                id: "layout".to_owned(),
+                role: LedLayoutRole::RenderTarget,
+                pixel_count: 2,
+                width: Some(2),
+                height: Some(1),
+                points_3d: None,
+            },
+            rgba: vec![255, 128, 0, 255, 0, 64, 255, 128],
+        };
+        let mut bytes = message.encode();
+        let point_count_offset = 4 + 2 + (7 * 4) + 2;
+        bytes[point_count_offset..point_count_offset + 4].copy_from_slice(&1u32.to_le_bytes());
+
+        let error = BinaryRuntimeFrameMessage::decode(&bytes).expect_err("reject point count");
+        assert!(error.contains("point_count"));
+    }
+
+    #[test]
+    fn binary_runtime_frame_message_rejects_truncated_spatial_points() {
+        let message = BinaryRuntimeFrameMessage {
+            graph_id: "graph".to_owned(),
+            node_id: "node".to_owned(),
+            name: "frame".to_owned(),
+            value_kind: BinaryFrameValueKind::ColorFrame,
+            layout: LedLayout {
+                id: "layout".to_owned(),
+                role: LedLayoutRole::RenderTarget,
+                pixel_count: 1,
+                width: None,
+                height: None,
+                points_3d: Some(vec![Vec3 {
+                    x: 1.0,
+                    y: 2.0,
+                    z: 3.0,
+                }]),
+            },
+            rgba: vec![255, 128, 0, 255],
+        };
+        let mut bytes = message.encode();
+        bytes.truncate(bytes.len() - 5);
+
+        let error =
+            BinaryRuntimeFrameMessage::decode(&bytes).expect_err("reject truncated point payload");
+        assert!(
+            error.contains("truncated while reading f32") || error.contains("rgba payload length")
+        );
     }
 
     /// Tests that persisted broker configs without the new broker-intent field still default to

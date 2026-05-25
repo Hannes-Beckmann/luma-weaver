@@ -69,6 +69,9 @@ impl RuntimeNode for LaplacianFilterNode {
             InputValue::ColorFrame(frame) => LaplacianFilterOutputs {
                 value: Some(InputValue::ColorFrame(self.filter_frame(frame))),
             },
+            InputValue::MappedFrame(frame) => LaplacianFilterOutputs {
+                value: Some(InputValue::MappedFrame(self.filter_frame(frame))),
+            },
             InputValue::FloatTensor(tensor) => {
                 let filtered = self.filter_tensor(tensor)?;
                 LaplacianFilterOutputs {
@@ -76,7 +79,7 @@ impl RuntimeNode for LaplacianFilterNode {
                 }
             }
             other => bail!(
-                "laplacian filter expects ColorFrame or FloatTensor input, got {:?}",
+                "laplacian filter expects ColorFrame, MappedFrame, or FloatTensor input, got {:?}",
                 other.value_kind()
             ),
         };
@@ -249,9 +252,12 @@ mod tests {
     fn layout(width: usize, height: usize) -> LedLayout {
         LedLayout {
             id: "laplacian-test".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: width * height,
             width: Some(width),
             height: Some(height),
+            points_3d: None,
         }
     }
 

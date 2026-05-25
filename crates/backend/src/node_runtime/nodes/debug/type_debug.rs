@@ -53,6 +53,10 @@ fn type_label(value: Option<&InputValue>) -> String {
             (Some(width), Some(height)) => format!("ColorFrame shape=[{}, {}]", height, width),
             _ => format!("ColorFrame shape=[{}]", frame.pixels.len()),
         },
+        Some(InputValue::MappedFrame(frame)) => match (frame.layout.width, frame.layout.height) {
+            (Some(width), Some(height)) => format!("MappedFrame shape=[{}, {}]", height, width),
+            _ => format!("MappedFrame shape=[{}]", frame.pixels.len()),
+        },
     }
 }
 
@@ -118,9 +122,12 @@ mod tests {
                     value: Some(AnyInputValue(InputValue::ColorFrame(shared::ColorFrame {
                         layout: shared::LedLayout {
                             id: "grid".to_owned(),
+
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 6,
                             width: Some(3),
                             height: Some(2),
+                            points_3d: None,
                         },
                         pixels: vec![
                             shared::RgbaColor {

@@ -341,19 +341,27 @@ pub(super) fn default_input_value(kind: ValueKind) -> InputValue {
         }),
         ValueKind::LedLayout => InputValue::LedLayout(shared::LedLayout {
             id: "default".to_owned(),
+            role: shared::LedLayoutRole::RenderTarget,
             pixel_count: 60,
             width: None,
             height: None,
+            points_3d: None,
         }),
-        ValueKind::ColorFrame => InputValue::ColorFrame(shared::ColorFrame {
-            layout: shared::LedLayout {
-                id: "default".to_owned(),
-                pixel_count: 0,
-                width: None,
-                height: None,
+        ValueKind::ColorFrame | ValueKind::MappedFrame => InputValue::from_frame_kind(
+            kind,
+            shared::ColorFrame {
+                layout: shared::LedLayout {
+                    id: "default".to_owned(),
+                    role: shared::LedLayoutRole::RenderTarget,
+                    pixel_count: 0,
+                    width: None,
+                    height: None,
+                    points_3d: None,
+                },
+                pixels: Vec::new(),
             },
-            pixels: Vec::new(),
-        }),
+        )
+        .expect("frame kind"),
     }
 }
 
@@ -370,6 +378,9 @@ pub(super) fn coerce_input_value_kind(value: InputValue, kind: ValueKind) -> Inp
         (ValueKind::Color, InputValue::Color(v)) => InputValue::Color(v),
         (ValueKind::LedLayout, InputValue::LedLayout(v)) => InputValue::LedLayout(v),
         (ValueKind::ColorFrame, InputValue::ColorFrame(v)) => InputValue::ColorFrame(v),
+        (ValueKind::ColorFrame, InputValue::MappedFrame(v)) => InputValue::ColorFrame(v),
+        (ValueKind::MappedFrame, InputValue::ColorFrame(v)) => InputValue::MappedFrame(v),
+        (ValueKind::MappedFrame, InputValue::MappedFrame(v)) => InputValue::MappedFrame(v),
         (expected_kind, _) => default_input_value(expected_kind),
     }
 }
@@ -406,7 +417,10 @@ pub(super) fn visible_parameter_definitions<'a>(
     definition
         .parameters
         .iter()
-        .filter(|parameter_definition| parameter_definition.is_visible(parameters))
+        .filter(|parameter_definition| {
+            parameter_definition.ui_hint != shared::ParameterUiHint::Hidden
+                && parameter_definition.is_visible(parameters)
+        })
         .collect()
 }
 
@@ -766,6 +780,10 @@ mod tests {
             display_name: "Test Visibility".to_owned(),
             category: NodeCategory::Debug,
             needs_io: false,
+            render_layouts: vec![
+                shared::RenderLayoutKind::Index1d,
+                shared::RenderLayoutKind::Matrix2d,
+            ],
             inputs: vec![],
             outputs: vec![],
             parameters: vec![

@@ -94,6 +94,7 @@ impl FrontendApp {
             if let Some(previous) = self.subscriptions.runtime_graph_subscription.take() {
                 self.send(ClientMessage::UnsubscribeGraphRuntime { graph_id: previous });
                 self.graphs.runtime_node_values.clear();
+                self.graphs.preview_frames_by_graph.clear();
             }
 
             if let Some(graph_id) = desired.clone() {
@@ -102,6 +103,7 @@ impl FrontendApp {
                 });
                 self.subscriptions.runtime_graph_subscription = Some(graph_id);
                 self.graphs.runtime_node_values.clear();
+                self.graphs.preview_frames_by_graph.clear();
             }
         }
 

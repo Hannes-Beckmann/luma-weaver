@@ -89,6 +89,7 @@ fn value_kind(value: &InputValue) -> ValueKind {
         InputValue::Color(_) => ValueKind::Color,
         InputValue::LedLayout(_) => ValueKind::LedLayout,
         InputValue::ColorFrame(_) => ValueKind::ColorFrame,
+        InputValue::MappedFrame(_) => ValueKind::MappedFrame,
     }
 }
 
@@ -159,9 +160,12 @@ mod tests {
         let other_frame = InputValue::ColorFrame(ColorFrame {
             layout: LedLayout {
                 id: "frame".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
+                points_3d: None,
             },
             pixels: vec![
                 RgbaColor {
@@ -181,9 +185,12 @@ mod tests {
         let frame = InputValue::ColorFrame(ColorFrame {
             layout: LedLayout {
                 id: "frame".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 2,
                 width: Some(2),
                 height: Some(1),
+                points_3d: None,
             },
             pixels: vec![
                 RgbaColor {

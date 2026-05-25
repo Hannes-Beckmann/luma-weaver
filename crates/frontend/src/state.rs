@@ -7,7 +7,7 @@ use futures_channel::mpsc;
 use shared::{
     EventSubscription, GraphDocument, GraphExchangeFile, GraphMetadata, GraphRuntimeMode,
     InputValue, MqttBrokerConfig, NodeDiagnosticEntry, NodeDiagnosticSummary, NodeSchema,
-    ServerState, WledInstance,
+    ServerState, SinkPreviewFrame, WledInstance,
 };
 
 use crate::transport::FrontendTransport;
@@ -48,9 +48,24 @@ pub(crate) struct UiState {
     pub(crate) browser_clipboard_events:
         Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserClipboardEvent>>,
     pub(crate) pending_clipboard_read_graph_id: Option<String>,
+    pub(crate) sink_preview_window_open: bool,
+    pub(crate) sink_preview_yaw: f32,
+    pub(crate) sink_preview_pitch: f32,
+    pub(crate) sink_preview_zoom: f32,
+    pub(crate) sink_preview_pan_x: f32,
+    pub(crate) sink_preview_pan_y: f32,
+    pub(crate) sink_preview_led_size: f32,
+    pub(crate) sink_preview_show_axes: bool,
+    pub(crate) sink_preview_selected_item_keys: HashSet<String>,
+    pub(crate) sink_preview_selection_context_key: Option<String>,
+    pub(crate) sink_preview_display_scope_node_id: Option<String>,
+    pub(crate) connection_guidance_target_node_id: Option<String>,
+    pub(crate) connection_guidance_target_input_name: Option<String>,
+    pub(crate) connection_guidance_message: Option<String>,
+    pub(crate) connection_guidance_expires_at_secs: f64,
     #[cfg(target_arch = "wasm32")]
-    pub(crate) browser_image_asset_events:
-        Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserImageAssetEvent>>,
+    pub(crate) browser_asset_upload_events:
+        Option<mpsc::UnboundedReceiver<crate::browser_file::BrowserAssetUploadEvent>>,
 }
 
 impl Default for UiState {
@@ -82,8 +97,23 @@ impl Default for UiState {
             #[cfg(target_arch = "wasm32")]
             browser_clipboard_events: None,
             pending_clipboard_read_graph_id: None,
+            sink_preview_window_open: false,
+            sink_preview_yaw: 0.5,
+            sink_preview_pitch: -0.35,
+            sink_preview_zoom: 1.0,
+            sink_preview_pan_x: 0.0,
+            sink_preview_pan_y: 0.0,
+            sink_preview_led_size: 3.5,
+            sink_preview_show_axes: true,
+            sink_preview_selected_item_keys: HashSet::new(),
+            sink_preview_selection_context_key: None,
+            sink_preview_display_scope_node_id: None,
+            connection_guidance_target_node_id: None,
+            connection_guidance_target_input_name: None,
+            connection_guidance_message: None,
+            connection_guidance_expires_at_secs: 0.0,
             #[cfg(target_arch = "wasm32")]
-            browser_image_asset_events: None,
+            browser_asset_upload_events: None,
         }
     }
 }
@@ -109,6 +139,7 @@ pub(crate) struct GraphState {
     pub(crate) live_snarl_needs_rebuild: bool,
     pub(crate) graph_runtime_modes: HashMap<String, GraphRuntimeMode>,
     pub(crate) runtime_node_values: HashMap<String, HashMap<String, InputValue>>,
+    pub(crate) preview_frames_by_graph: HashMap<String, Vec<SinkPreviewFrame>>,
     pub(crate) plot_history: HashMap<String, VecDeque<f32>>,
     pub(crate) node_diagnostic_summaries_by_graph:
         HashMap<String, HashMap<String, NodeDiagnosticSummary>>,
@@ -141,6 +172,7 @@ impl Default for GraphState {
             live_snarl_needs_rebuild: false,
             graph_runtime_modes: HashMap::new(),
             runtime_node_values: HashMap::new(),
+            preview_frames_by_graph: HashMap::new(),
             plot_history: HashMap::new(),
             node_diagnostic_summaries_by_graph: HashMap::new(),
             node_diagnostic_details_by_graph: HashMap::new(),

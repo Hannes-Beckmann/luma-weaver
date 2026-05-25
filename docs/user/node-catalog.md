@@ -64,9 +64,12 @@ These nodes manipulate frame or color data.
 Examples:
 
 - Tint Frame
+- Transform
 - Extract Channels
 - Set Channel
 - Colorize
+- Map To Layout
+- Fill From Frame
 - Mask Frame
 - Mix Color
 - Alpha Over
@@ -80,6 +83,19 @@ matching `FloatTensor`.
 
 `Colorize` maps a `Float` or `FloatTensor` from `0..1` across a gradient and outputs a
 `ColorFrame`.
+
+`Map To Layout` behaves like a local layout sink: it requests a concrete render layout from
+upstream using its configured width, height, and optional spatial parameters, then emits the
+result as a self-contained `MappedFrame`.
+
+`Transform` offsets and rotates spatial layouts. On `ColorFrame` branches it changes the planned
+target layout upstream, so generators render as if the sink had moved. On `MappedFrame` branches
+it rewrites the frame's embedded source geometry directly.
+
+`Fill From Frame` maps an incoming `MappedFrame` into the active render-target layout.
+`WLED Sink` emits source frames with optional strip or matrix source geometry configured on the
+sink. Fill methods include nearest point, smooth distance blending, radius-limited blending, and
+index stretching.
 
 `Mask Frame` accepts either a `ColorFrame` mask, using its alpha channel, or a `FloatTensor`
 mask that matches the target frame shape.

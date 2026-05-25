@@ -1,7 +1,11 @@
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::fmt;
 use std::sync::Arc;
 
-use shared::{GraphDocument, GraphNode, NodeTypeId, OutputInference, infer_graph_output};
+use shared::{
+    GraphDocument, GraphNode, NodeDiagnostic, NodeDiagnosticSeverity, NodeTypeId, OutputInference,
+    ValueKind, infer_graph_output,
+};
 
 use crate::node_runtime::NodeRegistry;
 use crate::services::runtime::planner::plan_render_contexts;
@@ -41,6 +45,7 @@ pub(crate) fn compile_graph_document(
 
     let mut incoming_edges_by_node = vec![Vec::new(); nodes.len()];
     let mut adjacency = vec![Vec::new(); nodes.len()];
+    let mut full_adjacency = vec![Vec::new(); nodes.len()];
     let mut in_degree = vec![0usize; nodes.len()];
 
     for edge in &document.edges {
@@ -87,16 +92,29 @@ pub(crate) fn compile_graph_document(
             from_node_index,
             from_output_name: edge.from_output_name.clone(),
             to_input_name: edge.to_input_name.clone(),
+            participates_in_render_context: resolved_output_kind != ValueKind::MappedFrame,
+            source_context_suffix: (to_node.node_type.as_str() == NodeTypeId::TRANSFORM
+                && resolved_output_kind != ValueKind::MappedFrame)
+                .then(|| format!("|transform:{}", to_node.id)),
             use_previous_tick: from_node.node_type.as_str() == NodeTypeId::DELAY,
         });
+        full_adjacency[from_node_index].push(to_node_index);
         if from_node.node_type.as_str() != NodeTypeId::DELAY {
             adjacency[from_node_index].push(to_node_index);
             in_degree[to_node_index] += 1;
         }
     }
 
+    validate_transform_cycles(&nodes, &full_adjacency).map_err(anyhow::Error::new)?;
     let topological_order = topological_order(&adjacency, &in_degree)?;
     let render_contexts_by_node = plan_render_contexts(&nodes, &incoming_edges_by_node);
+    validate_render_layout_capabilities(
+        &nodes,
+        &incoming_edges_by_node,
+        &render_contexts_by_node,
+        node_registry.as_ref(),
+    )
+    .map_err(anyhow::Error::new)?;
 
     tracing::debug!(
         graph_id = %document.metadata.id,
@@ -115,6 +133,133 @@ pub(crate) fn compile_graph_document(
         topological_order,
         render_contexts_by_node,
     })
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct CompileNodeDiagnostic {
+    pub(crate) node_id: String,
+    pub(crate) diagnostic: NodeDiagnostic,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GraphCompileDiagnosticError {
+    pub(crate) diagnostics: Vec<CompileNodeDiagnostic>,
+}
+
+impl fmt::Display for GraphCompileDiagnosticError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "graph compile failed with {} diagnostic(s)",
+            self.diagnostics.len()
+        )
+    }
+}
+
+impl std::error::Error for GraphCompileDiagnosticError {}
+
+fn validate_render_layout_capabilities(
+    nodes: &[CompiledNode],
+    incoming_edges_by_node: &[Vec<CompiledIncomingEdge>],
+    render_contexts_by_node: &[Vec<crate::services::runtime::types::RenderContext>],
+    node_registry: &NodeRegistry,
+) -> Result<(), GraphCompileDiagnosticError> {
+    let mut diagnostics = Vec::new();
+    for (node_index, contexts) in render_contexts_by_node.iter().enumerate() {
+        let node = &nodes[node_index];
+        let Some(definition) = node_registry.definition(node.node_type.as_str()) else {
+            continue;
+        };
+        for context in contexts {
+            if !definition.supports_render_layout(context.kind) {
+                diagnostics.push(CompileNodeDiagnostic {
+                    node_id: node.id.clone(),
+                    diagnostic: NodeDiagnostic {
+                        severity: NodeDiagnosticSeverity::Error,
+                        code: Some("runtime.render_layout_unsupported".to_owned()),
+                        message: format!(
+                            "Node type '{}' does not support {:?} render layouts required by sink context '{}'.",
+                            node.node_type.as_str(),
+                            context.kind,
+                            context.id
+                        ),
+                    },
+                });
+            }
+            if node.node_type.as_str() == NodeTypeId::TRANSFORM
+                && incoming_edges_by_node[node_index]
+                    .iter()
+                    .any(|edge| edge.participates_in_render_context)
+                && (context.kind != shared::RenderLayoutKind::Spatial3d
+                    || context.layout.points_3d.is_none())
+            {
+                diagnostics.push(CompileNodeDiagnostic {
+                    node_id: node.id.clone(),
+                    diagnostic: NodeDiagnostic {
+                        severity: NodeDiagnosticSeverity::Error,
+                        code: Some("runtime.transform_requires_spatial_layout".to_owned()),
+                        message: format!(
+                            "Transform requires a Spatial3d render layout with 3D points, but sink context '{}' is {:?}.",
+                            context.id, context.kind
+                        ),
+                    },
+                });
+            }
+        }
+    }
+    if diagnostics.is_empty() {
+        Ok(())
+    } else {
+        Err(GraphCompileDiagnosticError { diagnostics })
+    }
+}
+
+fn validate_transform_cycles(
+    nodes: &[CompiledNode],
+    adjacency: &[Vec<usize>],
+) -> Result<(), GraphCompileDiagnosticError> {
+    let mut diagnostics = Vec::new();
+
+    for (node_index, node) in nodes.iter().enumerate() {
+        if node.node_type.as_str() != NodeTypeId::TRANSFORM {
+            continue;
+        }
+        if node_is_in_cycle(node_index, adjacency) {
+            diagnostics.push(CompileNodeDiagnostic {
+                node_id: node.id.clone(),
+                diagnostic: NodeDiagnostic {
+                    severity: NodeDiagnosticSeverity::Error,
+                    code: Some("runtime.transform_cycle".to_owned()),
+                    message: "Transform cannot participate in a graph cycle because its spatial layout is resolved statically during compilation."
+                        .to_owned(),
+                },
+            });
+        }
+    }
+
+    if diagnostics.is_empty() {
+        Ok(())
+    } else {
+        Err(GraphCompileDiagnosticError { diagnostics })
+    }
+}
+
+fn node_is_in_cycle(node_index: usize, adjacency: &[Vec<usize>]) -> bool {
+    let mut stack = adjacency[node_index].clone();
+    let mut visited = vec![false; adjacency.len()];
+
+    while let Some(current) = stack.pop() {
+        if current == node_index {
+            return true;
+        }
+        if visited[current] {
+            continue;
+        }
+        visited[current] = true;
+        stack.extend(adjacency[current].iter().copied());
+    }
+
+    false
 }
 
 /// Compiles a single persisted graph node into its runtime form.
@@ -184,6 +329,7 @@ fn compile_node(node: GraphNode, node_registry: &NodeRegistry) -> anyhow::Result
 
     Ok(CompiledNode {
         id: node.id,
+        display_name: node.metadata.name,
         node_type: node.node_type,
         input_defaults,
         parameters,
@@ -226,7 +372,7 @@ fn topological_order(adjacency: &[Vec<usize>], in_degree: &[usize]) -> anyhow::R
 #[cfg(test)]
 mod tests {
     use crate::node_runtime::{NodeEvaluationContext, build_node_registry};
-    use crate::services::runtime::compiler::compile_graph_document;
+    use crate::services::runtime::compiler::{GraphCompileDiagnosticError, compile_graph_document};
     use shared::{
         GraphDocument, GraphMetadata, GraphNode, LedLayout, NodeMetadata, NodeTypeId,
         ParameterDefaultValue, node_definition,
@@ -317,9 +463,12 @@ mod tests {
             elapsed_seconds: 1.0 / 60.0,
             render_layout: Some(LedLayout {
                 id: "default-audit-layout".to_owned(),
+
+                role: ::shared::LedLayoutRole::RenderTarget,
                 pixel_count: 64,
                 width: Some(8),
                 height: Some(8),
+                points_3d: None,
             }),
         };
         let mut clamp_findings = Vec::new();
@@ -474,6 +623,239 @@ mod tests {
         assert!(
             compiled.incoming_edges_by_node[3].is_empty(),
             "invalid binary select output edge should not be compiled"
+        );
+    }
+
+    #[test]
+    fn spatial_sink_accepts_spatial_capable_branch() {
+        let document: shared::GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "spatial-compatible",
+                "name": "spatial compatible",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "solid",
+                    "metadata": { "name": "solid" },
+                    "node_type": shared::NodeTypeId::SOLID_FRAME
+                },
+                {
+                    "id": "dummy",
+                    "metadata": { "name": "dummy" },
+                    "node_type": shared::NodeTypeId::WLED_DUMMY_DISPLAY,
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 },
+                        { "name": "use_spatial", "value": true }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "solid",
+                    "from_output_name": "frame",
+                    "to_node_id": "dummy",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse spatial compatible graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let compiled = compile_graph_document(document, node_registry).expect("compile graph");
+
+        assert_eq!(
+            compiled.render_contexts_by_node[0][0].kind,
+            shared::RenderLayoutKind::Spatial3d
+        );
+        assert_eq!(
+            compiled.render_contexts_by_node[0][0]
+                .layout
+                .points_3d
+                .as_ref()
+                .map(Vec::len),
+            Some(16)
+        );
+    }
+
+    #[test]
+    fn spatial_sink_rejects_legacy_only_branch() {
+        let document: shared::GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "spatial-incompatible",
+                "name": "spatial incompatible",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "rainbow",
+                    "metadata": { "name": "rainbow" },
+                    "node_type": shared::NodeTypeId::RAINBOW_SWEEP
+                },
+                {
+                    "id": "dummy",
+                    "metadata": { "name": "dummy" },
+                    "node_type": shared::NodeTypeId::WLED_DUMMY_DISPLAY,
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 },
+                        { "name": "use_spatial", "value": true }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "rainbow",
+                    "from_output_name": "frame",
+                    "to_node_id": "dummy",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse spatial incompatible graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let error = match compile_graph_document(document, node_registry) {
+            Ok(_) => panic!("legacy-only branch should not compile under spatial sink"),
+            Err(error) => error,
+        };
+
+        let diagnostic_error = error
+            .downcast_ref::<GraphCompileDiagnosticError>()
+            .expect("structured compile diagnostics");
+        assert_eq!(diagnostic_error.diagnostics.len(), 1);
+        assert_eq!(diagnostic_error.diagnostics[0].node_id, "rainbow");
+        assert_eq!(
+            diagnostic_error.diagnostics[0].diagnostic.code.as_deref(),
+            Some("runtime.render_layout_unsupported")
+        );
+        assert!(
+            diagnostic_error.diagnostics[0]
+                .diagnostic
+                .message
+                .contains("Spatial3d")
+        );
+    }
+
+    #[test]
+    fn transform_rejects_non_spatial_color_frame_contexts() {
+        let document: shared::GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "transform-non-spatial",
+                "name": "transform non spatial",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "solid",
+                    "metadata": { "name": "solid" },
+                    "node_type": shared::NodeTypeId::SOLID_FRAME
+                },
+                {
+                    "id": "transform",
+                    "metadata": { "name": "transform" },
+                    "node_type": shared::NodeTypeId::TRANSFORM
+                },
+                {
+                    "id": "dummy",
+                    "metadata": { "name": "dummy" },
+                    "node_type": shared::NodeTypeId::WLED_DUMMY_DISPLAY,
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 1 },
+                        { "name": "use_spatial", "value": false }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "solid",
+                    "from_output_name": "frame",
+                    "to_node_id": "transform",
+                    "to_input_name": "frame"
+                },
+                {
+                    "from_node_id": "transform",
+                    "from_output_name": "frame",
+                    "to_node_id": "dummy",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse transform non spatial graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let error = match compile_graph_document(document, node_registry) {
+            Ok(_) => panic!("transform under non-spatial context should fail"),
+            Err(error) => error,
+        };
+
+        let diagnostic_error = error
+            .downcast_ref::<GraphCompileDiagnosticError>()
+            .expect("structured compile diagnostics");
+        assert_eq!(diagnostic_error.diagnostics.len(), 1);
+        assert_eq!(diagnostic_error.diagnostics[0].node_id, "transform");
+        assert_eq!(
+            diagnostic_error.diagnostics[0].diagnostic.code.as_deref(),
+            Some("runtime.transform_requires_spatial_layout")
+        );
+    }
+
+    #[test]
+    fn transform_in_delay_cycle_emits_compile_diagnostic() {
+        let document: shared::GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "transform-cycle",
+                "name": "transform cycle",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "transform",
+                    "metadata": { "name": "transform" },
+                    "node_type": shared::NodeTypeId::TRANSFORM
+                },
+                {
+                    "id": "delay",
+                    "metadata": { "name": "delay" },
+                    "node_type": shared::NodeTypeId::DELAY,
+                    "parameters": [
+                        { "name": "initial_type", "value": "colorframe" }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "transform",
+                    "from_output_name": "frame",
+                    "to_node_id": "delay",
+                    "to_input_name": "value"
+                },
+                {
+                    "from_node_id": "delay",
+                    "from_output_name": "value",
+                    "to_node_id": "transform",
+                    "to_input_name": "frame"
+                }
+            ]
+        }))
+        .expect("parse transform cycle graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let error = match compile_graph_document(document, node_registry) {
+            Ok(_) => panic!("transform cycle should fail"),
+            Err(error) => error,
+        };
+
+        let diagnostic_error = error
+            .downcast_ref::<GraphCompileDiagnosticError>()
+            .expect("structured compile diagnostics");
+        assert_eq!(diagnostic_error.diagnostics.len(), 1);
+        assert_eq!(diagnostic_error.diagnostics[0].node_id, "transform");
+        assert_eq!(
+            diagnostic_error.diagnostics[0].diagnostic.code.as_deref(),
+            Some("runtime.transform_cycle")
         );
     }
 }

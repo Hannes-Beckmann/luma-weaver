@@ -10,6 +10,7 @@ pub enum ValueKind {
     Color,
     LedLayout,
     ColorFrame,
+    MappedFrame,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -22,6 +23,7 @@ pub enum InputValue {
     Color(RgbaColor),
     LedLayout(LedLayout),
     ColorFrame(ColorFrame),
+    MappedFrame(ColorFrame),
 }
 
 impl InputValue {
@@ -34,7 +36,40 @@ impl InputValue {
             Self::Color(_) => ValueKind::Color,
             Self::LedLayout(_) => ValueKind::LedLayout,
             Self::ColorFrame(_) => ValueKind::ColorFrame,
+            Self::MappedFrame(_) => ValueKind::MappedFrame,
         }
+    }
+
+    /// Returns the contained frame payload for either frame-valued variant.
+    pub fn as_frame(&self) -> Option<&ColorFrame> {
+        match self {
+            Self::ColorFrame(frame) | Self::MappedFrame(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Returns the contained frame payload for either frame-valued variant.
+    pub fn as_frame_mut(&mut self) -> Option<&mut ColorFrame> {
+        match self {
+            Self::ColorFrame(frame) | Self::MappedFrame(frame) => Some(frame),
+            _ => None,
+        }
+    }
+
+    /// Converts a frame payload into the requested frame-valued variant.
+    pub fn from_frame_kind(kind: ValueKind, frame: ColorFrame) -> Option<Self> {
+        match kind {
+            ValueKind::ColorFrame => Some(Self::ColorFrame(frame)),
+            ValueKind::MappedFrame => Some(Self::MappedFrame(frame)),
+            _ => None,
+        }
+    }
+}
+
+impl ValueKind {
+    /// Returns whether the kind represents one of the frame-carrying variants.
+    pub fn is_frame(self) -> bool {
+        matches!(self, Self::ColorFrame | Self::MappedFrame)
     }
 }
 
@@ -60,15 +95,33 @@ impl FloatTensor {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 /// Describes a concrete LED layout used for frame-producing nodes and sinks.
 pub struct LedLayout {
     pub id: String,
+    #[serde(default)]
+    pub role: LedLayoutRole,
     pub pixel_count: usize,
     #[serde(default)]
     pub width: Option<usize>,
     #[serde(default)]
     pub height: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub points_3d: Option<Vec<Vec3>>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+/// Declares whether a layout is a render destination or a source capture layout.
+pub enum LedLayoutRole {
+    RenderTarget,
+    Source,
+}
+
+impl Default for LedLayoutRole {
+    fn default() -> Self {
+        Self::RenderTarget
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -98,4 +151,12 @@ pub struct RgbaColor {
     pub g: f32,
     pub b: f32,
     pub a: f32,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+/// Represents one LED position in a spatial render layout.
+pub struct Vec3 {
+    pub x: f32,
+    pub y: f32,
+    pub z: f32,
 }

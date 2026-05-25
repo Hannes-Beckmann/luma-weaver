@@ -152,9 +152,12 @@ mod tests {
                 &NodeEvaluationContext {
                     render_layout: Some(shared::LedLayout {
                         id: "panel".to_owned(),
+
+                        role: ::shared::LedLayoutRole::RenderTarget,
                         pixel_count: 4,
                         width: Some(2),
                         height: Some(2),
+                        points_3d: None,
                     }),
                     ..context()
                 },

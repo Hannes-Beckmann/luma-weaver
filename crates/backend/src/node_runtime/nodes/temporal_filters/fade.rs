@@ -62,8 +62,13 @@ impl RuntimeNode for FadeNode {
                 apply_frame_fade(&mut frame, &tensor, dt)?;
                 InputValue::ColorFrame(frame)
             }
+            InputValue::MappedFrame(mut frame) => {
+                let tensor = coerce_float_tensor(&decay, &shape_from_layout(&frame.layout))?;
+                apply_frame_fade(&mut frame, &tensor, dt)?;
+                InputValue::MappedFrame(frame)
+            }
             other => bail!(
-                "fade expects Color, ColorFrame, or FloatTensor input, got {:?}",
+                "fade expects Color, ColorFrame, MappedFrame, or FloatTensor input, got {:?}",
                 other.value_kind()
             ),
         };

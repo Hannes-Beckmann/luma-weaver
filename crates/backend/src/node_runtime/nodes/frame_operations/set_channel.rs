@@ -2,13 +2,11 @@ use std::collections::HashMap;
 
 use anyhow::Result;
 use palette::{FromColor, Hsv, RgbHue, Srgb};
-use shared::{
-    ColorFrame, FloatTensor, InputValue, NodeDiagnostic, NodeDiagnosticSeverity, RgbaColor,
-};
+use shared::{FloatTensor, InputValue, NodeDiagnostic, NodeDiagnosticSeverity, RgbaColor};
 
 use crate::node_runtime::tensor::coerce_float_tensor;
 use crate::node_runtime::{
-    NodeEvaluationContext, RuntimeNode, RuntimeOutputs, TypedNodeEvaluation,
+    AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeOutputs, TypedNodeEvaluation,
 };
 
 #[derive(Clone, Copy)]
@@ -39,7 +37,7 @@ crate::node_runtime::impl_runtime_parameters!(SetChannelNode {
 });
 
 pub(crate) struct SetChannelInputs {
-    frame: Option<ColorFrame>,
+    frame: Option<AnyInputValue>,
     tensor: Option<FloatTensor>,
 }
 
@@ -49,14 +47,14 @@ crate::node_runtime::impl_runtime_inputs!(SetChannelInputs {
 });
 
 pub(crate) struct SetChannelOutputs {
-    frame: Option<ColorFrame>,
+    frame: Option<InputValue>,
 }
 
 impl RuntimeOutputs for SetChannelOutputs {
     fn into_runtime_outputs(self) -> anyhow::Result<HashMap<String, InputValue>> {
         let mut outputs = HashMap::new();
         if let Some(frame) = self.frame {
-            outputs.insert("frame".to_owned(), InputValue::ColorFrame(frame));
+            outputs.insert("frame".to_owned(), frame);
         }
         Ok(outputs)
     }
@@ -71,7 +69,7 @@ impl RuntimeNode for SetChannelNode {
         _context: &NodeEvaluationContext,
         inputs: Self::Inputs,
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
-        let Some(mut frame) = inputs.frame else {
+        let Some(mut frame) = inputs.frame.map(|value| value.0) else {
             return Ok(TypedNodeEvaluation::from_outputs(SetChannelOutputs {
                 frame: None,
             }));
@@ -82,15 +80,22 @@ impl RuntimeNode for SetChannelNode {
             }));
         };
 
-        let target_shape = match (frame.layout.width, frame.layout.height) {
+        let frame_value = frame
+            .as_frame_mut()
+            .expect("set channel only accepts frame values");
+        let target_shape = match (frame_value.layout.width, frame_value.layout.height) {
             (Some(width), Some(height)) => vec![height, width],
-            _ => vec![frame.layout.pixel_count],
+            _ => vec![frame_value.layout.pixel_count],
         };
 
         let diagnostics;
         match coerce_float_tensor(&InputValue::FloatTensor(tensor), &target_shape) {
             Ok(tensor) => {
-                for (pixel, value) in frame.pixels.iter_mut().zip(tensor.values.iter().copied()) {
+                for (pixel, value) in frame_value
+                    .pixels
+                    .iter_mut()
+                    .zip(tensor.values.iter().copied())
+                {
                     *pixel = self.channel.apply(*pixel, value);
                 }
                 diagnostics = Vec::new();
@@ -190,15 +195,18 @@ mod tests {
         let mut node = SetChannelNode::default();
         let layout = shared::LedLayout {
             id: "frame".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 2,
             width: Some(2),
             height: Some(1),
+            points_3d: None,
         };
         let evaluation = node
             .evaluate(
                 &context(),
                 SetChannelInputs {
-                    frame: Some(ColorFrame {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(shared::ColorFrame {
                         layout: layout.clone(),
                         pixels: vec![
                             RgbaColor {
@@ -214,7 +222,7 @@ mod tests {
                                 a: 0.8,
                             },
                         ],
-                    }),
+                    }))),
                     tensor: Some(FloatTensor {
                         shape: vec![1, 2],
                         values: vec![0.9, 0.25],
@@ -225,7 +233,7 @@ mod tests {
 
         assert_eq!(
             evaluation.outputs.frame,
-            Some(ColorFrame {
+            Some(InputValue::ColorFrame(shared::ColorFrame {
                 layout,
                 pixels: vec![
                     RgbaColor {
@@ -241,7 +249,7 @@ mod tests {
                         a: 0.8,
                     },
                 ],
-            })
+            }))
         );
     }
 
@@ -255,12 +263,15 @@ mod tests {
             .evaluate(
                 &context(),
                 SetChannelInputs {
-                    frame: Some(ColorFrame {
+                    frame: Some(AnyInputValue(InputValue::ColorFrame(shared::ColorFrame {
                         layout: shared::LedLayout {
                             id: "frame".to_owned(),
+
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 1,
                             width: Some(1),
                             height: Some(1),
+                            points_3d: None,
                         },
                         pixels: vec![RgbaColor {
                             r: 1.0,
@@ -268,7 +279,7 @@ mod tests {
                             b: 0.0,
                             a: 0.75,
                         }],
-                    }),
+                    }))),
                     tensor: Some(FloatTensor {
                         shape: vec![1, 1],
                         values: vec![1.0 / 3.0],
@@ -278,6 +289,7 @@ mod tests {
             .expect("set channel evaluation should succeed");
 
         let output = evaluation.outputs.frame.expect("frame output");
+        let output = output.as_frame().expect("frame output");
         let pixel = output.pixels[0];
         assert!(pixel.r < 0.1);
         assert!(pixel.g > 0.95);

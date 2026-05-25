@@ -77,9 +77,11 @@ impl RuntimeNode for SpectrumAnalyzerNode {
     ) -> Result<TypedNodeEvaluation<Self::Outputs>> {
         let layout = context.render_layout.clone().unwrap_or_else(|| LedLayout {
             id: "spectrum_analyzer:unbound".to_owned(),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: inputs.spectrum.values.len().max(1),
             width: Some(inputs.spectrum.values.len().max(1)),
             height: Some(1),
+            points_3d: None,
         });
 
         let levels = self.display_levels(&inputs.spectrum.values, context.elapsed_seconds);
@@ -264,9 +266,12 @@ mod tests {
     fn one_dimensional_layout_maps_band_strength_to_brightness() {
         let layout = LedLayout {
             id: "strip".to_owned(),
+
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: 4,
             width: None,
             height: None,
+            points_3d: None,
         };
         let frame = render_spectrum_frame(
             &layout,

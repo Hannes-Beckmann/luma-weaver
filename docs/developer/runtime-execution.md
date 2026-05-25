@@ -121,6 +121,24 @@ The planner:
 - deduplicates contexts per node
 - forward-fills contexts into observer-style branches that were not reached by the backward pass
 
+Render layouts also carry a compatibility kind:
+
+- `Index1d`
+- `Matrix2d`
+- `Spatial3d`
+
+Sink nodes can opt into spatial mode. In spatial mode they still consume and emit ordered
+`ColorFrame` pixels, but the render layout includes `points_3d` and requires upstream nodes to
+declare `Spatial3d` support in their shared node schema. Legacy frame nodes can remain
+`Index1d`/`Matrix2d` only and will be rejected when connected to a spatial sink branch.
+WLED target and dummy-display spatial layouts are generated procedurally from the sink's origin,
+roll/pitch/yaw rotation, and LED spacing parameters, so the graph stores compact placement values
+instead of a large point array.
+
+The frontend's 3D sink preview subscribes through `SubscribeSinkPreview`. During each tick the
+backend publishes `SinkPreviewUpdate` frames for spatial WLED target and dummy display sinks only.
+Empty updates are intentional and clear stale previews when a graph no longer has spatial sinks.
+
 This is how upstream render nodes learn the layout they should produce for.
 
 ## Multiple LED Layouts In One Graph
@@ -149,6 +167,7 @@ Each sink node contributes a concrete `RenderContext`:
 
 - `WLED Target` creates a context based on its configured target and LED count
 - `WLED Dummy Display` creates a context based on its configured width and height
+- `Map To Layout` also creates a context from its configured width, height, and optional spatial layout
 
 That context is then propagated backward through upstream dependencies.
 
@@ -157,6 +176,19 @@ Important consequence:
 - a node can accumulate multiple contexts if it contributes to multiple sinks
 
 So if one animation branch feeds two different sinks, the upstream generator may be evaluated once per sink context.
+
+Some inputs deliberately stop render-context backpropagation. `Fill From Frame` receives the
+downstream sink context for its output, but its `frame` input consumes a `MappedFrame` with its
+own fixed layout. The planner therefore does not propagate the destination context across that
+input. This lets nodes like `WLED Sink` or `Map To Layout` publish pixels with intrinsic source
+geometry once, while `Fill From Frame` remaps that mapped frame into each downstream sink layout.
+
+`Transform` is special in the opposite direction: on `ColorFrame` edges it does participate in
+render-context backpropagation, but it rewrites the propagated context with the inverse of its
+configured translation and rotation. That lets upstream render nodes target the pre-transform
+coordinate system while the runtime node itself remains a pixel pass-through. On `MappedFrame`
+edges no render context is propagated; the runtime node instead forward-transforms the mapped
+layout's embedded `points_3d`.
 
 ## Forward Fill For Observer Branches
 
@@ -170,7 +202,7 @@ This is what allows nodes like displays or previews to stay aligned with the ren
 
 ```mermaid
 flowchart LR
-    Sinks[Sink nodes\nWLED Target / Dummy Display] --> Backprop[Backpropagate contexts upstream]
+    Sinks[Sink-like nodes\nWLED Target / Dummy Display / Map To Layout] --> Backprop[Backpropagate contexts upstream]
     Backprop --> Dedup[Sort and deduplicate contexts per node]
     Dedup --> ForwardFill[Forward-fill contexts into observer branches]
     ForwardFill --> Planned[render_contexts_by_node]

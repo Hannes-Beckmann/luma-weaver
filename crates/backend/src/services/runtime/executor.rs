@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::Context;
-use shared::{InputValue, NodeDiagnostic, NodeDiagnosticSeverity, NodeRuntimeValue};
+use shared::{InputValue, NodeDiagnostic, NodeDiagnosticSeverity, NodeRuntimeValue, RgbaColor};
 
 use crate::node_runtime::nodes::temporal_filters::delay::seeded_initial_value_for_layout;
 use crate::node_runtime::{NodeEvaluation, NodeEvaluationContext, RuntimeNodeEvaluator};
@@ -34,7 +34,6 @@ impl CompiledGraph {
                 evaluation_contexts_for_node(&self.render_contexts_by_node[node_index]);
             let incoming_edges = self.incoming_edges_by_node[node_index].clone();
             let node = &mut self.nodes[node_index];
-
             for render_context in render_contexts {
                 let context_id = render_context
                     .as_ref()
@@ -43,26 +42,15 @@ impl CompiledGraph {
                 let mut inputs = node.input_defaults.clone();
 
                 for incoming in &incoming_edges {
-                    let context_key = (
-                        incoming.from_node_index,
-                        context_id.to_owned(),
-                        incoming.from_output_name.clone(),
-                    );
-                    let fallback_key = (
-                        incoming.from_node_index,
-                        DEFAULT_CONTEXT_ID.to_owned(),
-                        incoming.from_output_name.clone(),
-                    );
                     let value = if incoming.use_previous_tick {
-                        previous_outputs
-                            .get(&context_key)
-                            .cloned()
-                            .or_else(|| previous_outputs.get(&fallback_key).cloned())
+                        resolve_input_value(
+                            &previous_outputs,
+                            incoming,
+                            context_id,
+                            DEFAULT_CONTEXT_ID,
+                        )
                     } else {
-                        outputs
-                            .get(&context_key)
-                            .cloned()
-                            .or_else(|| outputs.get(&fallback_key).cloned())
+                        resolve_input_value(&outputs, incoming, context_id, DEFAULT_CONTEXT_ID)
                     };
                     if let Some(value) = value {
                         inputs.insert(incoming.to_input_name.clone(), value);
@@ -176,6 +164,67 @@ impl CompiledGraph {
     }
 }
 
+fn black_color() -> RgbaColor {
+    RgbaColor {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    }
+}
+
+/// Resolves an incoming edge against the current runtime output store.
+///
+/// `MappedFrame` edges are compiled as non-participating edges, which means they should behave
+/// like regular values and not depend on the consumer's render-context ID.
+fn resolve_input_value(
+    outputs: &HashMap<(usize, String, String), InputValue>,
+    incoming: &crate::services::runtime::types::CompiledIncomingEdge,
+    context_id: &str,
+    default_context_id: &str,
+) -> Option<InputValue> {
+    let source_context_id = if incoming.participates_in_render_context {
+        match &incoming.source_context_suffix {
+            Some(suffix) => format!("{context_id}{suffix}"),
+            None => context_id.to_owned(),
+        }
+    } else {
+        context_id.to_owned()
+    };
+    let context_key = (
+        incoming.from_node_index,
+        source_context_id,
+        incoming.from_output_name.clone(),
+    );
+    if let Some(value) = outputs.get(&context_key) {
+        return Some(value.clone());
+    }
+
+    let fallback_key = (
+        incoming.from_node_index,
+        default_context_id.to_owned(),
+        incoming.from_output_name.clone(),
+    );
+    if let Some(value) = outputs.get(&fallback_key) {
+        return Some(value.clone());
+    }
+
+    if incoming.participates_in_render_context {
+        return None;
+    }
+
+    let mut candidates = outputs
+        .iter()
+        .filter(|((node_index, _, output_name), _)| {
+            *node_index == incoming.from_node_index && *output_name == incoming.from_output_name
+        })
+        .collect::<Vec<_>>();
+    candidates.sort_by(|((_, left_context, _), _), ((_, right_context, _), _)| {
+        left_context.cmp(right_context)
+    });
+    candidates.first().map(|(_, value)| (*value).clone())
+}
+
 /// Returns the render contexts in which a node should be evaluated for the current tick.
 ///
 /// Nodes without explicit render contexts are evaluated once in the default context.
@@ -260,6 +309,9 @@ fn runtime_update_name_allowed(
         || (node.node_type.as_str() == shared::NodeTypeId::DISPLAY
             && node.allowed_runtime_update_names.contains("value")
             && name.starts_with("value"))
+        || (node.node_type.as_str() == shared::NodeTypeId::FILL_FROM_FRAME
+            && node.allowed_runtime_update_names.contains("frame")
+            && name.starts_with("frame"))
 }
 
 /// Returns whether a runtime update should be emitted at `now`.
@@ -283,12 +335,17 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use anyhow::Context;
-    use shared::{GraphDocument, InputValue};
+    use shared::{GraphDocument, InputValue, RgbaColor};
 
     use crate::node_runtime::{NodeEvaluationContext, build_node_registry};
     use crate::services::runtime::compiler::compile_graph_document;
-    use crate::services::runtime::executor::{evaluate_node, initialize_delay_previous_outputs};
-    use crate::services::runtime::types::{GraphExecutionState, RuntimeEventPublisher};
+    use crate::services::runtime::executor::{
+        evaluate_node, initialize_delay_previous_outputs, resolve_input_value,
+        runtime_update_name_allowed,
+    };
+    use crate::services::runtime::types::{
+        CompiledIncomingEdge, GraphExecutionState, RuntimeEventPublisher,
+    };
 
     struct NoopEvents;
 
@@ -569,26 +626,15 @@ mod tests {
                     let mut inputs = node.input_defaults.clone();
 
                     for incoming in &incoming_edges {
-                        let context_key = (
-                            incoming.from_node_index,
-                            context_id.to_owned(),
-                            incoming.from_output_name.clone(),
-                        );
-                        let fallback_key = (
-                            incoming.from_node_index,
-                            DEFAULT_CONTEXT_ID.to_owned(),
-                            incoming.from_output_name.clone(),
-                        );
                         let value = if incoming.use_previous_tick {
-                            previous_outputs
-                                .get(&context_key)
-                                .cloned()
-                                .or_else(|| previous_outputs.get(&fallback_key).cloned())
+                            resolve_input_value(
+                                &previous_outputs,
+                                incoming,
+                                context_id,
+                                DEFAULT_CONTEXT_ID,
+                            )
                         } else {
-                            outputs
-                                .get(&context_key)
-                                .cloned()
-                                .or_else(|| outputs.get(&fallback_key).cloned())
+                            resolve_input_value(&outputs, incoming, context_id, DEFAULT_CONTEXT_ID)
                         };
                         if let Some(value) = value {
                             inputs.insert(incoming.to_input_name.clone(), value);
@@ -827,5 +873,258 @@ mod tests {
                 pixel.r == 0.0 && pixel.g == 0.0 && pixel.b == 0.0 && pixel.a == 0.0
             })
         );
+    }
+
+    #[test]
+    fn non_participating_edges_resolve_values_across_contexts() {
+        let outputs = HashMap::from([(
+            (
+                3usize,
+                "sink:map_to_layout:map".to_owned(),
+                "frame".to_owned(),
+            ),
+            InputValue::Float(42.0),
+        )]);
+        let incoming = CompiledIncomingEdge {
+            from_node_index: 3,
+            from_output_name: "frame".to_owned(),
+            to_input_name: "frame".to_owned(),
+            participates_in_render_context: false,
+            source_context_suffix: None,
+            use_previous_tick: false,
+        };
+
+        let value = resolve_input_value(&outputs, &incoming, "sink:dummy:display", "__default__");
+
+        assert_eq!(value, Some(InputValue::Float(42.0)));
+    }
+
+    #[test]
+    fn fill_from_frame_allows_layout_scoped_frame_runtime_updates() {
+        let node = crate::services::runtime::types::CompiledNode {
+            id: "fill".to_owned(),
+            display_name: "Fill".to_owned(),
+            node_type: shared::NodeTypeId::new(shared::NodeTypeId::FILL_FROM_FRAME),
+            input_defaults: HashMap::new(),
+            parameters: HashMap::new(),
+            construction_diagnostics: Vec::new(),
+            allowed_runtime_update_names: ["source_frame".to_owned(), "frame".to_owned()]
+                .into_iter()
+                .collect(),
+        };
+
+        assert!(runtime_update_name_allowed(&node, "source_frame"));
+        assert!(runtime_update_name_allowed(&node, "frame (destination)"));
+        assert!(!runtime_update_name_allowed(&node, "bogus"));
+    }
+
+    #[test]
+    fn mapped_frame_flow_crosses_contexts_like_a_regular_value() {
+        let document: GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "mapped-frame-cross-context",
+                "name": "mapped frame cross context",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "solid",
+                    "metadata": { "name": "Solid" },
+                    "node_type": "generators.solid_frame",
+                    "parameters": [
+                        { "name": "color", "value": { "r": 0.2, "g": 0.7, "b": 0.4, "a": 1.0 } }
+                    ]
+                },
+                {
+                    "id": "map",
+                    "metadata": { "name": "Map To Layout" },
+                    "node_type": "frame_operations.map_to_layout",
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 },
+                        { "name": "use_spatial", "value": true }
+                    ]
+                },
+                {
+                    "id": "fill",
+                    "metadata": { "name": "Fill From Frame" },
+                    "node_type": "frame_operations.fill_from_frame",
+                    "parameters": [
+                        { "name": "method", "value": "nearest" }
+                    ]
+                },
+                {
+                    "id": "dummy",
+                    "metadata": { "name": "Dummy" },
+                    "node_type": "debug.wled_dummy_display",
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 },
+                        { "name": "use_spatial", "value": true }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "solid",
+                    "from_output_name": "frame",
+                    "to_node_id": "map",
+                    "to_input_name": "frame"
+                },
+                {
+                    "from_node_id": "map",
+                    "from_output_name": "frame",
+                    "to_node_id": "fill",
+                    "to_input_name": "frame"
+                },
+                {
+                    "from_node_id": "fill",
+                    "from_output_name": "frame",
+                    "to_node_id": "dummy",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse mapped-frame graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile mapped-frame graph");
+        let mut execution_state = GraphExecutionState::default();
+
+        graph
+            .execute_tick(
+                "mapped-frame-cross-context",
+                &NoopEvents,
+                0.0,
+                &mut execution_state,
+            )
+            .expect("execute mapped-frame graph tick");
+
+        let fill_index = graph
+            .nodes
+            .iter()
+            .position(|node| node.id == "fill")
+            .expect("fill node index");
+        let fill_context = graph.render_contexts_by_node[fill_index]
+            .first()
+            .expect("fill render context")
+            .id
+            .clone();
+        let filled = execution_state
+            .previous_outputs
+            .get(&(fill_index, fill_context, "frame".to_owned()))
+            .cloned()
+            .expect("fill output frame");
+
+        let frame = match filled {
+            InputValue::ColorFrame(frame) => frame,
+            other => panic!("expected color frame output, got {other:?}"),
+        };
+        assert_eq!(frame.pixels.len(), 16);
+        assert!(frame.pixels.iter().any(|pixel| {
+            *pixel
+                != RgbaColor {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.0,
+                }
+        }));
+    }
+
+    #[test]
+    fn transform_color_frame_flow_resolves_upstream_derived_context() {
+        let document: GraphDocument = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "id": "transform-color-frame",
+                "name": "transform color frame",
+                "execution_frequency_hz": 60
+            },
+            "nodes": [
+                {
+                    "id": "circle",
+                    "metadata": { "name": "Circle" },
+                    "node_type": "generators.circle_sweep"
+                },
+                {
+                    "id": "transform",
+                    "metadata": { "name": "Transform" },
+                    "node_type": "frame_operations.transform",
+                    "parameters": [
+                        { "name": "translation_x", "value": 10.0 }
+                    ]
+                },
+                {
+                    "id": "dummy",
+                    "metadata": { "name": "Dummy" },
+                    "node_type": "debug.wled_dummy_display",
+                    "parameters": [
+                        { "name": "width", "value": 4 },
+                        { "name": "height", "value": 4 },
+                        { "name": "use_spatial", "value": true }
+                    ]
+                }
+            ],
+            "edges": [
+                {
+                    "from_node_id": "circle",
+                    "from_output_name": "frame",
+                    "to_node_id": "transform",
+                    "to_input_name": "frame"
+                },
+                {
+                    "from_node_id": "transform",
+                    "from_output_name": "frame",
+                    "to_node_id": "dummy",
+                    "to_input_name": "value"
+                }
+            ]
+        }))
+        .expect("parse transform color-frame graph");
+
+        let node_registry = build_node_registry().expect("build node registry");
+        let mut graph =
+            compile_graph_document(document, node_registry).expect("compile transform graph");
+        let mut execution_state = GraphExecutionState::default();
+
+        graph
+            .execute_tick(
+                "transform-color-frame",
+                &NoopEvents,
+                0.0,
+                &mut execution_state,
+            )
+            .expect("execute transform graph tick");
+
+        let transform_index = graph
+            .nodes
+            .iter()
+            .position(|node| node.id == "transform")
+            .expect("transform node index");
+        let transform_context = graph.render_contexts_by_node[transform_index]
+            .first()
+            .expect("transform render context")
+            .id
+            .clone();
+        let frame = execution_state
+            .previous_outputs
+            .get(&(transform_index, transform_context, "frame".to_owned()))
+            .cloned()
+            .expect("transform frame output");
+
+        let InputValue::ColorFrame(frame) = frame else {
+            panic!("expected color frame output");
+        };
+        assert_eq!(frame.pixels.len(), 16);
+        assert!(frame.pixels.iter().any(|pixel| {
+            *pixel
+                != RgbaColor {
+                    r: 0.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.0,
+                }
+        }));
     }
 }

@@ -228,9 +228,11 @@ mod tests {
             value: InputValue::ColorFrame(crate::ColorFrame {
                 layout: crate::LedLayout {
                     id: "panel".to_owned(),
+                    role: crate::LedLayoutRole::RenderTarget,
                     pixel_count: 1,
                     width: Some(1),
                     height: Some(1),
+                    points_3d: None,
                 },
                 pixels: vec![crate::RgbaColor {
                     r: 1.0,
@@ -324,9 +326,11 @@ mod tests {
             value: InputValue::ColorFrame(crate::ColorFrame {
                 layout: crate::LedLayout {
                     id: "panel".to_owned(),
+                    role: crate::LedLayoutRole::RenderTarget,
                     pixel_count: 1,
                     width: Some(1),
                     height: Some(1),
+                    points_3d: None,
                 },
                 pixels: vec![crate::RgbaColor {
                     r: 1.0,
@@ -377,6 +381,36 @@ mod tests {
             issue.code == GraphValidationIssueCode::EdgeTypeMismatch
                 && issue.message.contains("must resolve to the same kind")
         }));
+    }
+
+    #[test]
+    fn validation_rejects_source_frame_connected_directly_to_target() {
+        let document = GraphDocument {
+            metadata: GraphMetadata {
+                id: "graph".to_owned(),
+                name: "Graph".to_owned(),
+                execution_frequency_hz: 60,
+                home_assistant_broker_id: String::new(),
+            },
+            viewport: crate::GraphViewport::default(),
+            nodes: vec![
+                node("source", NodeTypeId::WLED_SINK),
+                node("target", NodeTypeId::WLED_TARGET),
+            ],
+            edges: vec![GraphEdge {
+                from_node_id: "source".to_owned(),
+                from_output_name: "frame".to_owned(),
+                to_node_id: "target".to_owned(),
+                to_input_name: "value".to_owned(),
+            }],
+        };
+
+        let issues = validate_graph_document(&document);
+        assert!(
+            issues
+                .iter()
+                .any(|issue| issue.code == GraphValidationIssueCode::EdgeTypeMismatch)
+        );
     }
 }
 

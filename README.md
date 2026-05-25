@@ -37,10 +37,11 @@ Current building blocks include:
 
 - animation and pattern nodes such as linear sweep, circle sweep, plasma, twinkle stars, bouncing balls, and level bar
 - math and signal nodes such as constants, add/subtract/multiply/divide, min/max/clamp, abs, map range, binary select, power/root/exp/log, rounding, and signal generator, with selected math nodes supporting tensors and frames
-- frame and color processing nodes such as tint, mix, blur, Laplacian edge/detail filtering, mask, brightness, and filters
+- frame and color processing nodes such as tint, mix, fill from frame, blur, Laplacian edge/detail filtering, mask, brightness, and filters
 - temporal nodes such as delay, differentiate, integrate, fade, moving average, and moving median
 - runtime/debug nodes such as plot, display, and a WLED dummy display
-- network nodes for WLED output, WLED frame input, audio FFT receive, and Home Assistant MQTT graph controls/numbers
+- network nodes for WLED output, WLED frame input with optional source geometry, audio FFT receive, and Home Assistant MQTT graph controls/numbers
+- optional spatial render layouts on LED sinks, with compatibility checks so legacy frame nodes remain protected from unsupported 3D layouts
 
 The editor also supports multi-select graph editing with node-group dragging plus clipboard copy and paste via `Ctrl/Cmd+C` and `Ctrl/Cmd+V`.
 

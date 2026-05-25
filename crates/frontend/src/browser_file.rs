@@ -7,9 +7,46 @@ pub(crate) enum BrowserGraphFileEvent {
     Error(String),
 }
 
-/// Represents the outcome of a browser-managed image upload.
-pub(crate) enum BrowserImageAssetEvent {
+#[derive(Clone, Copy)]
+pub(crate) enum AssetUploadKind {
+    Image,
+    Layout,
+}
+
+impl AssetUploadKind {
+    fn accept(self) -> &'static str {
+        match self {
+            Self::Image => "image/*",
+            Self::Layout => ".csv,.json,application/json,text/csv",
+        }
+    }
+
+    fn endpoint(self) -> &'static str {
+        match self {
+            Self::Image => "/api/assets/images",
+            Self::Layout => "/api/assets/layouts",
+        }
+    }
+
+    fn display_name(self) -> &'static str {
+        match self {
+            Self::Image => "image",
+            Self::Layout => "layout",
+        }
+    }
+
+    fn delete_endpoint(self, asset_id: &str) -> String {
+        match self {
+            Self::Image => format!("/api/assets/images/{asset_id}"),
+            Self::Layout => format!("/api/assets/layouts/{asset_id}"),
+        }
+    }
+}
+
+/// Represents the outcome of a browser-managed asset upload.
+pub(crate) enum BrowserAssetUploadEvent {
     Uploaded {
+        kind: AssetUploadKind,
         node_id: String,
         parameter_name: String,
         asset_id: String,
@@ -234,11 +271,12 @@ pub(crate) fn read_text_from_clipboard()
 }
 
 #[cfg(target_arch = "wasm32")]
-/// Opens the browser file picker for an image upload and returns a stream of upload results.
-pub(crate) fn pick_and_upload_image_asset(
+/// Opens the browser file picker for an asset upload and returns a stream of upload results.
+pub(crate) fn pick_and_upload_asset(
+    kind: AssetUploadKind,
     node_id: String,
     parameter_name: String,
-) -> Result<mpsc::UnboundedReceiver<BrowserImageAssetEvent>, String> {
+) -> Result<mpsc::UnboundedReceiver<BrowserAssetUploadEvent>, String> {
     use wasm_bindgen::JsCast;
     use wasm_bindgen::closure::Closure;
 
@@ -254,27 +292,27 @@ pub(crate) fn pick_and_upload_image_asset(
         .dyn_into::<web_sys::HtmlInputElement>()
         .map_err(|_| "Failed to create file input".to_owned())?;
     input.set_type("file");
-    input.set_accept("image/*");
+    input.set_accept(kind.accept());
 
     let (sender, receiver) = mpsc::unbounded();
     let onchange_sender = sender.clone();
     let onchange_input = input.clone();
     let onchange = Closure::wrap(Box::new(move |_event: web_sys::Event| {
         let Some(files) = onchange_input.files() else {
-            let _ = onchange_sender.unbounded_send(BrowserImageAssetEvent::Error(
+            let _ = onchange_sender.unbounded_send(BrowserAssetUploadEvent::Error(
                 "No file was selected".to_owned(),
             ));
             return;
         };
         let Some(file) = files.get(0) else {
-            let _ = onchange_sender.unbounded_send(BrowserImageAssetEvent::Error(
+            let _ = onchange_sender.unbounded_send(BrowserAssetUploadEvent::Error(
                 "No file was selected".to_owned(),
             ));
             return;
         };
 
         let Ok(reader) = web_sys::FileReader::new() else {
-            let _ = onchange_sender.unbounded_send(BrowserImageAssetEvent::Error(
+            let _ = onchange_sender.unbounded_send(BrowserAssetUploadEvent::Error(
                 "Failed to create browser file reader".to_owned(),
             ));
             return;
@@ -286,22 +324,24 @@ pub(crate) fn pick_and_upload_image_asset(
         let upload_parameter_name = parameter_name.clone();
         let onload = Closure::once(Box::new(move |_event: web_sys::Event| {
             let Some(result) = load_reader.result().ok() else {
-                let _ = load_sender.unbounded_send(BrowserImageAssetEvent::Error(
-                    "Failed to read image file".to_owned(),
-                ));
+                let _ = load_sender.unbounded_send(BrowserAssetUploadEvent::Error(format!(
+                    "Failed to read {} file",
+                    kind.display_name()
+                )));
                 return;
             };
             let array = js_sys::Uint8Array::new(&result);
             let bytes = array.to_vec();
             let upload_sender = load_sender.clone();
             wasm_bindgen_futures::spawn_local(async move {
-                let event = match upload_image_asset(bytes).await {
-                    Ok(asset_id) => BrowserImageAssetEvent::Uploaded {
+                let event = match upload_asset(kind, bytes).await {
+                    Ok(asset_id) => BrowserAssetUploadEvent::Uploaded {
+                        kind,
                         node_id: upload_node_id,
                         parameter_name: upload_parameter_name,
                         asset_id,
                     },
-                    Err(message) => BrowserImageAssetEvent::Error(message),
+                    Err(message) => BrowserAssetUploadEvent::Error(message),
                 };
                 let _ = upload_sender.unbounded_send(event);
             });
@@ -311,17 +351,19 @@ pub(crate) fn pick_and_upload_image_asset(
 
         let error_sender = onchange_sender.clone();
         let onerror = Closure::once(Box::new(move |_event: web_sys::Event| {
-            let _ = error_sender.unbounded_send(BrowserImageAssetEvent::Error(
-                "Failed to read image file".to_owned(),
-            ));
+            let _ = error_sender.unbounded_send(BrowserAssetUploadEvent::Error(format!(
+                "Failed to read {} file",
+                kind.display_name()
+            )));
         }) as Box<dyn FnOnce(_)>);
         reader.set_onerror(Some(onerror.as_ref().unchecked_ref()));
         onerror.forget();
 
         if reader.read_as_array_buffer(&file).is_err() {
-            let _ = onchange_sender.unbounded_send(BrowserImageAssetEvent::Error(
-                "Failed to start reading image file".to_owned(),
-            ));
+            let _ = onchange_sender.unbounded_send(BrowserAssetUploadEvent::Error(format!(
+                "Failed to start reading {} file",
+                kind.display_name()
+            )));
         }
     }) as Box<dyn FnMut(_)>);
 
@@ -333,13 +375,14 @@ pub(crate) fn pick_and_upload_image_asset(
 }
 
 #[cfg(target_arch = "wasm32")]
-async fn upload_image_asset(bytes: Vec<u8>) -> Result<String, String> {
+#[cfg(target_arch = "wasm32")]
+async fn upload_asset(kind: AssetUploadKind, bytes: Vec<u8>) -> Result<String, String> {
     use serde::Deserialize;
     use wasm_bindgen::JsCast;
     use wasm_bindgen_futures::JsFuture;
 
     #[derive(Deserialize)]
-    struct UploadImageAssetResponse {
+    struct UploadAssetResponse {
         asset_id: String,
     }
 
@@ -347,7 +390,7 @@ async fn upload_image_asset(bytes: Vec<u8>) -> Result<String, String> {
     init.set_method("POST");
     init.set_body(&js_sys::Uint8Array::from(bytes.as_slice()).into());
 
-    let request = web_sys::Request::new_with_str_and_init("/api/assets/images", &init)
+    let request = web_sys::Request::new_with_str_and_init(kind.endpoint(), &init)
         .map_err(|_| "Failed to build upload request".to_owned())?;
 
     let Some(window) = web_sys::window() else {
@@ -355,22 +398,31 @@ async fn upload_image_asset(bytes: Vec<u8>) -> Result<String, String> {
     };
     let response_value = JsFuture::from(window.fetch_with_request(&request))
         .await
-        .map_err(|_| "Image upload request failed".to_owned())?;
+        .map_err(|_| format!("{} upload request failed", capitalize(kind.display_name())))?;
     let response = response_value
         .dyn_into::<web_sys::Response>()
-        .map_err(|_| "Image upload response was invalid".to_owned())?;
+        .map_err(|_| {
+            format!(
+                "{} upload response was invalid",
+                capitalize(kind.display_name())
+            )
+        })?;
     let response_text = JsFuture::from(
         response
             .text()
-            .map_err(|_| "Failed to read image upload response".to_owned())?,
+            .map_err(|_| format!("Failed to read {} upload response", kind.display_name()))?,
     )
     .await
-    .map_err(|_| "Failed to read image upload response".to_owned())?
+    .map_err(|_| format!("Failed to read {} upload response", kind.display_name()))?
     .as_string()
     .unwrap_or_default();
 
     if !response.ok() {
-        let fallback = format!("Image upload failed with status {}", response.status());
+        let fallback = format!(
+            "{} upload failed with status {}",
+            capitalize(kind.display_name()),
+            response.status()
+        );
         return Err(if response_text.trim().is_empty() {
             fallback
         } else {
@@ -378,16 +430,89 @@ async fn upload_image_asset(bytes: Vec<u8>) -> Result<String, String> {
         });
     }
 
-    serde_json::from_str::<UploadImageAssetResponse>(&response_text)
+    serde_json::from_str::<UploadAssetResponse>(&response_text)
         .map(|response| response.asset_id)
-        .map_err(|error| format!("Failed to parse image upload response: {error}"))
+        .map_err(|error| {
+            format!(
+                "Failed to parse {} upload response: {error}",
+                kind.display_name()
+            )
+        })
+}
+
+#[cfg(target_arch = "wasm32")]
+/// Deletes a previously uploaded asset through the backend asset API.
+pub(crate) async fn delete_asset(kind: AssetUploadKind, asset_id: String) -> Result<(), String> {
+    use wasm_bindgen::JsCast;
+    use wasm_bindgen_futures::JsFuture;
+
+    let init = web_sys::RequestInit::new();
+    init.set_method("DELETE");
+
+    let request =
+        web_sys::Request::new_with_str_and_init(&kind.delete_endpoint(&asset_id), &init)
+            .map_err(|_| "Failed to build asset delete request".to_owned())?;
+
+    let Some(window) = web_sys::window() else {
+        return Err("Browser window is unavailable".to_owned());
+    };
+    let response_value = JsFuture::from(window.fetch_with_request(&request))
+        .await
+        .map_err(|_| format!("{} delete request failed", capitalize(kind.display_name())))?;
+    let response = response_value
+        .dyn_into::<web_sys::Response>()
+        .map_err(|_| {
+            format!(
+                "{} delete response was invalid",
+                capitalize(kind.display_name())
+            )
+        })?;
+    if response.ok() {
+        return Ok(());
+    }
+
+    let response_text = JsFuture::from(
+        response
+            .text()
+            .map_err(|_| format!("Failed to read {} delete response", kind.display_name()))?,
+    )
+    .await
+    .map_err(|_| format!("Failed to read {} delete response", kind.display_name()))?
+    .as_string()
+    .unwrap_or_default();
+
+    let fallback = format!(
+        "{} delete failed with status {}",
+        capitalize(kind.display_name()),
+        response.status()
+    );
+    Err(if response_text.trim().is_empty() {
+        fallback
+    } else {
+        response_text
+    })
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-/// Reports that image uploads via the browser file picker are unavailable on non-wasm builds.
-pub(crate) fn pick_and_upload_image_asset(
+/// Reports that asset uploads via the browser file picker are unavailable on non-wasm builds.
+pub(crate) fn pick_and_upload_asset(
+    _kind: AssetUploadKind,
     _node_id: String,
     _parameter_name: String,
-) -> Result<mpsc::UnboundedReceiver<BrowserImageAssetEvent>, String> {
-    Err("Image uploads are only available in the browser build".to_owned())
+) -> Result<mpsc::UnboundedReceiver<BrowserAssetUploadEvent>, String> {
+    Err("Asset uploads are only available in the browser build".to_owned())
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+/// Reports that asset deletion via the browser API is unavailable on non-wasm builds.
+pub(crate) async fn delete_asset(_kind: AssetUploadKind, _asset_id: String) -> Result<(), String> {
+    Err("Asset deletion is only available in the browser build".to_owned())
+}
+
+fn capitalize(value: &str) -> String {
+    let mut chars = value.chars();
+    match chars.next() {
+        Some(first) => format!("{}{}", first.to_ascii_uppercase(), chars.as_str()),
+        None => String::new(),
+    }
 }

@@ -75,9 +75,11 @@ impl RuntimeNode for RainbowSweepNode {
                     frame: ColorFrame {
                         layout: LedLayout {
                             id: "rainbow_sweep:unbound".to_owned(),
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 0,
                             width: None,
                             height: None,
+                            points_3d: None,
                         },
                         pixels: Vec::new(),
                     },

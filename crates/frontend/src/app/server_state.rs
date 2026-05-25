@@ -1,9 +1,9 @@
 use std::collections::HashSet;
 
 use shared::{
-    GraphDocument, GraphMetadata, GraphRuntimeStatus, InputValue, MqttBrokerConfig,
-    NodeDiagnosticEntry, NodeDiagnosticSummary, NodeRuntimeUpdateValue, NodeSchema, ServerState,
-    WledInstance,
+    GraphDocument, GraphMetadata, GraphRuntimeMode, GraphRuntimeStatus, InputValue,
+    MqttBrokerConfig, NodeDiagnosticEntry, NodeDiagnosticSummary, NodeRuntimeUpdateValue,
+    NodeSchema, ServerState, SinkPreviewFrame, WledInstance,
 };
 use tracing::{debug, info, trace, warn};
 
@@ -71,6 +71,9 @@ impl FrontendApp {
         self.graphs
             .node_diagnostic_details_by_graph
             .retain(|graph_id, _| known_graph_ids.contains(graph_id.as_str()));
+        self.graphs
+            .preview_frames_by_graph
+            .retain(|graph_id, _| known_graph_ids.contains(graph_id.as_str()));
         self.ui.status = format!(
             "Loaded {} graph documents",
             self.graphs.graph_documents.len()
@@ -106,6 +109,7 @@ impl FrontendApp {
         if !same_loaded_graph {
             self.graphs.snarl_viewport_initialized_graph_id = None;
             self.graphs.runtime_node_values.clear();
+            self.graphs.preview_frames_by_graph.remove(&graph_id);
             self.graphs.plot_history.clear();
         }
 
@@ -169,10 +173,30 @@ impl FrontendApp {
 
     /// Replaces the cached runtime mode for every known graph.
     pub(crate) fn apply_runtime_statuses(&mut self, graphs: Vec<GraphRuntimeStatus>) {
+        let selected_graph_id = self.ui.selected_graph_id.clone();
+        let previous_selected_mode = selected_graph_id
+            .as_ref()
+            .and_then(|graph_id| self.graphs.graph_runtime_modes.get(graph_id).copied());
         self.graphs.graph_runtime_modes = graphs
             .into_iter()
             .map(|status| (status.graph_id, status.mode))
             .collect();
+        if let Some(graph_id) = selected_graph_id {
+            let next_selected_mode = self.graphs.graph_runtime_modes.get(&graph_id).copied();
+            let started_running = matches!(
+                (previous_selected_mode, next_selected_mode),
+                (None, Some(GraphRuntimeMode::Running))
+                    | (
+                        Some(GraphRuntimeMode::Paused),
+                        Some(GraphRuntimeMode::Running)
+                    )
+            );
+            if started_running {
+                self.graphs.runtime_node_values.clear();
+                self.graphs.plot_history.clear();
+                self.graphs.preview_frames_by_graph.remove(&graph_id);
+            }
+        }
         self.ui.status = "Runtime statuses updated".to_owned();
     }
 
@@ -223,6 +247,7 @@ impl FrontendApp {
             }
             node_values.insert(name, value);
         }
+        self.refresh_graph_preview_frames(&graph_id);
     }
 
     /// Replaces the node-level diagnostic summary list for the selected graph.
@@ -291,7 +316,12 @@ impl FrontendApp {
         self.graphs.live_snarl = None;
         self.graphs.live_snarl_needs_rebuild = false;
         self.graphs.runtime_node_values.clear();
+        self.graphs.preview_frames_by_graph.clear();
         self.graphs.plot_history.clear();
+        self.ui.sink_preview_window_open = false;
+        self.ui.sink_preview_selected_item_keys.clear();
+        self.ui.sink_preview_selection_context_key = None;
+        self.ui.sink_preview_display_scope_node_id = None;
         self.ui.diagnostics_window_graph_id = None;
         self.ui.diagnostics_window_node_id = None;
         #[cfg(target_arch = "wasm32")]
@@ -330,11 +360,54 @@ fn decode_runtime_update_value(value: NodeRuntimeUpdateValue) -> (String, InputV
     }
 }
 
+impl FrontendApp {
+    fn refresh_graph_preview_frames(&mut self, graph_id: &str) {
+        let Some(document) = self.graphs.loaded_graph_document.as_ref() else {
+            return;
+        };
+        let mut frames = Vec::new();
+        for node in &document.nodes {
+            let Some(values) = self.graphs.runtime_node_values.get(&node.id) else {
+                continue;
+            };
+            frames.extend(values.iter().filter_map(|(_name, value)| {
+                preview_frame_from_input_value(value, node.id.as_str(), node.metadata.name.as_str())
+            }));
+        }
+        self.graphs
+            .preview_frames_by_graph
+            .insert(graph_id.to_owned(), frames);
+    }
+}
+
+fn preview_frame_from_input_value(
+    value: &InputValue,
+    source_node_id: &str,
+    source_display_name: &str,
+) -> Option<SinkPreviewFrame> {
+    match value {
+        InputValue::ColorFrame(frame) | InputValue::MappedFrame(frame)
+            if frame.layout.points_3d.is_some() =>
+        {
+            Some(SinkPreviewFrame {
+                sink_node_id: source_node_id.to_owned(),
+                sink_node_name: source_display_name.to_owned(),
+                layout: frame.layout.clone(),
+                pixels: frame.pixels.clone(),
+            })
+        }
+        _ => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use std::collections::{HashMap, VecDeque};
+
     use shared::{
-        GraphDocument, GraphNode, NodeDiagnosticEntry, NodeDiagnosticSeverity,
-        NodeDiagnosticSummary, NodeMetadata, NodeTypeId, NodeViewport,
+        ColorFrame, GraphDocument, GraphNode, GraphRuntimeMode, GraphRuntimeStatus, LedLayout,
+        NodeDiagnosticEntry, NodeDiagnosticSeverity, NodeDiagnosticSummary, NodeMetadata,
+        NodeRuntimeUpdateValue, NodeTypeId, NodeViewport, RgbaColor, SinkPreviewFrame, Vec3,
     };
 
     use crate::app::FrontendApp;
@@ -406,5 +479,141 @@ mod tests {
         let live_snarl = app.graphs.live_snarl.as_ref().expect("live snarl");
         let node_titles = crate::editor_view::snarl_node_titles(live_snarl);
         assert_eq!(node_titles, vec!["Backend Title".to_owned()]);
+    }
+
+    #[test]
+    fn dummy_display_runtime_updates_refresh_preview_frames() {
+        let mut app = FrontendApp::default();
+        let mut document = graph_document_with_node_title("Dummy Graph");
+        document.nodes[0].node_type = NodeTypeId::new(shared::NodeTypeId::WLED_DUMMY_DISPLAY);
+        document.nodes[0].id = "dummy-1".to_owned();
+        app.graphs.loaded_graph_document = Some(document);
+
+        app.apply_runtime_update(
+            "graph-a".to_owned(),
+            "dummy-1".to_owned(),
+            vec![NodeRuntimeUpdateValue::Inline {
+                name: "frame".to_owned(),
+                value: shared::InputValue::ColorFrame(ColorFrame {
+                    layout: LedLayout {
+                        id: "dummy-1".to_owned(),
+                        role: ::shared::LedLayoutRole::RenderTarget,
+                        pixel_count: 1,
+                        width: Some(1),
+                        height: Some(1),
+                        points_3d: Some(vec![Vec3 {
+                            x: 1.0,
+                            y: 2.0,
+                            z: 3.0,
+                        }]),
+                    },
+                    pixels: vec![RgbaColor {
+                        r: 1.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    }],
+                }),
+            }],
+        );
+        assert_eq!(
+            app.graphs
+                .preview_frames_by_graph
+                .get("graph-a")
+                .map(Vec::len),
+            Some(1)
+        );
+
+        app.apply_runtime_update(
+            "graph-a".to_owned(),
+            "dummy-1".to_owned(),
+            vec![NodeRuntimeUpdateValue::Inline {
+                name: "frame".to_owned(),
+                value: shared::InputValue::ColorFrame(ColorFrame {
+                    layout: LedLayout {
+                        id: "dummy-1".to_owned(),
+                        role: ::shared::LedLayoutRole::RenderTarget,
+                        pixel_count: 1,
+                        width: Some(1),
+                        height: Some(1),
+                        points_3d: Some(vec![Vec3 {
+                            x: 1.0,
+                            y: 2.0,
+                            z: 3.0,
+                        }]),
+                    },
+                    pixels: vec![RgbaColor {
+                        r: 0.0,
+                        g: 1.0,
+                        b: 0.0,
+                        a: 1.0,
+                    }],
+                }),
+            }],
+        );
+
+        assert_eq!(
+            app.graphs
+                .preview_frames_by_graph
+                .get("graph-a")
+                .and_then(|entries| entries.first())
+                .map(|entry| entry.pixels[0]),
+            Some(RgbaColor {
+                r: 0.0,
+                g: 1.0,
+                b: 0.0,
+                a: 1.0,
+            })
+        );
+    }
+
+    #[test]
+    fn starting_selected_graph_clears_runtime_caches() {
+        let mut app = FrontendApp::default();
+        app.ui.selected_graph_id = Some("graph-a".to_owned());
+        app.graphs
+            .graph_runtime_modes
+            .insert("graph-a".to_owned(), GraphRuntimeMode::Paused);
+        app.graphs.runtime_node_values.insert(
+            "node-1".to_owned(),
+            HashMap::from([("value".to_owned(), shared::InputValue::Float(1.0))]),
+        );
+        app.graphs
+            .plot_history
+            .insert("node-1".to_owned(), VecDeque::from([1.0_f32, 2.0_f32]));
+        app.graphs.preview_frames_by_graph.insert(
+            "graph-a".to_owned(),
+            vec![SinkPreviewFrame {
+                sink_node_id: "node-1".to_owned(),
+                sink_node_name: "Display".to_owned(),
+                layout: LedLayout {
+                    id: "layout-a".to_owned(),
+                    role: shared::LedLayoutRole::RenderTarget,
+                    pixel_count: 1,
+                    width: Some(1),
+                    height: Some(1),
+                    points_3d: Some(vec![Vec3 {
+                        x: 1.0,
+                        y: 2.0,
+                        z: 3.0,
+                    }]),
+                },
+                pixels: vec![RgbaColor {
+                    r: 1.0,
+                    g: 0.0,
+                    b: 0.0,
+                    a: 1.0,
+                }],
+            }],
+        );
+
+        app.apply_runtime_statuses(vec![GraphRuntimeStatus {
+            graph_id: "graph-a".to_owned(),
+            mode: GraphRuntimeMode::Running,
+        }]);
+
+        assert!(app.graphs.runtime_node_values.is_empty());
+        assert!(app.graphs.plot_history.is_empty());
+        assert!(!app.graphs.preview_frames_by_graph.contains_key("graph-a"));
     }
 }

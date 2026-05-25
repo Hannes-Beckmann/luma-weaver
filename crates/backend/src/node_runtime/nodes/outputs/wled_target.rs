@@ -6,15 +6,18 @@ use serde_json::Value as JsonValue;
 use shared::{ColorFrame, InputValue, LedLayout, NodeDiagnostic, NodeDiagnosticSeverity};
 
 use crate::node_runtime::{
-    AnyInputValue, NodeEvaluationContext, RuntimeNode, RuntimeNodeFromParameters,
-    TypedNodeEvaluation,
+    AnyInputValue, NodeEvaluationContext, NodeFrontendUpdate, RuntimeNode,
+    RuntimeNodeFromParameters, TypedNodeEvaluation,
 };
 use crate::services::wled::ddp;
+use crate::spatial_layout::{MatrixStripMode, spatial_points_for_mode};
 
 #[derive(Default)]
 pub(crate) struct WledTargetNode {
     led_count: usize,
     target: String,
+    use_spatial: bool,
+    parameters: HashMap<String, JsonValue>,
     transport: Option<WledDdpTransport>,
 }
 
@@ -22,20 +25,24 @@ pub(crate) struct WledTargetNode {
 struct WledTargetParameters {
     led_count: usize,
     target: String,
+    use_spatial: bool,
 }
 
 crate::node_runtime::impl_runtime_parameters!(WledTargetParameters {
     led_count: u64 => |value| crate::node_runtime::max_u64_to_usize(value, 1), default 60usize,
     target: String = String::new(),
+    use_spatial: bool = false,
 });
 
 impl WledTargetNode {
     /// Creates a WLED target node from parsed parameters and eagerly resolves the destination.
-    fn from_config(config: WledTargetParameters) -> Self {
+    fn from_config(config: WledTargetParameters, parameters: HashMap<String, JsonValue>) -> Self {
         let transport = WledDdpTransport::new(&config.target).ok();
         Self {
             led_count: config.led_count,
             target: config.target,
+            use_spatial: config.use_spatial,
+            parameters,
             transport,
         }
     }
@@ -50,7 +57,7 @@ impl RuntimeNodeFromParameters for WledTargetNode {
             diagnostics,
         } = WledTargetParameters::from_parameters(parameters);
         crate::node_runtime::NodeConstruction {
-            node: WledTargetNode::from_config(config),
+            node: WledTargetNode::from_config(config, parameters.clone()),
             diagnostics,
         }
     }
@@ -80,9 +87,18 @@ impl RuntimeNode for WledTargetNode {
         let disabled = is_disabled(inputs.disable);
         let layout = context.render_layout.clone().unwrap_or(LedLayout {
             id: "wled_target".to_owned(),
+            role: ::shared::LedLayoutRole::RenderTarget,
             pixel_count: self.led_count,
-            width: None,
-            height: None,
+            width: Some(self.led_count),
+            height: Some(1),
+            points_3d: self.use_spatial.then(|| {
+                spatial_points_for_mode(
+                    &self.parameters,
+                    "",
+                    self.led_count,
+                    MatrixStripMode::Strip,
+                )
+            }),
         });
 
         let frame_for_transport = match inputs.value.map(|value| value.0) {
@@ -124,9 +140,29 @@ impl RuntimeNode for WledTargetNode {
             }
         }
 
+        let preview_frame = if disabled {
+            ColorFrame {
+                layout: frame_for_transport.layout.clone(),
+                pixels: vec![
+                    shared::RgbaColor {
+                        r: 0.0,
+                        g: 0.0,
+                        b: 0.0,
+                        a: 1.0,
+                    };
+                    frame_for_transport.layout.pixel_count
+                ],
+            }
+        } else {
+            normalize_frame_for_preview(frame_for_transport)
+        };
+
         Ok(TypedNodeEvaluation {
             outputs: (),
-            frontend_updates: Vec::new(),
+            frontend_updates: vec![NodeFrontendUpdate {
+                name: "frame".to_owned(),
+                value: InputValue::ColorFrame(preview_frame),
+            }],
             diagnostics,
         })
     }
@@ -166,6 +202,24 @@ impl WledTargetNode {
 
 fn is_disabled(value: f32) -> bool {
     value >= 0.5
+}
+
+fn normalize_frame_for_preview(mut frame: ColorFrame) -> ColorFrame {
+    let pixel_count = frame.layout.pixel_count;
+    if frame.pixels.len() > pixel_count {
+        frame.pixels.truncate(pixel_count);
+    } else if frame.pixels.len() < pixel_count {
+        frame.pixels.extend(std::iter::repeat_n(
+            shared::RgbaColor {
+                r: 0.0,
+                g: 0.0,
+                b: 0.0,
+                a: 1.0,
+            },
+            pixel_count - frame.pixels.len(),
+        ));
+    }
+    frame
 }
 
 struct WledDdpTransport {

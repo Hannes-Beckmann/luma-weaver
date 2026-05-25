@@ -52,9 +52,11 @@ impl RuntimeNode for LevelBarNode {
                     frame: ColorFrame {
                         layout: LedLayout {
                             id: "level_bar:unbound".to_owned(),
+                            role: ::shared::LedLayoutRole::RenderTarget,
                             pixel_count: 0,
                             width: None,
                             height: None,
+                            points_3d: None,
                         },
                         pixels: Vec::new(),
                     },
