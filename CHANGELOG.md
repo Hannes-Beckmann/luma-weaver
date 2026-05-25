@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0
+
+### Features
+
+- Added spatial LED layout workflows, including optional `Spatial3d` sink layouts and mapped-frame graph paths.
+- Added a global 3D sink preview with runtime-fed previews for spatial WLED targets and dummy displays.
+- Added the `Transform` node for spatial frame translation and rotation workflows.
+- Added uploaded layout asset support for spatial layout configuration.
+- Added Home Assistant MQTT graph controls for starting, stopping, and observing graph execution state.
+
+### Fixes
+
+- Preserved mapped-frame runtime previews over binary WebSocket transport.
+- Fixed WLED target runtime preview forwarding so spatial target previews reach the frontend.
+- Fixed layout upload validation to return client errors for malformed CSV/JSON uploads.
+- Fixed uploaded asset state synchronization in the editor so selected files appear immediately.
+- Fixed layout asset replacement cleanup so orphaned layout uploads are deleted when they are no longer referenced.
+- Added editor feedback for rejected connections, including contextual guidance for invalid graph wires.
+
+### Documentation And Maintenance
+
+- Expanded architecture and integration docs for spatial layouts, mapped frames, and Home Assistant graph controls.
+
 ## 0.2.0
 
 ### Breaking Changes
