@@ -36,7 +36,22 @@ pub(super) async fn handle(
             } else {
                 match context.state.mqtt_broker_store.save_all(&brokers).await {
                     Ok(()) => match context.state.mqtt_service.sync_brokers(brokers.clone()) {
-                        Ok(()) => Some(ServerMessage::MqttBrokerConfigs { brokers }),
+                        Ok(()) => {
+                            if let Ok(graphs) =
+                                context.state.graph_store.list_graph_metadata().await
+                            {
+                                let statuses =
+                                    context.state.runtime_manager.runtime_statuses().await;
+                                if let Err(error) = context
+                                    .state
+                                    .mqtt_service
+                                    .sync_graph_controls(&graphs, &statuses)
+                                {
+                                    tracing::warn!(%error, "failed to sync Home Assistant graph controls after broker update");
+                                }
+                            }
+                            Some(ServerMessage::MqttBrokerConfigs { brokers })
+                        }
                         Err(error) => Some(ServerMessage::Error {
                             message: format!("Failed to apply MQTT broker configs: {error}"),
                         }),

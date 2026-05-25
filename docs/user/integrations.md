@@ -16,7 +16,7 @@ Because discovery and device communication happen in the backend, WLED features 
 
 ## Home Assistant MQTT
 
-Luma Weaver can expose values through Home Assistant MQTT `number` entities.
+Luma Weaver can expose graph controls and graph values through Home Assistant MQTT entities.
 
 The backend is responsible for:
 
@@ -27,6 +27,13 @@ The backend is responsible for:
 - synchronization for registered graph nodes
 
 Reusable broker configs can be marked as Home Assistant brokers in the UI. Only those marked brokers are offered to Home Assistant nodes.
+
+On the graph overview page, each graph can select one configured Home Assistant broker. Selecting a broker creates graph-level Home Assistant entities for that graph:
+
+- an `Execution` switch that starts the graph when turned on and stops it when turned off
+- an `Execution Status` sensor with `running`, `paused`, or `stopped`
+
+Home Assistant MQTT Number nodes still create their own per-graph `number` entities through the broker selected on the node.
 
 ## Demo Mode Limitations
 

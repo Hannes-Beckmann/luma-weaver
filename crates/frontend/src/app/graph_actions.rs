@@ -68,6 +68,41 @@ impl FrontendApp {
         });
     }
 
+    /// Updates the Home Assistant broker used for graph-level control entities.
+    pub(crate) fn update_graph_home_assistant_broker(
+        &mut self,
+        graph_id: String,
+        broker_id: String,
+    ) {
+        let broker_id = broker_id.trim().to_owned();
+
+        if let Some(graph) = self
+            .graphs
+            .graph_documents
+            .iter_mut()
+            .find(|graph| graph.id == graph_id)
+        {
+            graph.home_assistant_broker_id = broker_id.clone();
+        }
+
+        if self
+            .graphs
+            .loaded_graph_document
+            .as_ref()
+            .map(|document| document.metadata.id.as_str())
+            == Some(graph_id.as_str())
+        {
+            if let Some(document) = self.graphs.loaded_graph_document.as_mut() {
+                document.metadata.home_assistant_broker_id = broker_id.clone();
+            }
+        }
+
+        self.send(ClientMessage::UpdateGraphHomeAssistantBroker {
+            id: graph_id,
+            broker_id,
+        });
+    }
+
     /// Updates the locally cached graph name and sends the rename request to the backend.
     ///
     /// Empty names are rejected immediately so the user gets fast feedback without waiting for the

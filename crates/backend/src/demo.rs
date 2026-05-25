@@ -121,6 +121,9 @@ impl DemoTransport {
                 id,
                 execution_frequency_hz,
             } => self.update_graph_execution_frequency(&id, execution_frequency_hz),
+            ClientMessage::UpdateGraphHomeAssistantBroker { id, broker_id } => {
+                self.update_graph_home_assistant_broker(&id, broker_id)
+            }
             ClientMessage::GetNodeDefinitions => Some(ServerMessage::NodeDefinitions {
                 definitions: self.node_definitions.clone(),
             }),
@@ -208,6 +211,7 @@ impl DemoTransport {
                 id: Uuid::new_v4().to_string(),
                 name: trimmed_name,
                 execution_frequency_hz: 60,
+                home_assistant_broker_id: String::new(),
             },
             viewport: shared::GraphViewport::default(),
             nodes: Vec::new(),
@@ -331,6 +335,30 @@ impl DemoTransport {
             };
 
             document.metadata.execution_frequency_hz = execution_frequency_hz.max(1);
+        }
+        Some(ServerMessage::GraphMetadata {
+            documents: self.graph_metadata(),
+        })
+    }
+
+    fn update_graph_home_assistant_broker(
+        &mut self,
+        id: &str,
+        broker_id: String,
+    ) -> Option<ServerMessage> {
+        let id = id.trim();
+        {
+            let Some(document) = self
+                .graph_documents
+                .iter_mut()
+                .find(|document| document.metadata.id == id)
+            else {
+                return Some(ServerMessage::Error {
+                    message: format!("Graph document {id} was not found"),
+                });
+            };
+
+            document.metadata.home_assistant_broker_id = broker_id.trim().to_owned();
         }
         Some(ServerMessage::GraphMetadata {
             documents: self.graph_metadata(),

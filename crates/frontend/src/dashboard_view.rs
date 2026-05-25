@@ -102,6 +102,13 @@ pub(crate) fn render(ctx: &egui::Context, ui: &mut egui::Ui, app: &mut FrontendA
         });
     } else {
         let graphs = app.graphs.graph_documents.clone();
+        let home_assistant_brokers = app
+            .graphs
+            .mqtt_broker_configs
+            .iter()
+            .filter(|broker| broker.is_home_assistant)
+            .cloned()
+            .collect::<Vec<_>>();
         let mut open_graph: Option<String> = None;
         let mut delete_graph: Option<String> = None;
         let mut rename_graph: Option<(String, String)> = None;
@@ -200,6 +207,35 @@ pub(crate) fn render(ctx: &egui::Context, ui: &mut egui::Ui, app: &mut FrontendA
                             app.update_graph_execution_frequency(
                                 graph_id.clone(),
                                 execution_frequency_hz,
+                            );
+                        }
+                        ui.add_space(8.0);
+                        ui.label(RichText::new("HA broker").color(Color32::from_gray(150)));
+                        let mut selected_broker_id = graph.home_assistant_broker_id.clone();
+                        egui::ComboBox::from_id_salt(format!("graph_ha_broker_{graph_id}"))
+                            .width(190.0)
+                            .selected_text(home_assistant_broker_label(
+                                &selected_broker_id,
+                                &home_assistant_brokers,
+                            ))
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(
+                                    &mut selected_broker_id,
+                                    String::new(),
+                                    "Disabled",
+                                );
+                                for broker in &home_assistant_brokers {
+                                    ui.selectable_value(
+                                        &mut selected_broker_id,
+                                        broker.id.clone(),
+                                        broker.display_name.clone(),
+                                    );
+                                }
+                            });
+                        if selected_broker_id != graph.home_assistant_broker_id {
+                            app.update_graph_home_assistant_broker(
+                                graph_id.clone(),
+                                selected_broker_id,
                             );
                         }
                     });
@@ -462,6 +498,20 @@ fn runtime_badge(ui: &mut egui::Ui, mode: Option<GraphRuntimeMode>) {
         .show(ui, |ui| {
             ui.label(RichText::new(label).color(color).strong());
         });
+}
+
+/// Returns the display label for a graph-level Home Assistant broker selection.
+fn home_assistant_broker_label(broker_id: &str, brokers: &[MqttBrokerConfig]) -> String {
+    let broker_id = broker_id.trim();
+    if broker_id.is_empty() {
+        return "Disabled".to_owned();
+    }
+
+    brokers
+        .iter()
+        .find(|broker| broker.id == broker_id)
+        .map(|broker| broker.display_name.clone())
+        .unwrap_or_else(|| format!("{broker_id} (unavailable)"))
 }
 
 /// Returns the most severe diagnostic summary for a graph, breaking ties by active count.

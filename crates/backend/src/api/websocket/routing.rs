@@ -69,6 +69,7 @@ pub(crate) async fn handle_client_message(
                 | ClientMessage::UpdateGraphName { .. }
                 | ClientMessage::ImportGraphDocument { .. }
                 | ClientMessage::UpdateGraphExecutionFrequency { .. }
+                | ClientMessage::UpdateGraphHomeAssistantBroker { .. }
                 | ClientMessage::GetNodeDefinitions
                 | ClientMessage::GetGraphMetadata => {
                     graphs::handle(&mut context, client_message).await
@@ -127,6 +128,9 @@ fn client_message_kind(message: &ClientMessage) -> &'static str {
         ClientMessage::UpdateGraphName { .. } => "update_graph_name",
         ClientMessage::ImportGraphDocument { .. } => "import_graph_document",
         ClientMessage::UpdateGraphExecutionFrequency { .. } => "update_graph_execution_frequency",
+        ClientMessage::UpdateGraphHomeAssistantBroker { .. } => {
+            "update_graph_home_assistant_broker"
+        }
         ClientMessage::GetNodeDefinitions => "get_node_definitions",
         ClientMessage::GetGraphMetadata => "get_graph_metadata",
         ClientMessage::StartGraph { .. } => "start_graph",

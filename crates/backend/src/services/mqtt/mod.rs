@@ -1,11 +1,11 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use flume::{Receiver, Sender};
 use rumqttc::{AsyncClient, Event, LastWill, MqttOptions, Packet, QoS};
-use shared::MqttBrokerConfig;
+use shared::{GraphMetadata, GraphRuntimeMode, GraphRuntimeStatus, MqttBrokerConfig};
 use tokio::time::MissedTickBehavior;
 
 static GLOBAL_HOME_ASSISTANT_MQTT_SERVICE: OnceLock<Arc<HomeAssistantMqttService>> =
@@ -49,6 +49,18 @@ pub(crate) struct HaMqttNumberSnapshot {
     pub(crate) waiting_for_first_value: bool,
 }
 
+#[derive(Clone, PartialEq)]
+pub(crate) struct HaMqttGraphControlRegistration {
+    pub(crate) graph_id: String,
+    pub(crate) graph_name: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum HaMqttGraphControlCommand {
+    Start { graph_id: String },
+    Stop { graph_id: String },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct NumberEntityKey {
     graph_id: String,
@@ -67,15 +79,25 @@ impl NumberEntityKey {
 pub(crate) struct HomeAssistantMqttService {
     configs: RwLock<HashMap<String, MqttBrokerConfig>>,
     brokers: RwLock<HashMap<String, BrokerHandle>>,
+    graph_command_tx: Sender<HaMqttGraphControlCommand>,
+    graph_command_rx: Receiver<HaMqttGraphControlCommand>,
 }
 
 impl HomeAssistantMqttService {
     /// Creates a new shared Home Assistant MQTT service.
     pub(crate) fn new() -> Arc<Self> {
+        let (graph_command_tx, graph_command_rx) = flume::unbounded();
         Arc::new(Self {
             configs: RwLock::new(HashMap::new()),
             brokers: RwLock::new(HashMap::new()),
+            graph_command_tx,
+            graph_command_rx,
         })
+    }
+
+    /// Returns a receiver for graph-level Home Assistant control commands.
+    pub(crate) fn graph_control_commands(&self) -> Receiver<HaMqttGraphControlCommand> {
+        self.graph_command_rx.clone()
     }
 
     /// Reconciles the active broker tasks with the latest configured broker list.
@@ -140,7 +162,12 @@ impl HomeAssistantMqttService {
 
             let state = Arc::new(RwLock::new(BrokerRuntimeState::default()));
             let (command_tx, command_rx) = flume::unbounded();
-            spawn_broker_task(config.clone(), state.clone(), command_rx);
+            spawn_broker_task(
+                config.clone(),
+                state.clone(),
+                command_rx,
+                self.graph_command_tx.clone(),
+            );
             brokers.insert(
                 broker_id,
                 BrokerHandle {
@@ -149,6 +176,67 @@ impl HomeAssistantMqttService {
                     command_tx,
                 },
             );
+        }
+
+        Ok(())
+    }
+
+    /// Reconciles graph-level Home Assistant controls for all active Home Assistant brokers.
+    pub(crate) fn sync_graph_controls(
+        &self,
+        graphs: &[GraphMetadata],
+        statuses: &[GraphRuntimeStatus],
+    ) -> anyhow::Result<()> {
+        let configs = self
+            .configs
+            .read()
+            .map_err(|_| anyhow::anyhow!("mqtt broker config registry lock poisoned"))?;
+        let active_broker_ids = configs
+            .iter()
+            .filter(|(_, config)| config.is_home_assistant)
+            .map(|(id, _)| id.clone())
+            .collect::<HashSet<_>>();
+        let mut controls_by_broker = active_broker_ids
+            .iter()
+            .map(|broker_id| (broker_id.clone(), Vec::new()))
+            .collect::<HashMap<_, _>>();
+
+        for graph in graphs {
+            let broker_id = graph.home_assistant_broker_id.trim();
+            if broker_id.is_empty() {
+                continue;
+            }
+            if !active_broker_ids.contains(broker_id) {
+                tracing::warn!(
+                    graph_id = %graph.id,
+                    broker_id,
+                    "graph selected a missing or non-Home Assistant MQTT broker"
+                );
+                continue;
+            }
+            controls_by_broker
+                .entry(broker_id.to_owned())
+                .or_default()
+                .push(HaMqttGraphControlRegistration {
+                    graph_id: graph.id.clone(),
+                    graph_name: graph.name.clone(),
+                });
+        }
+        drop(configs);
+
+        let brokers = self
+            .brokers
+            .read()
+            .map_err(|_| anyhow::anyhow!("mqtt broker registry lock poisoned"))?;
+        for (broker_id, handle) in brokers.iter() {
+            let controls = controls_by_broker.remove(broker_id).unwrap_or_default();
+            handle
+                .command_tx
+                .send(BrokerCommand::ReconcileGraphControls {
+                    controls,
+                    statuses: statuses.to_vec(),
+                })
+                .context("send MQTT graph controls reconciliation command")?;
         }
 
         Ok(())
@@ -263,9 +351,11 @@ struct BrokerHandle {
 #[cfg(test)]
 mod tests {
     use super::{
-        BrokerRuntimeState, HaMqttNumberRegistration, HomeAssistantMqttService, NumberEntityKey,
-        NumberEntityState, device_identifier, discovery_topic, entity_object_id, entity_unique_id,
-        graph_display_name, handle_publish, number_command_topic, number_state_topic,
+        BrokerRuntimeState, GraphControlState, HaMqttGraphControlCommand,
+        HaMqttGraphControlRegistration, HaMqttNumberRegistration, HomeAssistantMqttService,
+        NumberEntityKey, NumberEntityState, device_identifier, discovery_topic, entity_object_id,
+        entity_unique_id, graph_display_name, graph_switch_command_topic, handle_publish,
+        number_command_topic, number_state_topic,
     };
     use rumqttc::{AsyncClient, MqttOptions};
     use shared::MqttBrokerConfig;
@@ -369,10 +459,13 @@ mod tests {
     #[test]
     fn graph_display_name_falls_back_when_graph_name_is_empty() {
         let mut registration = registration();
-        assert_eq!(graph_display_name(&registration), "Graph One");
+        assert_eq!(graph_display_name(&registration.graph_name), "Graph One");
 
         registration.graph_name.clear();
-        assert_eq!(graph_display_name(&registration), "Luma Weaver Graph");
+        assert_eq!(
+            graph_display_name(&registration.graph_name),
+            "Luma Weaver Graph"
+        );
     }
 
     #[tokio::test]
@@ -421,6 +514,7 @@ mod tests {
 
         let state = Arc::new(RwLock::new(BrokerRuntimeState {
             connected: true,
+            controls: HashMap::new(),
             numbers: HashMap::from([
                 (
                     NumberEntityKey::from_registration(&first),
@@ -444,11 +538,13 @@ mod tests {
         }));
         let (client, _eventloop) =
             AsyncClient::new(MqttOptions::new("mqtt-test-client", "127.0.0.1", 1883), 10);
+        let (graph_command_tx, _graph_command_rx) = flume::unbounded();
 
         handle_publish(
             &config,
             &state,
             &client,
+            &graph_command_tx,
             number_state_topic(&config.id, &second.graph_id, &second.entity_id),
             b"7.5".to_vec(),
         )
@@ -470,12 +566,55 @@ mod tests {
             Some(7.5)
         );
     }
+
+    #[tokio::test]
+    async fn handle_publish_emits_graph_control_commands() {
+        let config = broker_config("primary", true);
+        let state = Arc::new(RwLock::new(BrokerRuntimeState {
+            connected: true,
+            controls: HashMap::from([(
+                "graph_one".to_owned(),
+                GraphControlState {
+                    registration: HaMqttGraphControlRegistration {
+                        graph_id: "graph_one".to_owned(),
+                        graph_name: "Graph One".to_owned(),
+                    },
+                },
+            )]),
+            numbers: HashMap::new(),
+        }));
+        let (client, _eventloop) =
+            AsyncClient::new(MqttOptions::new("mqtt-test-client", "127.0.0.1", 1883), 10);
+        let (graph_command_tx, graph_command_rx) = flume::unbounded();
+
+        handle_publish(
+            &config,
+            &state,
+            &client,
+            &graph_command_tx,
+            graph_switch_command_topic(&config.id, "graph_one"),
+            b"ON".to_vec(),
+        )
+        .await;
+
+        assert_eq!(
+            graph_command_rx.try_recv().expect("graph command"),
+            HaMqttGraphControlCommand::Start {
+                graph_id: "graph_one".to_owned()
+            }
+        );
+    }
 }
 
 #[derive(Default)]
 struct BrokerRuntimeState {
     connected: bool,
+    controls: HashMap<String, GraphControlState>,
     numbers: HashMap<NumberEntityKey, NumberEntityState>,
+}
+
+struct GraphControlState {
+    registration: HaMqttGraphControlRegistration,
 }
 
 struct NumberEntityState {
@@ -487,6 +626,10 @@ struct NumberEntityState {
 
 enum BrokerCommand {
     UpsertNumberEntity(HaMqttNumberRegistration),
+    ReconcileGraphControls {
+        controls: Vec<HaMqttGraphControlRegistration>,
+        statuses: Vec<GraphRuntimeStatus>,
+    },
     PublishNumberState {
         graph_id: String,
         entity_id: String,
@@ -504,6 +647,7 @@ fn spawn_broker_task(
     config: MqttBrokerConfig,
     state: Arc<RwLock<BrokerRuntimeState>>,
     command_rx: Receiver<BrokerCommand>,
+    graph_command_tx: Sender<HaMqttGraphControlCommand>,
 ) {
     tokio::spawn(async move {
         let availability_topic = broker_availability_topic(&config.id);
@@ -560,7 +704,7 @@ fn spawn_broker_task(
                                 .await;
                         }
                         Ok(Event::Incoming(Packet::Publish(publish))) => {
-                            handle_publish(&config, &state, &client, publish.topic, publish.payload.to_vec()).await;
+                            handle_publish(&config, &state, &client, &graph_command_tx, publish.topic, publish.payload.to_vec()).await;
                         }
                         Ok(_) => {}
                         Err(error) => {
@@ -608,12 +752,12 @@ async fn handle_broker_command(
                 "max": registration.max,
                 "step": registration.step,
                 "mode": "box",
-                "device": {
-                    "identifiers": [device_identifier(&registration.graph_id)],
-                    "name": graph_display_name(&registration),
-                    "manufacturer": "Luma Weaver",
-                    "model": "Graph Controls",
-                }
+                    "device": {
+                        "identifiers": [device_identifier(&registration.graph_id)],
+                        "name": graph_display_name(&registration.graph_name),
+                        "manufacturer": "Luma Weaver",
+                        "model": "Graph Controls",
+                    }
             });
             if let Err(error) = client
                 .subscribe(command_topic.clone(), QoS::AtLeastOnce)
@@ -651,6 +795,68 @@ async fn handle_broker_command(
             }
             false
         }
+        BrokerCommand::ReconcileGraphControls { controls, statuses } => {
+            let desired_ids = controls
+                .iter()
+                .map(|control| control.graph_id.clone())
+                .collect::<HashSet<_>>();
+            let removed = {
+                let mut state = match state.write() {
+                    Ok(state) => state,
+                    Err(_) => return false,
+                };
+                let removed = state
+                    .controls
+                    .keys()
+                    .filter(|graph_id| !desired_ids.contains(*graph_id))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                for graph_id in &removed {
+                    state.controls.remove(graph_id);
+                }
+                for control in &controls {
+                    state.controls.insert(
+                        control.graph_id.clone(),
+                        GraphControlState {
+                            registration: control.clone(),
+                        },
+                    );
+                }
+                removed
+            };
+
+            for graph_id in removed {
+                clear_graph_control_discovery(client, config, &graph_id).await;
+            }
+            for control in controls {
+                publish_graph_control_discovery(client, config, &control).await;
+                let status = graph_execution_status(&statuses, &control.graph_id);
+                if let Err(error) = client
+                    .publish(
+                        graph_status_state_topic(&config.id, &control.graph_id),
+                        QoS::AtLeastOnce,
+                        true,
+                        status,
+                    )
+                    .await
+                {
+                    tracing::warn!(broker_id = %config.id, %error, graph_id = %control.graph_id, "failed to publish Home Assistant graph status");
+                }
+                let switch_state = graph_switch_state(&statuses, &control.graph_id);
+                if let Err(error) = client
+                    .publish(
+                        graph_switch_state_topic(&config.id, &control.graph_id),
+                        QoS::AtLeastOnce,
+                        true,
+                        switch_state,
+                    )
+                    .await
+                {
+                    tracing::warn!(broker_id = %config.id, %error, graph_id = %control.graph_id, "failed to publish Home Assistant graph switch state");
+                }
+            }
+            false
+        }
         BrokerCommand::PublishNumberState {
             graph_id,
             entity_id,
@@ -670,7 +876,23 @@ async fn handle_broker_command(
             }
             false
         }
-        BrokerCommand::Stop => true,
+        BrokerCommand::Stop => {
+            let graph_ids = {
+                let mut state = match state.write() {
+                    Ok(state) => state,
+                    Err(_) => return true,
+                };
+                let graph_ids = state.controls.keys().cloned().collect::<Vec<_>>();
+                state.controls.clear();
+                graph_ids
+            };
+
+            for graph_id in graph_ids {
+                clear_graph_control_discovery(client, config, &graph_id).await;
+            }
+
+            true
+        }
     }
 }
 
@@ -682,9 +904,42 @@ async fn handle_publish(
     config: &MqttBrokerConfig,
     state: &Arc<RwLock<BrokerRuntimeState>>,
     client: &AsyncClient,
+    graph_command_tx: &Sender<HaMqttGraphControlCommand>,
     topic: String,
     payload: Vec<u8>,
 ) {
+    let graph_command = {
+        let state = match state.read() {
+            Ok(state) => state,
+            Err(_) => return,
+        };
+        let payload = std::str::from_utf8(&payload)
+            .ok()
+            .map(str::trim)
+            .map(str::to_ascii_uppercase);
+        state.controls.iter().find_map(|(graph_id, control)| {
+            if topic == graph_switch_command_topic(&config.id, &control.registration.graph_id) {
+                match payload.as_deref() {
+                    Some("ON") => Some(HaMqttGraphControlCommand::Start {
+                        graph_id: graph_id.clone(),
+                    }),
+                    Some("OFF") => Some(HaMqttGraphControlCommand::Stop {
+                        graph_id: graph_id.clone(),
+                    }),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        })
+    };
+    if let Some(command) = graph_command {
+        if let Err(error) = graph_command_tx.send(command) {
+            tracing::warn!(broker_id = %config.id, %error, "failed to enqueue Home Assistant graph command");
+        }
+        return;
+    }
+
     let value = match std::str::from_utf8(&payload)
         .ok()
         .map(str::trim)
@@ -749,6 +1004,99 @@ async fn handle_publish(
     }
 }
 
+async fn publish_graph_control_discovery(
+    client: &AsyncClient,
+    config: &MqttBrokerConfig,
+    registration: &HaMqttGraphControlRegistration,
+) {
+    clear_legacy_graph_button_discovery(client, config, &registration.graph_id).await;
+    let switch_command_topic = graph_switch_command_topic(&config.id, &registration.graph_id);
+    let device = serde_json::json!({
+        "identifiers": [device_identifier(&registration.graph_id)],
+        "name": graph_display_name(&registration.graph_name),
+        "manufacturer": "Luma Weaver",
+        "model": "Graph Controls",
+    });
+    let switch_payload = serde_json::json!({
+        "name": "Execution",
+        "unique_id": graph_control_unique_id(&config.id, &registration.graph_id, "execution"),
+        "object_id": graph_control_object_id(&registration.graph_id, "execution"),
+        "state_topic": graph_switch_state_topic(&config.id, &registration.graph_id),
+        "command_topic": switch_command_topic,
+        "availability_topic": broker_availability_topic(&config.id),
+        "payload_on": "ON",
+        "payload_off": "OFF",
+        "state_on": "ON",
+        "state_off": "OFF",
+        "icon": "mdi:play-pause",
+        "device": device.clone(),
+    });
+    let status_payload = serde_json::json!({
+        "name": "Execution Status",
+        "unique_id": graph_control_unique_id(&config.id, &registration.graph_id, "status"),
+        "object_id": graph_control_object_id(&registration.graph_id, "status"),
+        "state_topic": graph_status_state_topic(&config.id, &registration.graph_id),
+        "availability_topic": broker_availability_topic(&config.id),
+        "icon": "mdi:play-circle-outline",
+        "device": device,
+    });
+
+    if let Err(error) = client
+        .subscribe(switch_command_topic.clone(), QoS::AtLeastOnce)
+        .await
+    {
+        tracing::warn!(broker_id = %config.id, %error, topic = %switch_command_topic, "failed to subscribe to Home Assistant graph command topic");
+    }
+
+    let discovery_payloads = [
+        (
+            graph_control_discovery_topic(config, &registration.graph_id, "switch", "execution"),
+            switch_payload,
+        ),
+        (
+            graph_control_discovery_topic(config, &registration.graph_id, "sensor", "status"),
+            status_payload,
+        ),
+    ];
+    for (topic, payload) in discovery_payloads {
+        if let Err(error) = client
+            .publish(topic, QoS::AtLeastOnce, true, payload.to_string())
+            .await
+        {
+            tracing::warn!(broker_id = %config.id, %error, graph_id = %registration.graph_id, "failed to publish Home Assistant graph discovery payload");
+        }
+    }
+}
+
+async fn clear_graph_control_discovery(
+    client: &AsyncClient,
+    config: &MqttBrokerConfig,
+    graph_id: &str,
+) {
+    let switch_command_topic = graph_switch_command_topic(&config.id, graph_id);
+    let _ = client.unsubscribe(switch_command_topic).await;
+    for (domain, entity_id) in [("switch", "execution"), ("sensor", "status")] {
+        let topic = graph_control_discovery_topic(config, graph_id, domain, entity_id);
+        if let Err(error) = client.publish(topic, QoS::AtLeastOnce, true, "").await {
+            tracing::warn!(broker_id = %config.id, %error, graph_id, "failed to clear Home Assistant graph discovery payload");
+        }
+    }
+    clear_legacy_graph_button_discovery(client, config, graph_id).await;
+}
+
+async fn clear_legacy_graph_button_discovery(
+    client: &AsyncClient,
+    config: &MqttBrokerConfig,
+    graph_id: &str,
+) {
+    for (domain, entity_id) in [("button", "start"), ("button", "stop")] {
+        let topic = graph_control_discovery_topic(config, graph_id, domain, entity_id);
+        if let Err(error) = client.publish(topic, QoS::AtLeastOnce, true, "").await {
+            tracing::warn!(broker_id = %config.id, %error, graph_id, "failed to clear legacy Home Assistant graph button discovery payload");
+        }
+    }
+}
+
 /// Updates the cached connection state for a broker runtime.
 fn update_connected(
     state: &Arc<RwLock<BrokerRuntimeState>>,
@@ -790,6 +1138,33 @@ fn number_command_topic(broker_id: &str, graph_id: &str, entity_id: &str) -> Str
     )
 }
 
+/// Returns the MQTT command topic for a graph execution switch.
+fn graph_switch_command_topic(broker_id: &str, graph_id: &str) -> String {
+    format!(
+        "luma_weaver/{}/graph/{}/execution/set",
+        sanitize_identifier(broker_id),
+        sanitize_identifier(graph_id)
+    )
+}
+
+/// Returns the MQTT state topic for a graph execution switch.
+fn graph_switch_state_topic(broker_id: &str, graph_id: &str) -> String {
+    format!(
+        "luma_weaver/{}/graph/{}/execution/state",
+        sanitize_identifier(broker_id),
+        sanitize_identifier(graph_id)
+    )
+}
+
+/// Returns the MQTT state topic for a graph execution status sensor.
+fn graph_status_state_topic(broker_id: &str, graph_id: &str) -> String {
+    format!(
+        "luma_weaver/{}/graph/{}/status",
+        sanitize_identifier(broker_id),
+        sanitize_identifier(graph_id)
+    )
+}
+
 /// Returns the MQTT availability topic for a broker connection.
 fn broker_availability_topic(broker_id: &str) -> String {
     format!(
@@ -822,13 +1197,72 @@ fn entity_unique_id(broker_id: &str, graph_id: &str, entity_id: &str) -> String 
     )
 }
 
+/// Returns the Home Assistant discovery topic for a graph control entity.
+fn graph_control_discovery_topic(
+    config: &MqttBrokerConfig,
+    graph_id: &str,
+    domain: &str,
+    entity_id: &str,
+) -> String {
+    format!(
+        "{}/{}/luma_weaver/{}/config",
+        config.discovery_prefix.trim().trim_end_matches('/'),
+        domain,
+        graph_control_object_id(graph_id, entity_id)
+    )
+}
+
+/// Returns the stable object ID for a graph control entity.
+fn graph_control_object_id(graph_id: &str, entity_id: &str) -> String {
+    format!(
+        "{}_{}",
+        sanitize_identifier(graph_id),
+        sanitize_identifier(entity_id)
+    )
+}
+
+/// Returns the stable Home Assistant unique ID for a graph control entity.
+fn graph_control_unique_id(broker_id: &str, graph_id: &str, entity_id: &str) -> String {
+    format!(
+        "luma_weaver_{}_{}_{}",
+        sanitize_identifier(broker_id),
+        sanitize_identifier(graph_id),
+        sanitize_identifier(entity_id)
+    )
+}
+
 /// Returns the display name Home Assistant should show for the graph-backed device.
-fn graph_display_name(registration: &HaMqttNumberRegistration) -> String {
-    let graph_name = registration.graph_name.trim();
+fn graph_display_name(graph_name: &str) -> String {
+    let graph_name = graph_name.trim();
     if graph_name.is_empty() {
         "Luma Weaver Graph".to_owned()
     } else {
         graph_name.to_owned()
+    }
+}
+
+/// Returns the execution status string exposed to Home Assistant.
+fn graph_execution_status(statuses: &[GraphRuntimeStatus], graph_id: &str) -> &'static str {
+    match statuses
+        .iter()
+        .find(|status| status.graph_id == graph_id)
+        .map(|status| status.mode)
+    {
+        Some(GraphRuntimeMode::Running) => "running",
+        Some(GraphRuntimeMode::Paused) => "paused",
+        None => "stopped",
+    }
+}
+
+/// Returns the binary switch state exposed to Home Assistant.
+fn graph_switch_state(statuses: &[GraphRuntimeStatus], graph_id: &str) -> &'static str {
+    match statuses
+        .iter()
+        .find(|status| status.graph_id == graph_id)
+        .map(|status| status.mode)
+    {
+        Some(GraphRuntimeMode::Running) => "ON",
+        Some(GraphRuntimeMode::Paused) | None => "OFF",
     }
 }
 

@@ -330,6 +330,7 @@ mod tests {
                     id: format!("audit-{}", definition.id),
                     name: definition.display_name.clone(),
                     execution_frequency_hz: 60,
+                    home_assistant_broker_id: String::new(),
                 },
                 viewport: shared::GraphViewport::default(),
                 nodes: vec![GraphNode {
